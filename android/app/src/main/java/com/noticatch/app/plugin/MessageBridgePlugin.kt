@@ -1,12 +1,15 @@
 package com.noticatch.app.plugin
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.provider.Settings
-import android.text.TextUtils
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -29,32 +32,44 @@ import java.util.Locale
  * MessageBridgePlugin
  *
  * Capacitor plugin exposing native Android capabilities to the TypeScript/React layer.
- * All plugin methods are non-blocking — they delegate to coroutines or callbacks
- * and resolve/reject the PluginCall asynchronously.
+ * All plugin methods are non-blocking and delegate asynchronously.
  *
- * Methods exposed to JS:
- *   - openNotificationSettings
- *   - isNotificationListenerEnabled
- *   - authenticateBiometric
- *   - requestBatteryExemption
- *   - getConversations
- *   - getMessages
- *   - wipeAllData
- *   - exportChatAsCSV
- *   - setSpamFilter
+ * Includes an internal BroadcastReceiver that listens for NotificationListener.ACTION_NEW_MESSAGE
+ * and dispatches a 'noticatch:new-message' CustomEvent directly to the React WebView DOM.
  */
 @CapacitorPlugin(name = "MessageBridge")
 class MessageBridgePlugin : Plugin() {
 
     private val pluginScope = CoroutineScope(Dispatchers.IO)
 
+    private val messageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == NotificationListener.ACTION_NEW_MESSAGE) {
+                activity?.runOnUiThread {
+                    bridge?.webView?.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('noticatch:new-message'));",
+                        null
+                    )
+                }
+            }
+        }
+    }
+
+    override fun load() {
+        super.load()
+        val filter = IntentFilter(NotificationListener.ACTION_NEW_MESSAGE)
+        LocalBroadcastManager.getInstance(context).registerReceiver(messageReceiver, filter)
+    }
+
+    override fun handleOnDestroy() {
+        super.handleOnDestroy()
+        LocalBroadcastManager.getInstance(context).unregisterReceiver(messageReceiver)
+    }
+
     /**
      * openNotificationSettings
      *
      * Opens the Android system notification listener settings panel.
-     * The user must manually enable NotiCatch in this system list.
-     *
-     * @returns - JSObject { opened: true }
      */
     @PluginMethod
     fun openNotificationSettings(call: PluginCall) {
@@ -72,8 +87,6 @@ class MessageBridgePlugin : Plugin() {
      *
      * Checks whether NotiCatch's NotificationListenerService is currently
      * enabled in Android system notification access settings.
-     *
-     * @returns - JSObject { enabled: boolean }
      */
     @PluginMethod
     fun isNotificationListenerEnabled(call: PluginCall) {
@@ -92,13 +105,6 @@ class MessageBridgePlugin : Plugin() {
      * authenticateBiometric
      *
      * Invokes the Android BiometricPrompt to authenticate the user.
-     * Supports fingerprint, face, and device credential fallback.
-     * Resolves with { success: true } on acceptance or
-     * { success: false, error: "..." } on failure or cancellation.
-     *
-     * @param  title     - Title text for the biometric dialog.
-     * @param  subtitle  - Subtitle text for the biometric dialog.
-     * @returns          - JSObject { success: boolean, error: string | null }
      */
     @PluginMethod
     fun authenticateBiometric(call: PluginCall) {
@@ -146,10 +152,7 @@ class MessageBridgePlugin : Plugin() {
     /**
      * requestBatteryExemption
      *
-     * Fires the ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent
-     * to exempt NotiCatch from Android Doze mode restrictions.
-     *
-     * @returns - JSObject { requested: true }
+     * Fires ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent.
      */
     @PluginMethod
     fun requestBatteryExemption(call: PluginCall) {
@@ -171,8 +174,6 @@ class MessageBridgePlugin : Plugin() {
      * getConversations
      *
      * Queries Room DB for all conversations sorted by lastMessageTimestamp DESC.
-     *
-     * @returns - JSObject { conversations: JSArray of conversation objects }
      */
     @PluginMethod
     fun getConversations(call: PluginCall) {
@@ -206,9 +207,6 @@ class MessageBridgePlugin : Plugin() {
      * getMessages
      *
      * Queries Room DB for all messages within a given conversationId.
-     *
-     * @param  conversationId  - UUID of the target conversation.
-     * @returns                - JSObject { messages: JSArray of message objects }
      */
     @PluginMethod
     fun getMessages(call: PluginCall) {
@@ -252,8 +250,6 @@ class MessageBridgePlugin : Plugin() {
      *
      * Queries Room DB for all messages with isDeletedBySender = true
      * across all conversations, sorted by timestamp DESC.
-     *
-     * @returns - JSObject { messages: JSArray of deleted message objects }
      */
     @PluginMethod
     fun getDeletedMessages(call: PluginCall) {
@@ -291,10 +287,6 @@ class MessageBridgePlugin : Plugin() {
      * wipeAllData
      *
      * Permanently deletes all message and conversation records from Room DB.
-     * Also clears EncryptedSharedPreferences session state.
-     * This action is irreversible. Called only after user types "WIPE" in confirmation.
-     *
-     * @returns - JSObject { wiped: true }
      */
     @PluginMethod
     fun wipeAllData(call: PluginCall) {
@@ -321,13 +313,6 @@ class MessageBridgePlugin : Plugin() {
      *
      * Queries all messages for a specific conversationId and writes them
      * to a CSV file in the app's external files directory.
-     * Returns the file path for use with a share intent or direct user access.
-     *
-     * CSV format: Timestamp, Sender, Message, Deleted, Edited
-     *
-     * @param  conversationId  - UUID of the conversation to export.
-     * @param  chatTitle       - Human-readable chat name for the filename.
-     * @returns                - JSObject { filePath: string, rowCount: number }
      */
     @PluginMethod
     fun exportChatAsCSV(call: PluginCall) {
@@ -373,9 +358,6 @@ class MessageBridgePlugin : Plugin() {
      *
      * Updates the spam filter preference flag that NotificationListener
      * reads before persisting OTP/spam classified notifications.
-     *
-     * @param  enabled  - Boolean; true to suppress OTP/spam messages.
-     * @returns         - JSObject { updated: true }
      */
     @PluginMethod
     fun setSpamFilter(call: PluginCall) {

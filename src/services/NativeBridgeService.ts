@@ -320,30 +320,21 @@ export async function setSpamFilterNative(enabled: boolean): Promise<void> {
  * @returns - Current AuthState object.
  */
 export async function loadAuthState(): Promise<AuthState> {
-  if (!isNativeAndroid()) {
-    const stored = localStorage.getItem('auth_state_dev');
-    if (stored) {
-      try { return JSON.parse(stored) as AuthState; } catch { /* fall through */ }
+  const stored = localStorage.getItem('auth_state_noticatch');
+  if (stored) {
+    try {
+      return JSON.parse(stored) as AuthState;
+    } catch {
+      /* fall through to default */
     }
-    return {
-      isAuthenticated:    false,
-      isBiometricEnabled: false,
-      isPinEnabled:       true,
-      sessionStartedAt:   null,
-      sessionTimeoutMs:   300_000,
-    };
   }
-  try {
-    return await getBridge().getAuthState();
-  } catch {
-    return {
-      isAuthenticated:    false,
-      isBiometricEnabled: false,
-      isPinEnabled:       true,
-      sessionStartedAt:   null,
-      sessionTimeoutMs:   300_000,
-    };
-  }
+  return {
+    isAuthenticated:    false,
+    isBiometricEnabled: isNativeAndroid(),
+    isPinEnabled:       true,
+    sessionStartedAt:   null,
+    sessionTimeoutMs:   300_000,
+  };
 }
 
 /**
@@ -354,23 +345,24 @@ export async function loadAuthState(): Promise<AuthState> {
  * @param  authState  - Updated AuthState to save.
  */
 export async function persistAuthState(authState: AuthState): Promise<void> {
-  if (!isNativeAndroid()) {
-    localStorage.setItem('auth_state_dev', JSON.stringify(authState));
-  }
+  localStorage.setItem('auth_state_noticatch', JSON.stringify(authState));
 }
 
 /**
  * loadAppSettings
  *
- * Retrieves persisted application configuration settings.
+ * Retrieves persisted application configuration settings from storage.
+ * Works seamlessly across both native Android WebView and web preview.
  *
  * @returns - AppSettings configuration object.
  */
 export async function loadAppSettings(): Promise<AppSettings> {
-  if (!isNativeAndroid()) {
-    const stored = localStorage.getItem('app_settings_dev');
-    if (stored) {
-      try { return JSON.parse(stored) as AppSettings; } catch { /* fall through */ }
+  const stored = localStorage.getItem('app_settings_noticatch');
+  if (stored) {
+    try {
+      return JSON.parse(stored) as AppSettings;
+    } catch {
+      /* fall through to defaults */
     }
   }
   return {
@@ -388,15 +380,14 @@ export async function loadAppSettings(): Promise<AppSettings> {
 /**
  * persistAppSettings
  *
- * Saves updated application settings to persistent storage.
+ * Saves updated application settings to storage and synchronizes
+ * relevant flags (such as spam filter) to the native Android layer.
  *
  * @param  settings  - AppSettings object to save.
  */
 export async function persistAppSettings(settings: AppSettings): Promise<void> {
-  if (!isNativeAndroid()) {
-    localStorage.setItem('app_settings_dev', JSON.stringify(settings));
-    return;
+  localStorage.setItem('app_settings_noticatch', JSON.stringify(settings));
+  if (isNativeAndroid()) {
+    await setSpamFilterNative(settings.spamFilterEnabled);
   }
-  /* On native, push spam filter state to Kotlin layer immediately */
-  await setSpamFilterNative(settings.spamFilterEnabled);
 }

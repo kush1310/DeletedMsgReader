@@ -5,13 +5,11 @@
  * Blends Claude's clean typography, thoughtful spacing, and analytical insight panels
  * with WhatsApp's iconic message flow, timestamp badges, and recovery status tags.
  *
- * Includes:
- *   1. Boyer-Moore-Horspool search acceleration within conversation
- *   2. Thread Security & Integrity metadata panel (Claude style)
- *   3. Interactive Notification Simulator to test real-time capture and recovery
+ * Connects directly to NativeBridgeService to query Room SQLite DB on Android
+ * and listens for live 'noticatch:new-message' IPC events for real-time updates.
  */
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -20,22 +18,22 @@ import {
   AlertTriangle,
   ShieldCheck,
   Info,
-  Send,
-  Trash2,
   Lock,
 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';
-import { Avatar, EmptyState, SectionDivider, SearchInput } from '@/components/common';
+import { Avatar, EmptyState, SectionDivider, SearchInput, LoadingSpinner } from '@/components/common';
 import { MessageBubble } from '@/components/chat';
+import {
+  getMessages,
+  getConversations,
+  isNativeAndroid,
+} from '@/services/NativeBridgeService';
 import {
   getConversationById,
   getMessagesByConversation,
-  insertMessage,
-  markMessageAsDeleted,
 } from '@/services/DatabaseService';
-import { generateUUID } from '@/services/SecurityService';
 import { searchAndRank } from '@/services/SearchEngine';
-import type { Message } from '@/types';
+import type { Message, Conversation } from '@/types';
 
 /**
  * ChatDetailPage
@@ -46,24 +44,59 @@ export function ChatDetailPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate           = useNavigate();
   const bottomRef          = useRef<HTMLDivElement>(null);
+  const native             = isNativeAndroid();
 
   const [searchOpen,       setSearchOpen]       = useState(false);
   const [searchQuery,      setSearchQuery]      = useState('');
   const [showThreadInfo,   setShowThreadInfo]   = useState(false);
-  const [simulatedText,    setSimulatedText]    = useState('');
-  const [versionKey,       setVersionKey]       = useState(0);
+  const [isLoading,        setIsLoading]        = useState(true);
+  const [conversation,     setConversation]     = useState<Conversation | null>(null);
+  const [allMessages,      setAllMessages]      = useState<Message[]>([]);
 
-  const conversation = useMemo(
-    () => (conversationId ? getConversationById(conversationId) : undefined),
-    [conversationId, versionKey],
-  );
+  /**
+   * loadThreadData
+   *
+   * Asynchronously queries the conversation and message timeline from
+   * Room SQLite database on native Android or in-memory store on web.
+   */
+  const loadThreadData = useCallback(async (): Promise<void> => {
+    if (!conversationId) {
+      setIsLoading(false);
+      return;
+    }
 
-  const allMessages: Message[] = useMemo(
-    () => (conversationId ? getMessagesByConversation(conversationId) : []),
-    [conversationId, versionKey],
-  );
+    if (native) {
+      const [convos, msgs] = await Promise.all([
+        getConversations(),
+        getMessages(conversationId),
+      ]);
+      const found = convos.find(c => c.id === conversationId) ?? null;
+      setConversation(found);
+      setAllMessages(msgs);
+    } else {
+      const found = getConversationById(conversationId) ?? null;
+      const msgs  = getMessagesByConversation(conversationId);
+      setConversation(found);
+      setAllMessages(msgs);
+    }
 
-  /* Scroll to the bottom of the message list on load or new message */
+    setIsLoading(false);
+  }, [conversationId, native]);
+
+  useEffect(() => {
+    loadThreadData();
+  }, [loadThreadData]);
+
+  /* Listen for live incoming WhatsApp messages / deletion events */
+  useEffect(() => {
+    function handleNewMessage(): void {
+      loadThreadData();
+    }
+    window.addEventListener('noticatch:new-message', handleNewMessage);
+    return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
+  }, [loadThreadData]);
+
+  /* Scroll to bottom when message list grows */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [allMessages.length]);
@@ -107,42 +140,30 @@ export function ChatDetailPage() {
 
   const deletedCount = allMessages.filter(m => m.isDeletedBySender).length;
 
-  /* Notification Simulator Handlers */
-  function handleSimulateIncoming(): void {
-    if (!conversationId || !conversation || !simulatedText.trim()) return;
-
-    insertMessage({
-      id: generateUUID(),
-      conversationId,
-      senderName: conversation.chatTitle,
-      messageText: simulatedText.trim(),
-      notificationId: Math.floor(Math.random() * 999_999),
-      timestamp: Date.now(),
-      isDeletedBySender: false,
-      isEdited: false,
-      mediaType: null,
-      mediaPath: null,
-      hashSignature: 'sim-hash-' + generateUUID(),
-    });
-
-    setSimulatedText('');
-    setVersionKey(prev => prev + 1);
-  }
-
-  function handleSimulateDeleteLast(): void {
-    if (!conversationId || allMessages.length === 0) return;
-    const lastActive = [...allMessages].reverse().find(m => !m.isDeletedBySender);
-    if (!lastActive) return;
-
-    markMessageAsDeleted(lastActive.id);
-    setVersionKey(prev => prev + 1);
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+        <TopAppBar title="Chat" />
+        <div className="pt-14 flex-1 flex items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </div>
+    );
   }
 
   if (!conversation) {
     return (
-      <div className="flex flex-col h-screen items-center justify-center gap-4 bg-surface-800">
-        <p className="text-content-muted text-sm font-bold">Conversation not found.</p>
-        <button id="back-to-chats-button" type="button" onClick={() => navigate('/chats')} className="btn-primary">
+      <div className="flex flex-col h-screen items-center justify-center gap-4 bg-surface-800 p-6 text-center">
+        <p className="text-content-primary text-base font-bold">Conversation not found</p>
+        <p className="text-content-muted text-xs max-w-xs font-medium">
+          The requested conversation could not be located in local encrypted storage.
+        </p>
+        <button
+          id="back-to-chats-button"
+          type="button"
+          onClick={() => navigate('/chats')}
+          className="btn-primary"
+        >
           Back to Chats
         </button>
       </div>
@@ -151,7 +172,7 @@ export function ChatDetailPage() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
-      {/* Top AppBar with Claude-inspired typography and WhatsApp icons */}
+      {/* Top AppBar */}
       <TopAppBar
         title={conversation.chatTitle}
         subtitle={
@@ -213,7 +234,7 @@ export function ChatDetailPage() {
           <div className="card max-w-md w-full p-6 space-y-4 shadow-card-lg animate-scale-in">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center border border-emerald-300 shadow-skeuo-chip">
+                <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center border border-emerald-300 shadow-skeuo-chip">
                   <ShieldCheck className="w-5 h-5 text-accent" strokeWidth={2.2} />
                 </div>
                 <div>
@@ -249,8 +270,8 @@ export function ChatDetailPage() {
                 <span className="font-bold text-amber-700">{deletedCount}</span>
               </div>
               <div className="flex justify-between py-2">
-                <span className="text-content-muted font-medium">Encryption Standard</span>
-                <span className="font-bold text-accent">AES-256-GCM / SQLCipher</span>
+                <span className="text-content-muted font-medium">Storage Standard</span>
+                <span className="font-bold text-accent">Room SQLite / Air-Gapped Internal</span>
               </div>
             </div>
 
@@ -271,7 +292,7 @@ export function ChatDetailPage() {
           <div className="card-neu flex items-center gap-2.5 px-3.5 py-2 border-amber-300 bg-gradient-to-r from-amber-50 to-amber-100/50 text-amber-950 text-xs shadow-skeuo-chip">
             <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0" strokeWidth={2.2} />
             <p className="leading-tight font-bold">
-              {deletedCount} deleted message{deletedCount > 1 ? 's' : ''} recovered — highlighted with amber tags
+              {deletedCount} deleted message{deletedCount > 1 ? 's' : ''} recovered — preserved with recovery badges
             </p>
           </div>
         )}
@@ -294,52 +315,24 @@ export function ChatDetailPage() {
         ) : (
           <EmptyState
             icon={<Search className="w-8 h-8" strokeWidth={1.8} />}
-            title="No matching messages"
-            description={`No messages matching "${searchQuery}" found in this thread.`}
+            title={searchQuery ? 'No matching messages' : 'No messages in thread yet'}
+            description={
+              searchQuery
+                ? `No messages matching "${searchQuery}" found in this thread.`
+                : 'Incoming WhatsApp messages for this conversation will appear here automatically.'
+            }
           />
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Claude + WhatsApp Interactive Simulation Bar */}
-      <div className="p-3 bg-surface-900/95 backdrop-blur-md border-t border-surface-700/80 shadow-lg">
-        <div className="flex items-center gap-2">
-          <input
-            id="simulation-message-input"
-            type="text"
-            value={simulatedText}
-            onChange={e => setSimulatedText(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSimulateIncoming()}
-            placeholder={`Simulate incoming WhatsApp alert from ${conversation.chatTitle}...`}
-            className="input-field py-2 text-xs flex-1 shadow-neu-inset"
-          />
-          <button
-            id="simulate-send-btn"
-            type="button"
-            onClick={handleSimulateIncoming}
-            disabled={!simulatedText.trim()}
-            className="btn-primary py-2 px-3 text-xs disabled:opacity-40"
-            title="Simulate incoming WhatsApp notification"
-          >
-            <Send className="w-3.5 h-3.5" strokeWidth={2.2} />
-          </button>
-          <button
-            id="simulate-delete-btn"
-            type="button"
-            onClick={handleSimulateDeleteLast}
-            className="btn-danger py-2 px-3 text-xs"
-            title="Simulate sender clicking 'Delete for Everyone'"
-          >
-            <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
-          </button>
-        </div>
-        <div className="flex items-center justify-between mt-1.5 px-1 text-2xs text-content-muted font-medium">
-          <span className="flex items-center gap-1">
-            <Lock className="w-3 h-3 text-accent" strokeWidth={2.2} />
-            Air-Gapped AES-256 local archive
-          </span>
-          <span>Tap trash icon to simulate sender deleting last message</span>
-        </div>
+      {/* Thread Security Footer */}
+      <div className="py-2.5 px-4 bg-surface-900/95 backdrop-blur-md border-t border-surface-700/80 flex items-center justify-between text-2xs text-content-muted font-semibold">
+        <span className="flex items-center gap-1">
+          <Lock className="w-3.5 h-3.5 text-accent" strokeWidth={2} />
+          On-device SQLite encrypted archive
+        </span>
+        <span>{allMessages.length} total events</span>
       </div>
     </div>
   );

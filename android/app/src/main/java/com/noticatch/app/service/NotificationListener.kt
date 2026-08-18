@@ -3,6 +3,7 @@ package com.noticatch.app.service
 import android.app.Notification
 import android.content.Intent
 import android.os.Bundle
+import android.os.Parcelable
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -19,20 +20,18 @@ import java.util.UUID
 /**
  * NotificationListener
  *
- * Android NotificationListenerService for NotiCatch.
- * Intercepts incoming WhatsApp notifications (com.whatsapp and com.whatsapp.w4b),
- * extracts message content before deletion, classifies the notification type
- * (user message vs deletion signal), and persists records to the Room database.
- * Broadcasts a local intent so the Capacitor WebView layer receives live updates.
+ * High-reliability Android NotificationListenerService for NotiCatch.
+ * Implements multi-tier payload extraction supporting Android 10-14 MessagingStyle,
+ * bundled notifications, big-text expansions, and multilingual deletion detection.
  *
- * Architecture: air-gapped local-only. Zero network access.
+ * Architecture: 100% on-device SQLite persistence via Room DB. Zero network access.
  */
 class NotificationListener : NotificationListenerService() {
 
     companion object {
-        private const val TAG                  = "NotiCatchListener"
-        private const val WHATSAPP_PKG         = "com.whatsapp"
-        private const val WHATSAPP_BUSINESS_PKG = "com.whatsapp.w4b"
+        private const val TAG                   = "NotiCatchListener"
+        private const val WHATSAPP_PKG          = "com.whatsapp"
+        private const val WHATSAPP_BUSINESS_PKG  = "com.whatsapp.w4b"
 
         /** Broadcast action fired when a new message or deletion is captured. */
         const val ACTION_NEW_MESSAGE = "com.noticatch.app.NEW_MESSAGE"
@@ -44,29 +43,31 @@ class NotificationListener : NotificationListenerService() {
         const val EXTRA_IS_DELETED      = "isDeleted"
         const val EXTRA_TIMESTAMP       = "timestamp"
 
-        /* Deletion signal patterns — mirrors ClassificationEngine.ts */
+        /* Multilingual deletion patterns */
         private val DELETION_PATTERNS = listOf(
             Regex("this message was deleted",       RegexOption.IGNORE_CASE),
             Regex("you deleted this message",       RegexOption.IGNORE_CASE),
             Regex("message deleted",                RegexOption.IGNORE_CASE),
+            Regex("deleted this message",           RegexOption.IGNORE_CASE),
+            Regex("deleted a message",              RegexOption.IGNORE_CASE),
             Regex("esta mensagem foi apagada",      RegexOption.IGNORE_CASE),
             Regex("este mensaje fue eliminado",     RegexOption.IGNORE_CASE),
             Regex("ce message a été supprimé",      RegexOption.IGNORE_CASE),
             Regex("diese nachricht wurde gelöscht", RegexOption.IGNORE_CASE),
+            Regex("questa messaggio è stato eliminato", RegexOption.IGNORE_CASE),
+            Regex("dit bericht is verwijderd",      RegexOption.IGNORE_CASE),
             Regex("यह संदेश हटा दिया गया"),
             Regex("تم حذف هذه الرسالة"),
+            Regex("这个消息已被删除"),
         )
 
-        /* OTP/spam patterns — suppressed when spam filter is enabled */
+        /* OTP / automated verification spam filters */
         private val OTP_PATTERNS = listOf(
-            Regex("\\b\\d{4,8}\\b.*\\bcode\\b",    RegexOption.IGNORE_CASE),
-            Regex("\\bverification code\\b",        RegexOption.IGNORE_CASE),
-            Regex("\\botp\\b",                      RegexOption.IGNORE_CASE),
-            Regex("\\bone.time\\b",                 RegexOption.IGNORE_CASE),
-            Regex("\\bpassword.*\\d{4,8}",          RegexOption.IGNORE_CASE),
+            Regex("\\b\\d{4,8}\\b.*\\b(code|otp)\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bverification code\\b",           RegexOption.IGNORE_CASE),
+            Regex("\\bone.time.password\\b",           RegexOption.IGNORE_CASE),
         )
 
-        /* Shared preferences key for spam filter state */
         const val PREF_SPAM_FILTER = "spam_filter_enabled"
         const val PREFS_NAME       = "noticatch_prefs"
     }
@@ -77,7 +78,12 @@ class NotificationListener : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         database = NotiCatchDatabase.getInstance(applicationContext)
-        Log.d(TAG, "NotificationListener service created.")
+        Log.d(TAG, "NotificationListener service instantiated.")
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d(TAG, "NotificationListener connected to Android notification subsystem.")
     }
 
     override fun onDestroy() {
@@ -88,13 +94,10 @@ class NotificationListener : NotificationListenerService() {
     /**
      * onNotificationPosted
      *
-     * Fires when any notification is posted to the status bar.
-     * Filters to WhatsApp packages only, extracts content, classifies,
-     * applies spam filter, then persists to Room DB and broadcasts to WebView.
+     * Intercepts incoming notifications, performs multi-tier payload extraction,
+     * checks for deletion signals, and persists to Room database.
      *
-     * @param  sbn  - StatusBarNotification posted by Android system.
-     * @validates   - Package whitelist, blank title/text rejection, OTP spam gate.
-     * @edge-cases  - Null SBN or notification extras are silently skipped.
+     * @param  sbn  - StatusBarNotification provided by Android OS.
      */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
@@ -105,28 +108,44 @@ class NotificationListener : NotificationListenerService() {
         val notification: Notification = sbn.notification ?: return
         val extras: Bundle             = notification.extras ?: return
 
-        val title   = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
-        val text    = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()  ?: ""
-        val groupKey = sbn.groupKey
+        /* Multi-tier Title Extraction */
+        val title = extractTitle(extras)
 
-        if (title.isBlank() && text.isBlank()) return
+        /* Multi-tier Text Extraction (MessagingStyle, BigText, TextLines, Text) */
+        val text = extractBodyText(extras)
+
+        if (title.isBlank() && text.isBlank()) {
+            Log.d(TAG, "Ignored empty notification payload: id=${sbn.id}")
+            return
+        }
+
+        /* Check summary / group header notifications */
+        if (text.matches(Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE))) {
+            Log.d(TAG, "Ignored summary notification count: $text")
+            return
+        }
 
         val timestamp      = sbn.postTime
         val notificationId = sbn.id
-        val isDeletion     = DELETION_PATTERNS.any { pattern -> pattern.containsMatchIn(text) }
+        val groupKey       = sbn.groupKey
 
-        /* Spam filter gate — reject OTP messages if filter is enabled */
+        /* Deletion signal detection */
+        val isDeletion = DELETION_PATTERNS.any { pattern ->
+            pattern.containsMatchIn(text) || pattern.containsMatchIn(title)
+        }
+
+        /* Spam filter check */
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
         if (spamFilterEnabled && !isDeletion && OTP_PATTERNS.any { it.containsMatchIn(text) }) {
-            Log.d(TAG, "OTP/spam notification suppressed for sender: $title")
+            Log.d(TAG, "Suppressed OTP notification: sender=$title")
             return
         }
 
         serviceScope.launch {
             persistNotification(
                 packageName    = packageName,
-                senderName     = title,
+                senderName     = if (title.isNotBlank()) title else "WhatsApp Contact",
                 messageText    = if (isDeletion) null else text,
                 notificationId = notificationId,
                 timestamp      = timestamp,
@@ -137,35 +156,80 @@ class NotificationListener : NotificationListenerService() {
     }
 
     /**
-     * onNotificationRemoved
+     * extractTitle
      *
-     * Fires when a notification is dismissed or removed.
-     * If the removal corresponds to a WhatsApp deletion signal, the
-     * matching stored message is flagged as deleted by sender.
-     *
-     * @param  sbn  - Removed StatusBarNotification.
+     * Resolves the sender or conversation title across Android notification fields.
      */
+    private fun extractTitle(extras: Bundle): String {
+        extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
+        extras.getCharSequence(Notification.EXTRA_TITLE_BIG)?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
+        extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
+        return ""
+    }
+
+    /**
+     * extractBodyText
+     *
+     * Recursively extracts notification message text from MessagingStyle Bundles,
+     * BigText, TextLines, and standard Text fields.
+     */
+    private fun extractBodyText(extras: Bundle): String {
+        /* 1. Android MessagingStyle EXTRA_MESSAGES parcelable array */
+        val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        if (messages != null && messages.isNotEmpty()) {
+            for (i in messages.indices.reversed()) {
+                val item = messages[i]
+                if (item is Bundle) {
+                    val msgText = item.getCharSequence("text")?.toString()?.trim()
+                    if (!msgText.isNullOrBlank()) {
+                        return msgText
+                    }
+                }
+            }
+        }
+
+        /* 2. EXTRA_BIG_TEXT */
+        extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
+
+        /* 3. EXTRA_TEXT_LINES (multi-line bundled preview) */
+        val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+        if (textLines != null && textLines.isNotEmpty()) {
+            for (i in textLines.indices.reversed()) {
+                val line = textLines[i]?.toString()?.trim()
+                if (!line.isNullOrBlank()) {
+                    return line
+                }
+            }
+        }
+
+        /* 4. Standard EXTRA_TEXT */
+        extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
+
+        return ""
+    }
+
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val packageName = sbn.packageName ?: return
         if (packageName != WHATSAPP_PKG && packageName != WHATSAPP_BUSINESS_PKG) return
-        Log.d(TAG, "WhatsApp notification removed: id=${sbn.id}")
+        Log.d(TAG, "WhatsApp notification dismissed: id=${sbn.id}")
     }
 
     /**
      * persistNotification
      *
-     * Performs Room DB upsert for a captured notification event.
-     * Resolves or creates the parent Conversation, then inserts the Message record.
-     * Broadcasts ACTION_NEW_MESSAGE on completion for WebView real-time update.
-     *
-     * @param  packageName     - Source package identifier.
-     * @param  senderName      - Notification title (contact or group name).
-     * @param  messageText     - Notification body text; null if deletion signal.
-     * @param  notificationId  - Android system notification ID.
-     * @param  timestamp       - Unix epoch ms of notification receipt.
-     * @param  isDeletion      - True if deletion pattern matched.
-     * @param  groupKey        - Notification group key for conversation grouping.
+     * Inserts or updates ConversationEntity and MessageEntity in Room database,
+     * with 72-hour sliding window deletion recovery.
      */
     private suspend fun persistNotification(
         packageName:    String,
@@ -201,49 +265,54 @@ class NotificationListener : NotificationListenerService() {
             )
         }
 
-        /* If this is a deletion signal, mark existing message deleted */
+        /* Deletion signal processing */
         if (isDeletion) {
-            val existing = database.messageDao()
+            /* 1. Primary lookup: matching sender within 72h */
+            var existing = database.messageDao()
                 .findRecentBySender(conversation.id, senderName, timestamp)
+
+            /* 2. Fallback lookup: most recent non-deleted message in conversation within 72h */
+            if (existing == null) {
+                existing = database.messageDao()
+                    .findRecentInConversation(conversation.id, timestamp)
+            }
+
             if (existing != null) {
                 database.messageDao().update(existing.copy(isDeletedBySender = true))
-                Log.d(TAG, "Marked message as deleted: sender=$senderName")
-                broadcastNewMessage(senderName, null, conversation.id, true, timestamp)
+                Log.d(TAG, "Successfully marked existing message as deleted: id=${existing.id}, sender=${existing.senderName}")
+                broadcastNewMessage(existing.senderName, existing.messageText, conversation.id, true, timestamp)
                 return
+            } else {
+                Log.d(TAG, "Deletion signal received but no prior message found in 72h window for conversation=${conversation.id}")
             }
         }
 
-        /* Insert new message record */
-        val message = MessageEntity(
-            id                = UUID.randomUUID().toString(),
-            conversationId    = conversation.id,
-            senderName        = senderName,
-            messageText       = messageText,
-            notificationId    = notificationId,
-            timestamp         = timestamp,
-            isDeletedBySender = isDeletion,
-            isEdited          = false,
-            mediaType         = null,
-            mediaPath         = null,
-            hashSignature     = "${conversation.id}|${senderName}|${timestamp}|${messageText ?: ""}",
-        )
-        database.messageDao().insert(message)
+        /* Standard message insertion */
+        if (!isDeletion && !messageText.isNullOrBlank()) {
+            val message = MessageEntity(
+                id                = UUID.randomUUID().toString(),
+                conversationId    = conversation.id,
+                senderName        = senderName,
+                messageText       = messageText,
+                notificationId    = notificationId,
+                timestamp         = timestamp,
+                isDeletedBySender = false,
+                isEdited          = false,
+                mediaType         = null,
+                mediaPath         = null,
+                hashSignature     = "${conversation.id}|${senderName}|${timestamp}|${messageText}",
+            )
+            database.messageDao().insert(message)
 
-        Log.d(TAG, "Persisted message: sender=$senderName, deleted=$isDeletion, len=${messageText?.length ?: 0}")
-        broadcastNewMessage(senderName, messageText, conversation.id, isDeletion, timestamp)
+            Log.d(TAG, "Persisted message: sender=$senderName, len=${messageText.length}")
+            broadcastNewMessage(senderName, messageText, conversation.id, false, timestamp)
+        }
     }
 
     /**
      * broadcastNewMessage
      *
-     * Fires a LocalBroadcast intent so the Capacitor WebView layer
-     * can dispatch a JS CustomEvent and trigger real-time UI refresh.
-     *
-     * @param  senderName       - Display name of message sender.
-     * @param  messageText      - Message body text or null for deletions.
-     * @param  conversationId   - Parent conversation UUID.
-     * @param  isDeleted        - True if this is a deletion event.
-     * @param  timestamp        - Unix epoch ms.
+     * Sends local broadcast so MessageBridgePlugin can relay live updates to React WebView.
      */
     private fun broadcastNewMessage(
         senderName:     String,

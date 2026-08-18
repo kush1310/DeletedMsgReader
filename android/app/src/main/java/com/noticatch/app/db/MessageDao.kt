@@ -43,7 +43,6 @@ interface MessageDao {
      * getByConversation
      *
      * Returns all messages for a given conversation in ascending timestamp order.
-     * Production equivalent: SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC
      *
      * @param  conversationId  - UUID of the parent conversation.
      * @returns                - List of MessageEntity in chronological order.
@@ -66,19 +65,19 @@ interface MessageDao {
      * findRecentBySender
      *
      * Searches for a message from a specific sender in a conversation
-     * within a 2-minute window before the deletion timestamp.
-     * Used to match deletion signals to their original captured message.
+     * within a 72-hour sliding window before the deletion timestamp.
+     * Matches WhatsApp's "Delete for Everyone" protocol ceiling (~60 hours).
      *
      * @param  conversationId  - Parent conversation UUID.
      * @param  senderName      - Display name of the sender.
-     * @param  beforeTimestamp - Deletion event timestamp; search range is -120000ms.
+     * @param  beforeTimestamp - Deletion event timestamp; search range is -259200000ms (72h).
      * @returns                - Most recent matching MessageEntity or null.
      */
     @Query("""
         SELECT * FROM messages
         WHERE conversationId = :conversationId
           AND senderName = :senderName
-          AND timestamp >= :beforeTimestamp - 120000
+          AND timestamp >= :beforeTimestamp - 259200000
           AND isDeletedBySender = 0
         ORDER BY timestamp DESC
         LIMIT 1
@@ -86,6 +85,29 @@ interface MessageDao {
     suspend fun findRecentBySender(
         conversationId:  String,
         senderName:      String,
+        beforeTimestamp: Long,
+    ): MessageEntity?
+
+    /**
+     * findRecentInConversation
+     *
+     * Fallback lookup: matches the most recent non-deleted message in the conversation
+     * within the 72-hour window when senderName varies between individual messages and group summaries.
+     *
+     * @param  conversationId  - Parent conversation UUID.
+     * @param  beforeTimestamp - Deletion event timestamp.
+     * @returns                - Most recent active MessageEntity or null.
+     */
+    @Query("""
+        SELECT * FROM messages
+        WHERE conversationId = :conversationId
+          AND timestamp >= :beforeTimestamp - 259200000
+          AND isDeletedBySender = 0
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """)
+    suspend fun findRecentInConversation(
+        conversationId:  String,
         beforeTimestamp: Long,
     ): MessageEntity?
 
