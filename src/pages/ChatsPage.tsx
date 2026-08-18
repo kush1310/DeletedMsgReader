@@ -137,9 +137,7 @@ export function ChatsPage() {
             description={
               searchQuery
                 ? `No conversations match "${searchQuery}".`
-                : native
-                  ? 'Send or receive a WhatsApp message — it will appear here within seconds.'
-                  : 'Web preview: no dummy data. Requires a physical Android device with notification access granted.'
+                : 'Send or receive a WhatsApp message — it will appear here automatically.'
             }
           />
         )}

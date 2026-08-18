@@ -141,9 +141,7 @@ export function SetupPage() {
           </div>
           <AppBrand />
           <p className="text-content-muted text-xs font-semibold max-w-[280px]">
-            {native
-              ? 'Granting system permissions to enable instant notification capture...'
-              : 'Web preview — permissions require a physical Android device.'}
+            Grant system permissions to enable instant WhatsApp notification capture.
           </p>
         </div>
 

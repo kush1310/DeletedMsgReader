@@ -158,9 +158,7 @@ export function DeletedOnlyPage() {
             description={
               searchQuery
                 ? `No deleted messages match "${searchQuery}".`
-                : native
-                  ? 'When someone deletes a WhatsApp message, the original text will appear here instantly.'
-                  : 'Web preview: no dummy data. Requires Android device with notification access.'
+                : 'When someone deletes a WhatsApp message, the original text will appear here automatically.'
             }
           />
         )}

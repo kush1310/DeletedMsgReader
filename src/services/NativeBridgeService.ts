@@ -139,8 +139,7 @@ export async function authenticateWithBiometrics(
   promptSubtitle: string,
 ): Promise<{ success: boolean; errorMessage: string | null }> {
   if (!isNativeAndroid()) {
-    /* Web preview: biometric unavailable — fall back to PIN */
-    return { success: false, errorMessage: 'Biometric unavailable in web preview. Use PIN.' };
+    return { success: false, errorMessage: 'Device biometric authentication unavailable.' };
   }
   try {
     const result = await getBridge().authenticateBiometric({
