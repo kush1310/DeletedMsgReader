@@ -20,6 +20,7 @@
 import { type ReactNode, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { BottomNavbar } from '@/components/navigation';
+import { LandingPage      } from '@/pages/LandingPage';
 import { LoginPage        } from '@/pages/LoginPage';
 import { SetupPage        } from '@/pages/SetupPage';
 import { ChatsPage        } from '@/pages/ChatsPage';
@@ -155,6 +156,8 @@ export function App() {
         <Route path="/"        element={<Navigate to="/login" replace />} />
         <Route path="/login"   element={<LoginPage />} />
         <Route path="/setup"   element={<SetupPage />} />
+        <Route path="/dashboard" element={<LandingPage />} />
+        <Route path="/landing"   element={<LandingPage />} />
         <Route path="/chats"          element={<ChatsPage />} />
         <Route path="/deleted"        element={<DeletedOnlyPage />} />
         <Route path="/settings"       element={<SettingsPage />} />

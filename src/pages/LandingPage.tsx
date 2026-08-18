@@ -5,10 +5,11 @@
  * NotiCatch application: total messages captured, deleted messages
  * recovered, active conversations, and storage usage.
  *
- * Enhanced with Three.js 3D security node, neumorphic cards, and Outfit typography.
+ * Connected directly to NativeBridgeService to query real Room DB records
+ * on Android, with real-time refresh upon receiving notification IPC events.
  */
 
-import { useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageCircle,
@@ -20,9 +21,17 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { TopAppBar, IconButton, AppBrand } from '@/components/navigation';
-import { Avatar, ThreeSecurityCanvas } from '@/components/common';
-import { getAppStats, getAllConversations } from '@/services/DatabaseService';
-import type { AppStats, Conversation } from '@/types';
+import { Avatar, ThreeSecurityCanvas, LoadingSpinner } from '@/components/common';
+import {
+  getConversations,
+  getDeletedMessages,
+  isNativeAndroid,
+} from '@/services/NativeBridgeService';
+import {
+  getAllConversations as getAllConversationsWeb,
+  getDeletedMessages as getDeletedMessagesWeb,
+} from '@/services/DatabaseService';
+import type { Conversation, Message } from '@/types';
 
 interface StatCardProps {
   readonly label:   string;
@@ -40,7 +49,7 @@ interface StatCardProps {
 function StatCard({ label, value, icon, accent = false, id }: StatCardProps) {
   return (
     <div id={id} className="stat-card animate-fade-in">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-1 shadow-skeuo-chip border border-white/80 ${accent ? 'bg-amber-100 text-amber-800' : 'bg-surface-800 text-accent'}`}>
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-1 shadow-skeuo-chip border border-white/80 ${accent ? 'bg-amber-100 text-amber-800' : 'bg-surface-800 text-accent'}`}>
         {icon}
       </div>
       <span className={`text-2xl font-extrabold tabular-nums leading-tight tracking-tight ${accent ? 'text-amber-800' : 'text-content-primary'}`}>
@@ -58,11 +67,58 @@ function StatCard({ label, value, icon, accent = false, id }: StatCardProps) {
  */
 export function LandingPage() {
   const navigate = useNavigate();
+  const native   = isNativeAndroid();
 
-  const stats: AppStats        = useMemo(() => getAppStats(),        []);
-  const conversations: Conversation[] = useMemo(() => getAllConversations(), []);
+  const [conversations,   setConversations]   = useState<Conversation[]>([]);
+  const [deletedMessages, setDeletedMessages] = useState<Message[]>([]);
+  const [isLoading,       setIsLoading]       = useState(true);
 
-  const recentWithDeleted = conversations.filter(conv => conv.deletedCount > 0).slice(0, 3);
+  /**
+   * loadDashboardData
+   *
+   * Queries Room DB on native Android or in-memory store on web.
+   */
+  const loadDashboardData = useCallback(async (): Promise<void> => {
+    if (native) {
+      const [convs, deleted] = await Promise.all([
+        getConversations(),
+        getDeletedMessages(),
+      ]);
+      setConversations(convs);
+      setDeletedMessages(deleted);
+    } else {
+      setConversations(getAllConversationsWeb());
+      setDeletedMessages(getDeletedMessagesWeb());
+    }
+    setIsLoading(false);
+  }, [native]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  /* Real-time sync on new captured message */
+  useEffect(() => {
+    function handleNewMessage(): void {
+      loadDashboardData();
+    }
+    window.addEventListener('noticatch:new-message', handleNewMessage);
+    return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
+  }, [loadDashboardData]);
+
+  const recentWithDeleted = useMemo(
+    () => conversations.filter(conv => conv.deletedCount > 0).slice(0, 3),
+    [conversations],
+  );
+
+  const totalCapturedCount = useMemo(() => {
+    const unreadSum = conversations.reduce((acc, c) => acc + c.unreadCount, 0);
+    return Math.max(unreadSum, deletedMessages.length);
+  }, [conversations, deletedMessages]);
+
+  const estimatedStorageBytes = useMemo(() => {
+    return (totalCapturedCount + deletedMessages.length) * 512;
+  }, [totalCapturedCount, deletedMessages]);
 
   function formatStorageSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -70,17 +126,28 @@ export function LandingPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+        <TopAppBar title="Dashboard" />
+        <div className="pt-14 flex-1 flex items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
       <TopAppBar
-        title="NotiCatch"
+        title="Dashboard"
         subtitle="WhatsApp Notification Saver"
         trailing={
           <IconButton
-            id="landing-settings-button"
+            id="landing-chats-nav-button"
             icon={<TrendingUp className="w-5 h-5 text-accent" strokeWidth={2.2} />}
-            label="View statistics"
-            onClick={() => {}}
+            label="View chats"
+            onClick={() => navigate('/chats')}
           />
         }
       />
@@ -107,8 +174,8 @@ export function LandingPage() {
           <div>
             <AppBrand className="mb-0.5" />
             <p className="text-content-muted text-xs font-bold">
-              {stats.totalDeletedRecovered > 0
-                ? `${stats.totalDeletedRecovered} deleted message${stats.totalDeletedRecovered > 1 ? 's' : ''} captured & preserved`
+              {deletedMessages.length > 0
+                ? `${deletedMessages.length} deleted message${deletedMessages.length > 1 ? 's' : ''} captured & preserved`
                 : 'Monitoring incoming WhatsApp alerts'}
             </p>
           </div>
@@ -121,26 +188,26 @@ export function LandingPage() {
               id="stat-captured"
               icon={<MessageCircle className="w-5 h-5" strokeWidth={2.2} />}
               label="Messages Captured"
-              value={stats.totalMessagesCaputred}
+              value={totalCapturedCount}
             />
             <StatCard
               id="stat-deleted"
               icon={<Trash2 className="w-5 h-5" strokeWidth={2.2} />}
               label="Deleted Recovered"
-              value={stats.totalDeletedRecovered}
+              value={deletedMessages.length}
               accent
             />
             <StatCard
               id="stat-conversations"
               icon={<Users className="w-5 h-5" strokeWidth={2.2} />}
               label="Conversations"
-              value={stats.totalConversations}
+              value={conversations.length}
             />
             <StatCard
               id="stat-storage"
               icon={<HardDrive className="w-5 h-5" strokeWidth={2.2} />}
               label="Storage Used"
-              value={formatStorageSize(stats.storageSizeBytes)}
+              value={formatStorageSize(estimatedStorageBytes)}
             />
           </div>
         </div>
@@ -194,7 +261,7 @@ export function LandingPage() {
         {recentWithDeleted.length === 0 && (
           <div className="px-4 pt-4">
             <div className="card-neu flex flex-col items-center gap-3 py-10 text-center animate-fade-in">
-              <div className="w-12 h-12 rounded-2xl bg-surface-800 flex items-center justify-center shadow-skeuo-chip border border-white">
+              <div className="w-12 h-12 rounded-lg bg-surface-800 flex items-center justify-center shadow-skeuo-chip border border-white">
                 <Trash2 className="w-6 h-6 text-content-muted" strokeWidth={2.2} />
               </div>
               <div>
