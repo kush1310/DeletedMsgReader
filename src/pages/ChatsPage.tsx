@@ -2,56 +2,112 @@
  * ChatsPage
  *
  * Lists all captured WhatsApp conversations sorted by most recent activity.
- * Powered by the Boyer-Moore-Horspool & Damerau-Levenshtein search engine.
+ * Data is loaded from the native Room DB via NativeBridgeService on Android,
+ * or from the empty in-memory store on web (no dummy data).
+ *
+ * Real-time refresh: listens for the 'noticatch:new-message' CustomEvent
+ * dispatched by the Capacitor bridge when a new notification is captured.
+ *
+ * Search: Boyer-Moore-Horspool & Damerau-Levenshtein via SearchEngine.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
-import { SearchInput, EmptyState } from '@/components/common';
+import { SearchInput, EmptyState, LoadingSpinner } from '@/components/common';
 import { ConversationRow } from '@/components/chat';
+import { getConversations } from '@/services/NativeBridgeService';
 import { getAllConversations } from '@/services/DatabaseService';
+import { isNativeAndroid } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
+import type { Conversation } from '@/types';
 
 /**
  * ChatsPage
  *
- * Renders the full conversation list with an accelerated Boyer-Moore search bar.
+ * Renders the full conversation list with real captured data and live updates.
  */
 export function ChatsPage() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
+  const native   = isNativeAndroid();
 
-  const allConversations = useMemo(() => getAllConversations(), []);
+  const [searchQuery,    setSearchQuery]    = useState('');
+  const [conversations,  setConversations]  = useState<Conversation[]>([]);
+  const [isLoading,      setIsLoading]      = useState(true);
+
+  /**
+   * loadData
+   *
+   * Fetches all conversations from the native Room DB (Android) or
+   * in-memory store (web). Called on mount and on real-time refresh events.
+   */
+  const loadData = useCallback(async (): Promise<void> => {
+    if (native) {
+      const data = await getConversations();
+      setConversations(data);
+    } else {
+      /* Web preview: in-memory store (starts empty without dummy data) */
+      setConversations(getAllConversations());
+    }
+    setIsLoading(false);
+  }, [native]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  /* Real-time refresh when Capacitor broadcasts a new WhatsApp message */
+  useEffect(() => {
+    function handleNewMessage(): void {
+      loadData();
+    }
+    window.addEventListener('noticatch:new-message', handleNewMessage);
+    return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
+  }, [loadData]);
 
   /* Apply Boyer-Moore-Horspool & Damerau-Levenshtein search ranking */
   const searchResults = useMemo(() => {
     return searchAndRank(
-      allConversations,
+      conversations,
       conversation => conversation.chatTitle,
       searchQuery,
     );
-  }, [allConversations, searchQuery]);
+  }, [conversations, searchQuery]);
 
   function handleConversationSelect(conversationId: string): void {
     navigate(`/chats/${conversationId}`);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+        <TopAppBar title="Chats" />
+        <div className="pt-14 flex-1 flex items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
       <TopAppBar
         title="Chats"
-        subtitle={`${allConversations.length} active conversation${allConversations.length !== 1 ? 's' : ''}`}
+        subtitle={
+          conversations.length > 0
+            ? `${conversations.length} conversation${conversations.length !== 1 ? 's' : ''} captured`
+            : 'Waiting for WhatsApp notifications...'
+        }
       />
 
-      {/* Fixed Search Bar container below TopAppBar */}
+      {/* Fixed Search Bar */}
       <div className="pt-14 z-20 bg-surface-800 border-b border-surface-700/80 px-4 py-2.5 shadow-xs">
         <SearchInput
           id="chats-search-input"
           value={searchQuery}
           onChange={setSearchQuery}
-          placeholder="Search conversations (BMH sub-linear search)..."
+          placeholder="Search conversations..."
           matchCount={searchQuery ? searchResults.length : undefined}
           algorithmLabel="Boyer-Moore-Horspool O(n/m)"
         />
@@ -80,8 +136,10 @@ export function ChatsPage() {
             title={searchQuery ? 'No conversations found' : 'No conversations captured yet'}
             description={
               searchQuery
-                ? `No conversations match query "${searchQuery}" under BMH search.`
-                : 'WhatsApp conversations will appear here once NotiCatch captures the first notification.'
+                ? `No conversations match "${searchQuery}".`
+                : native
+                  ? 'Send or receive a WhatsApp message — it will appear here within seconds.'
+                  : 'Web preview: no dummy data. Requires a physical Android device with notification access granted.'
             }
           />
         )}

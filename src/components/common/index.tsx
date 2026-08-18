@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import type { ToastMessage, ToastSeverity } from '@/types';
 export { ThreeSecurityCanvas } from './ThreeSecurityCanvas';
+export { ConfirmationModal } from './ConfirmationModal';
 
 /* =============================================================
    Loading Spinner
