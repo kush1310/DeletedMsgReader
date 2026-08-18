@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic / IDE / System artifacts
+.gemini
+.system_generated
+.tempmediaStorage
+.user_uploaded
+scratch
+browser
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Android build outputs & local config
+android/.gradle
+android/build
+android/app/build
+android/local.properties
+android/*.iml
+.gradle
+local.properties

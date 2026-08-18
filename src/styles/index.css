@@ -1,0 +1,298 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   NotiCatch — High-End Neumorphic & Skeuomorphic Design System
+   AegisRx Font Stack (Outfit) + Material Design 3 Light Mode
+   ========================================================= */
+
+@layer base {
+  :root {
+    --color-accent:           #008069;
+    --color-accent-hover:     #006A57;
+    --color-emerald:          #25D366;
+    --color-surface-900:      #FFFFFF;
+    --color-surface-850:      #F8FAFC;
+    --color-surface-800:      #EEF2F6;
+    --color-surface-700:      #E2E8F0;
+    --color-content-primary:  #0F172A;
+    --color-content-secondary:#334155;
+    --color-content-muted:    #64748B;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+    background-color: #EEF2F6;
+    color: #0F172A;
+  }
+
+  /* Neumorphic subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #EEF2F6;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 100px;
+    box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+  }
+
+  /* Remove mobile tap highlight */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Clean emerald focus rings */
+  :focus-visible {
+    outline: 2px solid #008069;
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  /* Emerald text selection */
+  ::selection {
+    background-color: rgba(0, 128, 105, 0.18);
+    color: #0F172A;
+  }
+}
+
+/* =========================================================
+   Neumorphic & Skeuomorphic Component Layer Utilities
+   ========================================================= */
+
+@layer components {
+  /* === Neumorphic & Skeuomorphic Surface Cards === */
+  .card {
+    background-color: #FFFFFF;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .card-neu {
+    background-color: #FFFFFF;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 6px 6px 14px rgba(166, 175, 195, 0.35), -6px -6px 14px rgba(255, 255, 255, 0.9);
+    transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .card-interactive {
+    background-color: #FFFFFF;
+    border-radius: 1rem;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(15, 23, 42, 0.04);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+  }
+  .card-interactive:hover {
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+    border-color: rgba(0, 128, 105, 0.3);
+  }
+  .card-interactive:active {
+    transform: scale(0.985);
+  }
+
+  /* === Modal / Bottom Sheet Overlay === */
+  .overlay {
+    @apply fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-sm;
+  }
+  
+  .bottom-sheet {
+    @apply fixed bottom-0 left-0 right-0 z-50
+           bg-surface-900 rounded-t-3xl p-6
+           border-t border-surface-700
+           animate-slide-up;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15);
+  }
+
+  /* === Badges with Skeuomorphic Gloss === */
+  .badge-deleted {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5
+           bg-gradient-to-b from-amber-50 to-amber-100 text-amber-900 text-2xs font-bold
+           rounded-full border border-amber-300 uppercase tracking-wider;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+  }
+  
+  .badge-recovered {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5
+           bg-gradient-to-b from-emerald-50 to-emerald-100 text-emerald-900 text-2xs font-bold
+           rounded-full border border-emerald-300 uppercase tracking-wider;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+  }
+  
+  .badge-online {
+    @apply w-3 h-3 rounded-full bg-emerald border-2 border-white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  /* === Message Bubbles (WhatsApp Tactile Gloss Style) === */
+  .bubble-received {
+    @apply bg-surface-900 text-content-primary rounded-2xl rounded-tl-none
+           px-4 py-2.5 max-w-[82%] border border-surface-700/80 text-sm leading-relaxed;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+  
+  .bubble-deleted {
+    @apply bg-gradient-to-b from-amber-50/90 to-amber-100/70 text-amber-950 rounded-2xl rounded-tl-none
+           px-4 py-2.5 max-w-[82%] border border-amber-300/80
+           text-sm leading-relaxed;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  /* === Skeuomorphic Tactile Buttons with Press Physics === */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-b from-[#00A884] to-[#008069]
+           hover:from-[#00B892] hover:to-[#006A57]
+           text-white font-bold text-sm
+           px-5 py-3 rounded-xl
+           border-t border-white/25;
+    box-shadow: 0 4px 6px -1px rgba(0, 128, 105, 0.25), 0 2px 4px -2px rgba(0, 128, 105, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-primary:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           bg-surface-800/80 hover:bg-surface-700 active:scale-[0.97]
+           text-content-secondary hover:text-content-primary font-semibold text-sm
+           px-4 py-2.5 rounded-xl border border-surface-700/60;
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-b from-red-50 to-red-100 hover:from-red-100 hover:to-red-200
+           text-red-700 hover:text-red-800 font-bold text-sm
+           px-5 py-3 rounded-xl
+           border border-red-300;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-danger:active {
+    transform: translateY(1px);
+  }
+
+  /* === Debossed Neumorphic Input Fields === */
+  .input-field {
+    @apply w-full bg-surface-900 border border-surface-600/80
+           text-content-primary placeholder-content-muted
+           rounded-xl px-4 py-3 text-sm
+           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+    box-shadow: inset 3px 3px 6px rgba(166, 175, 195, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* === Search Bar === */
+  .search-bar {
+    @apply input-field pl-10;
+  }
+
+  /* === Loading Skeleton === */
+  .skeleton {
+    @apply bg-surface-700 rounded-lg animate-shimmer
+           bg-[length:200%_100%];
+    background-image: linear-gradient(
+      90deg,
+      #E2E8F0 0%,
+      #F1F5F9 50%,
+      #E2E8F0 100%
+    );
+  }
+
+  /* === Top App Bar (Skeuomorphic Frosted Glass) === */
+  .top-bar {
+    @apply fixed top-0 left-0 right-0 z-30
+           bg-surface-900/90 backdrop-blur-md
+           border-b border-surface-700/80;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  /* === Bottom Navigation Bar (Neumorphic Glass Base) === */
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-30
+           bg-surface-900/95 backdrop-blur-md
+           border-t border-surface-700/80
+           pb-safe;
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.05);
+  }
+
+  /* === Step Card with Skeuomorphic Depth === */
+  .step-card {
+    @apply card p-4 flex items-start gap-4;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+  
+  .step-icon {
+    @apply w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/60;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+  }
+
+  /* === Stat Card with Neumorphic Relief === */
+  .stat-card {
+    @apply card-neu p-4 flex flex-col gap-1;
+  }
+}
+
+/* =========================================================
+   Animation & Safe Area Utilities
+   ========================================================= */
+
+@layer utilities {
+  .delay-75  { animation-delay: 75ms; }
+  .delay-100 { animation-delay: 100ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+
+  .pt-safe  { padding-top:    env(safe-area-inset-top, 0px); }
+  .pb-safe  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .px-safe  { padding-left:   env(safe-area-inset-left, 0px);
+               padding-right:  env(safe-area-inset-right, 0px); }
+
+  .h-page   { height: calc(100dvh - 120px); }
+  .min-h-page { min-height: calc(100dvh - 120px); }
+
+  .text-gradient-accent {
+    background: linear-gradient(135deg, #008069 0%, #00A884 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, #128C7E 0%, #25D366 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+}

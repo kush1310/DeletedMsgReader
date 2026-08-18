@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NotiCatch</string>
+    <string name="notification_listener_label">NotiCatch Notification Listener</string>
+    <string name="package_name">com.noticatch.app</string>
+    <string name="custom_url_scheme">com.noticatch.app</string>
+</resources>
