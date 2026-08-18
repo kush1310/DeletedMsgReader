@@ -18,8 +18,6 @@ import { TopAppBar } from '@/components/navigation';
 import { SearchInput, EmptyState, LoadingSpinner } from '@/components/common';
 import { ConversationRow } from '@/components/chat';
 import { getConversations } from '@/services/NativeBridgeService';
-import { getAllConversations } from '@/services/DatabaseService';
-import { isNativeAndroid } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
 import type { Conversation } from '@/types';
 
@@ -30,7 +28,6 @@ import type { Conversation } from '@/types';
  */
 export function ChatsPage() {
   const navigate = useNavigate();
-  const native   = isNativeAndroid();
 
   const [searchQuery,    setSearchQuery]    = useState('');
   const [conversations,  setConversations]  = useState<Conversation[]>([]);
@@ -39,19 +36,13 @@ export function ChatsPage() {
   /**
    * loadData
    *
-   * Fetches all conversations from the native Room DB (Android) or
-   * in-memory store (web). Called on mount and on real-time refresh events.
+   * Fetches all conversations directly from the native Room SQLite database.
    */
   const loadData = useCallback(async (): Promise<void> => {
-    if (native) {
-      const data = await getConversations();
-      setConversations(data);
-    } else {
-      /* Web preview: in-memory store (starts empty without dummy data) */
-      setConversations(getAllConversations());
-    }
+    const data = await getConversations();
+    setConversations(data);
     setIsLoading(false);
-  }, [native]);
+  }, []);
 
   useEffect(() => {
     loadData();

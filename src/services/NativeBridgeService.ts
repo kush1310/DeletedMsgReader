@@ -1,43 +1,18 @@
 /**
  * NativeBridgeService
  *
- * Abstracts all communication between the React/TypeScript layer and
+ * Direct communication bridge between the React TypeScript UI and
  * the Android Kotlin native layer via Capacitor plugin calls.
  *
- * In web preview mode (development), methods return appropriate empty/error
- * responses so the UI can be tested without a device. No dummy data is returned.
- *
- * In production (Android), each method delegates to the registered
- * Capacitor plugin "MessageBridge" which routes to MessageBridgePlugin.kt.
- *
- * Computer Networks domain: all IPC communication over this bridge uses
- * structured JSON payloads — no raw binary or string concatenation.
+ * In NotiCatch, all persistence, notification capture, and security operations
+ * execute strictly on the Android OS level via Room SQLite Database and
+ * NotificationListenerService.
  */
 
 import type { AuthState, AppSettings, Conversation, Message } from '@/types';
 
-/* =============================================================
-   Environment Detection
-   ============================================================= */
-
-/**
- * isNativeAndroid
- *
- * Determines whether the application is running inside a Capacitor
- * Android WebView or in a standard web browser (development mode).
- * Uses the presence of window.Capacitor as the discriminator.
- *
- * @returns - True if running inside a Capacitor native Android WebView.
- */
-export function isNativeAndroid(): boolean {
-  return typeof window !== 'undefined' &&
-         'Capacitor' in window &&
-         (window as unknown as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor.isNativePlatform();
-}
-
-/* Internal helper to access the native plugin with correct typing */
 type CapacitorWindow = {
-  Capacitor: {
+  Capacitor?: {
     isNativePlatform: () => boolean;
     Plugins: {
       MessageBridge: {
@@ -58,7 +33,13 @@ type CapacitorWindow = {
 };
 
 function getBridge() {
-  return (window as unknown as CapacitorWindow).Capacitor.Plugins.MessageBridge;
+  const win = window as unknown as CapacitorWindow;
+  return win.Capacitor?.Plugins.MessageBridge;
+}
+
+export function isNativeAndroid(): boolean {
+  const win = window as unknown as CapacitorWindow;
+  return Boolean(win.Capacitor?.isNativePlatform?.());
 }
 
 /* =============================================================
@@ -68,16 +49,13 @@ function getBridge() {
 /**
  * requestNotificationListenerPermission
  *
- * Opens the Android notification listener settings panel so the user
- * can grant the BIND_NOTIFICATION_LISTENER_SERVICE permission.
- * In web mode, returns false — permission cannot be granted in browser.
- *
- * @returns - Promise resolving to true once settings screen was opened.
+ * Opens the Android system notification access settings screen.
  */
 export async function requestNotificationListenerPermission(): Promise<boolean> {
-  if (!isNativeAndroid()) return false;
   try {
-    const result = await getBridge().openNotificationSettings();
+    const bridge = getBridge();
+    if (!bridge) return false;
+    const result = await bridge.openNotificationSettings();
     return result.opened;
   } catch {
     return false;
@@ -87,15 +65,13 @@ export async function requestNotificationListenerPermission(): Promise<boolean> 
 /**
  * checkNotificationListenerEnabled
  *
- * Queries Android's NotificationListenerManager to determine if the
- * app's NotificationListenerService is currently enabled.
- *
- * @returns - True if permission is granted and service is active.
+ * Queries whether NotiCatch's NotificationListenerService is enabled.
  */
 export async function checkNotificationListenerEnabled(): Promise<boolean> {
-  if (!isNativeAndroid()) return false;
   try {
-    const result = await getBridge().isNotificationListenerEnabled();
+    const bridge = getBridge();
+    if (!bridge) return false;
+    const result = await bridge.isNotificationListenerEnabled();
     return result.enabled;
   } catch {
     return false;
@@ -105,14 +81,13 @@ export async function checkNotificationListenerEnabled(): Promise<boolean> {
 /**
  * requestBatteryOptimizationExemption
  *
- * Triggers the ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent.
- *
- * @returns - True if the intent was dispatched successfully.
+ * Triggers ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent.
  */
 export async function requestBatteryOptimizationExemption(): Promise<boolean> {
-  if (!isNativeAndroid()) return false;
   try {
-    const result = await getBridge().requestBatteryExemption();
+    const bridge = getBridge();
+    if (!bridge) return false;
+    const result = await bridge.requestBatteryExemption();
     return result.requested;
   } catch {
     return false;
@@ -126,23 +101,18 @@ export async function requestBatteryOptimizationExemption(): Promise<boolean> {
 /**
  * authenticateWithBiometrics
  *
- * Invokes Android's BiometricPrompt to authenticate the user.
- * In web mode, returns failure — biometric hardware is not accessible
- * from a browser. The UI must fall back to PIN entry.
- *
- * @param  promptTitle    - Title text displayed in the biometric dialog.
- * @param  promptSubtitle - Subtitle text displayed in the biometric dialog.
- * @returns               - Object containing success flag and optional error message.
+ * Invokes Android BiometricPrompt for fingerprint/device authentication.
  */
 export async function authenticateWithBiometrics(
   promptTitle:    string,
   promptSubtitle: string,
 ): Promise<{ success: boolean; errorMessage: string | null }> {
-  if (!isNativeAndroid()) {
-    return { success: false, errorMessage: 'Device biometric authentication unavailable.' };
-  }
   try {
-    const result = await getBridge().authenticateBiometric({
+    const bridge = getBridge();
+    if (!bridge) {
+      return { success: false, errorMessage: 'Native biometric bridge not initialized.' };
+    }
+    const result = await bridge.authenticateBiometric({
       title:    promptTitle,
       subtitle: promptSubtitle,
     });
@@ -153,21 +123,19 @@ export async function authenticateWithBiometrics(
 }
 
 /* =============================================================
-   Data Retrieval — Conversations & Messages
+   Data Retrieval — Conversations & Messages (Room SQLite)
    ============================================================= */
 
 /**
  * getConversations
  *
- * Returns all captured conversations from Room DB on native Android,
- * or an empty array on web (no captured data without a real device).
- *
- * @returns - Array of Conversation objects.
+ * Returns all captured conversations from Room SQLite database.
  */
 export async function getConversations(): Promise<Conversation[]> {
-  if (!isNativeAndroid()) return [];
   try {
-    const result = await getBridge().getConversations();
+    const bridge = getBridge();
+    if (!bridge) return [];
+    const result = await bridge.getConversations();
     return result.conversations ?? [];
   } catch {
     return [];
@@ -177,15 +145,13 @@ export async function getConversations(): Promise<Conversation[]> {
 /**
  * getMessages
  *
- * Returns all messages for a given conversation from Room DB.
- *
- * @param  conversationId  - UUID of the target conversation.
- * @returns                - Array of Message objects in chronological order.
+ * Returns all messages for a given conversation from Room SQLite database.
  */
 export async function getMessages(conversationId: string): Promise<Message[]> {
-  if (!isNativeAndroid()) return [];
   try {
-    const result = await getBridge().getMessages({ conversationId });
+    const bridge = getBridge();
+    if (!bridge) return [];
+    const result = await bridge.getMessages({ conversationId });
     return result.messages ?? [];
   } catch {
     return [];
@@ -195,14 +161,13 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
 /**
  * getDeletedMessages
  *
- * Returns all messages flagged as deleted across all conversations from Room DB.
- *
- * @returns - Array of deleted Message objects sorted newest-first.
+ * Returns all deleted messages across all conversations from Room SQLite database.
  */
 export async function getDeletedMessages(): Promise<Message[]> {
-  if (!isNativeAndroid()) return [];
   try {
-    const result = await getBridge().getDeletedMessages();
+    const bridge = getBridge();
+    if (!bridge) return [];
+    const result = await bridge.getDeletedMessages();
     return result.messages ?? [];
   } catch {
     return [];
@@ -216,22 +181,16 @@ export async function getDeletedMessages(): Promise<Message[]> {
 /**
  * wipeAllData
  *
- * Permanently deletes all Room DB records and resets SharedPreferences.
- * On web, clears in-memory devStore via the clearAllData() import.
- * This action is irreversible and must only be called after user confirmation.
- *
- * @returns - True if wipe completed successfully.
+ * Permanently purges all Room SQLite database records and app preferences.
  */
 export async function wipeAllData(): Promise<boolean> {
-  if (!isNativeAndroid()) {
-    /* Web fallback: clear in-memory store */
-    const { clearAllData } = await import('@/services/DatabaseService');
-    clearAllData();
-    return true;
-  }
   try {
-    const result = await getBridge().wipeAllData();
-    return result.wiped;
+    const bridge = getBridge();
+    if (bridge) {
+      const result = await bridge.wipeAllData();
+      return result.wiped;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -240,69 +199,36 @@ export async function wipeAllData(): Promise<boolean> {
 /**
  * exportChatAsCSV
  *
- * Exports all messages for a given conversation as a CSV file.
- * On native: writes to external storage and returns the file path.
- * On web: generates a Blob and triggers a browser download.
- *
- * CSV columns: Timestamp, Sender, Message, Deleted, Edited
- *
- * @param  conversationId  - UUID of the conversation to export.
- * @param  chatTitle       - Human-readable chat name for filename.
- * @param  messages        - Message array (required for web fallback).
- * @returns                - Object with filePath (native) and rowCount.
+ * Exports all messages for a conversation as a CSV file written to device storage.
  */
 export async function exportChatAsCSV(
   conversationId: string,
   chatTitle:      string,
-  messages:       Message[],
+  _messages?:     Message[],
 ): Promise<{ filePath: string | null; rowCount: number }> {
-  if (isNativeAndroid()) {
-    try {
-      const result = await getBridge().exportChatAsCSV({ conversationId, chatTitle });
-      return { filePath: result.filePath, rowCount: result.rowCount };
-    } catch {
-      return { filePath: null, rowCount: 0 };
-    }
+  try {
+    const bridge = getBridge();
+    if (!bridge) return { filePath: null, rowCount: 0 };
+    const result = await bridge.exportChatAsCSV({ conversationId, chatTitle });
+    return { filePath: result.filePath, rowCount: result.rowCount };
+  } catch {
+    return { filePath: null, rowCount: 0 };
   }
-
-  /* Web fallback: generate CSV Blob and trigger browser download */
-  const csvLines: string[] = [
-    'Timestamp,Sender,Message,Deleted,Edited',
-    ...messages.map(m => {
-      const ts     = new Date(m.timestamp).toISOString().replace('T', ' ').substring(0, 19);
-      const sender = `"${m.senderName.replace(/"/g, '""')}"`;
-      const text   = `"${(m.messageText ?? '').replace(/"/g, '""')}"`;
-      return `${ts},${sender},${text},${m.isDeletedBySender},${m.isEdited}`;
-    }),
-  ];
-
-  const blob     = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url      = URL.createObjectURL(blob);
-  const anchor   = document.createElement('a');
-  anchor.href    = url;
-  anchor.download = `NotiCatch_${chatTitle.replace(/[^a-zA-Z0-9_\- ]/g, '_').substring(0, 40)}.csv`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-
-  return { filePath: null, rowCount: messages.length };
 }
 
 /**
  * setSpamFilterNative
  *
- * Pushes the spam filter boolean to the native SharedPreferences
- * so NotificationListener.kt reads the current user preference.
- *
- * @param  enabled  - True to suppress OTP/spam notifications.
+ * Pushes spam filter preference to Android SharedPreferences.
  */
 export async function setSpamFilterNative(enabled: boolean): Promise<void> {
-  if (!isNativeAndroid()) return;
   try {
-    await getBridge().setSpamFilter({ enabled });
+    const bridge = getBridge();
+    if (bridge) {
+      await bridge.setSpamFilter({ enabled });
+    }
   } catch {
-    /* Non-critical — log but do not surface to user */
+    /* Non-critical */
   }
 }
 
@@ -310,14 +236,6 @@ export async function setSpamFilterNative(enabled: boolean): Promise<void> {
    Session & Security Controls
    ============================================================= */
 
-/**
- * loadAuthState
- *
- * Retrieves persisted authentication and session configuration
- * from localStorage (web) or EncryptedSharedPreferences (native).
- *
- * @returns - Current AuthState object.
- */
 export async function loadAuthState(): Promise<AuthState> {
   const stored = localStorage.getItem('auth_state_noticatch');
   if (stored) {
@@ -329,32 +247,17 @@ export async function loadAuthState(): Promise<AuthState> {
   }
   return {
     isAuthenticated:    false,
-    isBiometricEnabled: isNativeAndroid(),
+    isBiometricEnabled: true,
     isPinEnabled:       true,
     sessionStartedAt:   null,
     sessionTimeoutMs:   300_000,
   };
 }
 
-/**
- * persistAuthState
- *
- * Saves the current session authentication state to secure storage.
- *
- * @param  authState  - Updated AuthState to save.
- */
 export async function persistAuthState(authState: AuthState): Promise<void> {
   localStorage.setItem('auth_state_noticatch', JSON.stringify(authState));
 }
 
-/**
- * loadAppSettings
- *
- * Retrieves persisted application configuration settings from storage.
- * Works seamlessly across both native Android WebView and web preview.
- *
- * @returns - AppSettings configuration object.
- */
 export async function loadAppSettings(): Promise<AppSettings> {
   const stored = localStorage.getItem('app_settings_noticatch');
   if (stored) {
@@ -366,7 +269,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
   }
   return {
     sessionTimeoutSeconds: 300,
-    biometricEnabled:      isNativeAndroid(),
+    biometricEnabled:      true,
     pinEnabled:            true,
     screenSecureEnabled:   true,
     autoDeleteAfterDays:   null,
@@ -376,17 +279,7 @@ export async function loadAppSettings(): Promise<AppSettings> {
   };
 }
 
-/**
- * persistAppSettings
- *
- * Saves updated application settings to storage and synchronizes
- * relevant flags (such as spam filter) to the native Android layer.
- *
- * @param  settings  - AppSettings object to save.
- */
 export async function persistAppSettings(settings: AppSettings): Promise<void> {
   localStorage.setItem('app_settings_noticatch', JSON.stringify(settings));
-  if (isNativeAndroid()) {
-    await setSpamFilterNative(settings.spamFilterEnabled);
-  }
+  await setSpamFilterNative(settings.spamFilterEnabled);
 }

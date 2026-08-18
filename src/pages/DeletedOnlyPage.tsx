@@ -19,12 +19,7 @@ import { DeletedMessageCard } from '@/components/chat';
 import {
   getDeletedMessages,
   getConversations,
-  isNativeAndroid,
 } from '@/services/NativeBridgeService';
-import {
-  getDeletedMessages as getDeletedWeb,
-  getAllConversations as getAllConversationsWeb,
-} from '@/services/DatabaseService';
 import { searchAndRank } from '@/services/SearchEngine';
 import type { Conversation, Message } from '@/types';
 
@@ -36,7 +31,6 @@ import type { Conversation, Message } from '@/types';
  */
 export function DeletedOnlyPage() {
   const navigate = useNavigate();
-  const native   = isNativeAndroid();
 
   const [searchQuery,       setSearchQuery]       = useState('');
   const [deletedMessages,   setDeletedMessages]   = useState<Message[]>([]);
@@ -46,23 +40,17 @@ export function DeletedOnlyPage() {
   /**
    * loadData
    *
-   * Fetches all deleted messages and conversations from Room DB (native)
-   * or in-memory store (web). Called on mount and on refresh events.
+   * Fetches all deleted messages and conversations directly from Room SQLite database.
    */
   const loadData = useCallback(async (): Promise<void> => {
-    if (native) {
-      const [deleted, convos] = await Promise.all([
-        getDeletedMessages(),
-        getConversations(),
-      ]);
-      setDeletedMessages(deleted);
-      setConversations(convos);
-    } else {
-      setDeletedMessages(getDeletedWeb());
-      setConversations(getAllConversationsWeb());
-    }
+    const [deleted, convos] = await Promise.all([
+      getDeletedMessages(),
+      getConversations(),
+    ]);
+    setDeletedMessages(deleted);
+    setConversations(convos);
     setIsLoading(false);
-  }, [native]);
+  }, []);
 
   useEffect(() => {
     loadData();

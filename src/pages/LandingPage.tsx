@@ -25,12 +25,7 @@ import { Avatar, ThreeSecurityCanvas, LoadingSpinner } from '@/components/common
 import {
   getConversations,
   getDeletedMessages,
-  isNativeAndroid,
 } from '@/services/NativeBridgeService';
-import {
-  getAllConversations as getAllConversationsWeb,
-  getDeletedMessages as getDeletedMessagesWeb,
-} from '@/services/DatabaseService';
 import type { Conversation, Message } from '@/types';
 
 interface StatCardProps {
@@ -67,7 +62,6 @@ function StatCard({ label, value, icon, accent = false, id }: StatCardProps) {
  */
 export function LandingPage() {
   const navigate = useNavigate();
-  const native   = isNativeAndroid();
 
   const [conversations,   setConversations]   = useState<Conversation[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Message[]>([]);
@@ -76,22 +70,17 @@ export function LandingPage() {
   /**
    * loadDashboardData
    *
-   * Queries Room DB on native Android or in-memory store on web.
+   * Queries Room DB directly from the native bridge.
    */
   const loadDashboardData = useCallback(async (): Promise<void> => {
-    if (native) {
-      const [convs, deleted] = await Promise.all([
-        getConversations(),
-        getDeletedMessages(),
-      ]);
-      setConversations(convs);
-      setDeletedMessages(deleted);
-    } else {
-      setConversations(getAllConversationsWeb());
-      setDeletedMessages(getDeletedMessagesWeb());
-    }
+    const [convs, deleted] = await Promise.all([
+      getConversations(),
+      getDeletedMessages(),
+    ]);
+    setConversations(convs);
+    setDeletedMessages(deleted);
     setIsLoading(false);
-  }, [native]);
+  }, []);
 
   useEffect(() => {
     loadDashboardData();

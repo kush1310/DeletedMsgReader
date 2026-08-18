@@ -26,12 +26,7 @@ import { MessageBubble } from '@/components/chat';
 import {
   getMessages,
   getConversations,
-  isNativeAndroid,
 } from '@/services/NativeBridgeService';
-import {
-  getConversationById,
-  getMessagesByConversation,
-} from '@/services/DatabaseService';
 import { searchAndRank } from '@/services/SearchEngine';
 import type { Message, Conversation } from '@/types';
 
@@ -44,7 +39,6 @@ export function ChatDetailPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const navigate           = useNavigate();
   const bottomRef          = useRef<HTMLDivElement>(null);
-  const native             = isNativeAndroid();
 
   const [searchOpen,       setSearchOpen]       = useState(false);
   const [searchQuery,      setSearchQuery]      = useState('');
@@ -57,7 +51,7 @@ export function ChatDetailPage() {
    * loadThreadData
    *
    * Asynchronously queries the conversation and message timeline from
-   * Room SQLite database on native Android or in-memory store on web.
+   * Room SQLite database on Android.
    */
   const loadThreadData = useCallback(async (): Promise<void> => {
     if (!conversationId) {
@@ -65,23 +59,16 @@ export function ChatDetailPage() {
       return;
     }
 
-    if (native) {
-      const [convos, msgs] = await Promise.all([
-        getConversations(),
-        getMessages(conversationId),
-      ]);
-      const found = convos.find(c => c.id === conversationId) ?? null;
-      setConversation(found);
-      setAllMessages(msgs);
-    } else {
-      const found = getConversationById(conversationId) ?? null;
-      const msgs  = getMessagesByConversation(conversationId);
-      setConversation(found);
-      setAllMessages(msgs);
-    }
+    const [convos, msgs] = await Promise.all([
+      getConversations(),
+      getMessages(conversationId),
+    ]);
+    const found = convos.find(c => c.id === conversationId) ?? null;
+    setConversation(found);
+    setAllMessages(msgs);
 
     setIsLoading(false);
-  }, [conversationId, native]);
+  }, [conversationId]);
 
   useEffect(() => {
     loadThreadData();
