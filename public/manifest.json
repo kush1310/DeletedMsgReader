@@ -1,0 +1,18 @@
+{
+  "short_name": "NotiCatch",
+  "name": "NotiCatch — WhatsApp Notification Saver",
+  "description": "Air-Gapped WhatsApp Notification Saver & Deleted Message Recovery",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/chats",
+  "background_color": "#EEF2F6",
+  "theme_color": "#008069",
+  "display": "standalone",
+  "orientation": "portrait"
+}
