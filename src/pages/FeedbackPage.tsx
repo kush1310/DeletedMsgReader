@@ -6,7 +6,7 @@
  * describe any issues, and optionally attach anonymized diagnostic information.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Star, CheckCircle2, Bug, Cpu } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';

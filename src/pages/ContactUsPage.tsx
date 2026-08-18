@@ -6,7 +6,7 @@
  * All form inputs are validated client-side before submission.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mail, Github, Send, CheckCircle2 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';

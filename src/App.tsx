@@ -17,7 +17,7 @@
  *   /              → Redirects to /login
  */
 
-import React, { useCallback, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { BottomNavbar } from '@/components/navigation';
 import { LoginPage        } from '@/pages/LoginPage';
@@ -112,7 +112,7 @@ function SessionGuard() {
  * Inner shell component managing bottom navigation bar visibility
  * and tab selection based on the current route.
  */
-function AppShell({ children }: { readonly children: React.ReactNode }) {
+function AppShell({ children }: { readonly children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
 

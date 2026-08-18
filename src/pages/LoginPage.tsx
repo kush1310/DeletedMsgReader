@@ -8,7 +8,7 @@
  * Session management: records unlock timestamp in sessionStorage on success.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Fingerprint, KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { AppBrand } from '@/components/navigation';

@@ -11,7 +11,7 @@
  * Design: backdrop blur, reduced corner radii (8px max), no rounded excess.
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface ConfirmationModalProps {

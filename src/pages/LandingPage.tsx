@@ -8,7 +8,7 @@
  * Enhanced with Three.js 3D security node, neumorphic cards, and Outfit typography.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageCircle,
