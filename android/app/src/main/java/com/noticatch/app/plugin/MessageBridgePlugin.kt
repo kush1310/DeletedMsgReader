@@ -4,11 +4,19 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -23,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -90,7 +99,7 @@ class MessageBridgePlugin : Plugin() {
      */
     @PluginMethod
     fun isNotificationListenerEnabled(call: PluginCall) {
-        val packageName    = context.packageName
+        val packageName     = context.packageName
         val enabledPackages = Settings.Secure.getString(
             context.contentResolver,
             "enabled_notification_listeners",
@@ -109,7 +118,7 @@ class MessageBridgePlugin : Plugin() {
     @PluginMethod
     fun authenticateBiometric(call: PluginCall) {
         val promptTitle    = call.getString("title",    "Unlock NotiCatch") ?: "Unlock NotiCatch"
-        val promptSubtitle = call.getString("subtitle", "Use biometrics")   ?: "Use biometrics"
+        val promptSubtitle = call.getString("subtitle", "Use device fingerprint to unlock") ?: "Use device fingerprint to unlock"
 
         val executor = ContextCompat.getMainExecutor(context)
 
@@ -125,7 +134,7 @@ class MessageBridgePlugin : Plugin() {
                 }
 
                 override fun onAuthenticationFailed() {
-                    /* Single attempt failure — do not resolve yet; user may retry */
+                    /* Single attempt failure — user may retry */
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -147,6 +156,56 @@ class MessageBridgePlugin : Plugin() {
             .build()
 
         activity.runOnUiThread { biometricPrompt.authenticate(promptInfo) }
+    }
+
+    /**
+     * setScreenSecure
+     *
+     * Dynamically enables or disables FLAG_SECURE on the Android window
+     * to prevent or allow screenshot capture and task switcher previews.
+     */
+    @PluginMethod
+    fun setScreenSecure(call: PluginCall) {
+        val enabled = call.getBoolean("enabled", true) ?: true
+
+        context.getSharedPreferences(NotificationListener.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("screen_secure_enabled", enabled)
+            .apply()
+
+        activity?.runOnUiThread {
+            if (enabled) {
+                activity?.window?.setFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE,
+                    WindowManager.LayoutParams.FLAG_SECURE
+                )
+            } else {
+                activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+
+        val result = JSObject()
+        result.put("updated", true)
+        call.resolve(result)
+    }
+
+    /**
+     * setSessionTimeout
+     *
+     * Persists the session timeout value to native SharedPreferences.
+     */
+    @PluginMethod
+    fun setSessionTimeout(call: PluginCall) {
+        val timeoutSeconds = call.getInt("timeoutSeconds", 300) ?: 300
+
+        context.getSharedPreferences(NotificationListener.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt("session_timeout_seconds", timeoutSeconds)
+            .apply()
+
+        val result = JSObject()
+        result.put("updated", true)
+        call.resolve(result)
     }
 
     /**
@@ -297,12 +356,162 @@ class MessageBridgePlugin : Plugin() {
 
             context.getSharedPreferences(
                 NotificationListener.PREFS_NAME,
-                android.content.Context.MODE_PRIVATE
+                Context.MODE_PRIVATE
             ).edit().clear().apply()
 
             withContext(Dispatchers.Main) {
                 val result = JSObject()
                 result.put("wiped", true)
+                call.resolve(result)
+            }
+        }
+    }
+
+    /**
+     * exportChatAsPDF
+     *
+     * Generates a multi-page PDF document for a specific chat conversation
+     * using Android's native PdfDocument API and triggers an Intent to view/share.
+     */
+    @PluginMethod
+    fun exportChatAsPDF(call: PluginCall) {
+        val conversationId = call.getString("conversationId") ?: run {
+            call.reject("conversationId is required")
+            return
+        }
+        val chatTitle = call.getString("chatTitle") ?: "chat"
+        val safeTitle = chatTitle.replace(Regex("[^a-zA-Z0-9_\\- ]"), "_").take(40)
+
+        pluginScope.launch {
+            val messages = NotiCatchDatabase.getInstance(context)
+                .messageDao()
+                .getByConversation(conversationId)
+
+            val exportDir  = context.getExternalFilesDir("exports") ?: context.filesDir
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault())
+            val pdfFile    = File(exportDir, "NotiCatch_${safeTitle}_${dateFormat.format(Date())}.pdf")
+
+            val pdfDocument = PdfDocument()
+            val pageWidth   = 595 // Standard A4 width at 72dpi
+            val pageHeight  = 842 // Standard A4 height at 72dpi
+            var pageNumber  = 1
+
+            var currentY = 50f
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = pdfDocument.startPage(pageInfo)
+            var canvas = page.canvas
+
+            val titlePaint = Paint().apply {
+                color = Color.rgb(20, 20, 20)
+                textSize = 16f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                isAntiAlias = true
+            }
+
+            val subtitlePaint = Paint().apply {
+                color = Color.rgb(100, 100, 100)
+                textSize = 10f
+                typeface = Typeface.DEFAULT
+                isAntiAlias = true
+            }
+
+            val textPaint = Paint().apply {
+                color = Color.rgb(30, 30, 30)
+                textSize = 10f
+                typeface = Typeface.DEFAULT
+                isAntiAlias = true
+            }
+
+            val deletedBadgePaint = Paint().apply {
+                color = Color.rgb(180, 40, 40)
+                textSize = 9f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                isAntiAlias = true
+            }
+
+            val linePaint = Paint().apply {
+                color = Color.rgb(220, 220, 220)
+                strokeWidth = 1f
+            }
+
+            // Draw Header
+            canvas.drawText("NotiCatch — WhatsApp Chat Archive", 40f, currentY, titlePaint)
+            currentY += 20f
+            canvas.drawText("Conversation: $chatTitle | Exported: ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())}", 40f, currentY, subtitlePaint)
+            currentY += 15f
+            canvas.drawLine(40f, currentY, pageWidth - 40f, currentY, linePaint)
+            currentY += 25f
+
+            val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+
+            for (m in messages) {
+                if (currentY > pageHeight - 60f) {
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    currentY = 50f
+                }
+
+                val timeStr = timeFormat.format(Date(m.timestamp))
+                val senderHeader = "[ $timeStr ] ${m.senderName}"
+                canvas.drawText(senderHeader, 40f, currentY, subtitlePaint)
+
+                if (m.isDeletedBySender) {
+                    canvas.drawText("[ DELETED BY SENDER ]", pageWidth - 160f, currentY, deletedBadgePaint)
+                }
+
+                currentY += 14f
+                val body = m.messageText ?: "(Media Attachment)"
+                // Truncate or wrap line
+                val maxCharsPerLine = 75
+                val lines = body.chunked(maxCharsPerLine)
+                for (line in lines) {
+                    if (currentY > pageHeight - 40f) {
+                        pdfDocument.finishPage(page)
+                        pageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        page = pdfDocument.startPage(pageInfo)
+                        canvas = page.canvas
+                        currentY = 50f
+                    }
+                    canvas.drawText(line, 50f, currentY, textPaint)
+                    currentY += 14f
+                }
+                currentY += 8f
+            }
+
+            pdfDocument.finishPage(page)
+
+            FileOutputStream(pdfFile).use { out ->
+                pdfDocument.writeTo(out)
+            }
+            pdfDocument.close()
+
+            // Open Android Share/View Sheet
+            try {
+                val uri: Uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    pdfFile
+                )
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "NotiCatch Archive: $chatTitle")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                activity.startActivity(Intent.createChooser(shareIntent, "Share Chat PDF"))
+            } catch (_: Exception) {
+                // Non-critical if share dialog fails
+            }
+
+            withContext(Dispatchers.Main) {
+                val result = JSObject()
+                result.put("filePath", pdfFile.absolutePath)
+                result.put("rowCount", messages.size)
                 call.resolve(result)
             }
         }
@@ -328,18 +537,17 @@ class MessageBridgePlugin : Plugin() {
                 .messageDao()
                 .getByConversation(conversationId)
 
-            val dateFormat   = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault())
-            val exportDir    = context.getExternalFilesDir("exports") ?: context.filesDir
-            val fileName     = "NotiCatch_${safeTitle}_${dateFormat.format(Date())}.csv"
-            val outputFile   = File(exportDir, fileName)
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault())
+            val exportDir  = context.getExternalFilesDir("exports") ?: context.filesDir
+            val outputFile = File(exportDir, "NotiCatch_${safeTitle}_${dateFormat.format(Date())}.csv")
 
             FileWriter(outputFile).use { writer ->
                 writer.appendLine("Timestamp,Sender,Message,Deleted,Edited")
                 for (m in messages) {
-                    val ts      = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    val ts     = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                         .format(Date(m.timestamp))
-                    val sender  = m.senderName.replace("\"", "\"\"")
-                    val text    = (m.messageText ?: "").replace("\"", "\"\"")
+                    val sender = m.senderName.replace("\"", "\"\"")
+                    val text   = (m.messageText ?: "").replace("\"", "\"\"")
                     writer.appendLine("\"$ts\",\"$sender\",\"$text\",${m.isDeletedBySender},${m.isEdited}")
                 }
             }
@@ -362,7 +570,7 @@ class MessageBridgePlugin : Plugin() {
     @PluginMethod
     fun setSpamFilter(call: PluginCall) {
         val enabled = call.getBoolean("enabled", true) ?: true
-        context.getSharedPreferences(NotificationListener.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences(NotificationListener.PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(NotificationListener.PREF_SPAM_FILTER, enabled)
             .apply()

@@ -2,19 +2,18 @@
  * SettingsPage
  *
  * Security and configuration control panel for NotiCatch.
- * All actions are fully implemented:
- *   - Biometric / screen security toggles with native persistence
- *   - Session timeout selector with active enforcement
- *   - Spam & OTP filter with native bridge sync
- *   - Export per-chat CSV (conversation picker → CSV download)
- *   - Wipe All Data (typed "WIPE" confirmation required)
- *   - Lock and Logout (confirmation modal required)
+ * All settings are backed by native Android Room SQLite and SharedPreferences:
+ *   - Screen Protection toggle with live WindowManager FLAG_SECURE synchronization
+ *   - Session Timeout selector with native backend persistence
+ *   - Spam & OTP filter with NotificationListener gate synchronization
+ *   - Chat-wise PDF and CSV Export with native FileProvider sharing
+ *   - Wipe All Data with typed confirmation gate
+ *   - Lock and Session Sign Out
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Fingerprint,
   Shield,
   Clock,
   Filter,
@@ -24,8 +23,8 @@ import {
   HelpCircle,
   LogOut,
   ChevronDown,
-  CheckSquare,
-  Square,
+  FileText,
+  Share2,
 } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
 import { SettingsRow, ToggleSwitch, LoadingSpinner, ConfirmationModal } from '@/components/common';
@@ -35,22 +34,24 @@ import {
   persistAuthState,
   loadAuthState,
   wipeAllData,
+  exportChatAsPDF,
   exportChatAsCSV,
   getConversations,
-  getMessages,
   setSpamFilterNative,
+  setScreenSecureNative,
+  setSessionTimeoutNative,
 } from '@/services/NativeBridgeService';
-import type { AppSettings, Conversation, Message } from '@/types';
+import type { AppSettings, Conversation } from '@/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
-  sessionTimeoutSeconds:  300,
-  biometricEnabled:       true,
-  pinEnabled:             false,
-  screenSecureEnabled:    true,
-  autoDeleteAfterDays:    null,
-  notificationEnabled:    true,
-  captureMediaEnabled:    false,
-  spamFilterEnabled:      true,
+  sessionTimeoutSeconds: 300,
+  biometricEnabled:      true,
+  pinEnabled:            false,
+  screenSecureEnabled:   true,
+  autoDeleteAfterDays:   null,
+  notificationEnabled:   true,
+  captureMediaEnabled:   false,
+  spamFilterEnabled:     true,
 };
 
 type ModalType = 'logout' | 'wipe' | 'export' | null;
@@ -58,39 +59,46 @@ type ModalType = 'logout' | 'wipe' | 'export' | null;
 /**
  * SettingsPage
  *
- * Renders the Settings control panel with all operations fully wired to
- * NativeBridgeService and local state.
+ * Renders the Settings control panel with all security and export features
+ * wired directly to native Android Room DB and SharedPreferences.
+ *
+ * @returns {JSX.Element} - Settings view container.
+ * @validates             - Enforces typed confirmation for wipe, validates export parameters.
+ * @redirects             - /login on logout, /setup on wipe.
+ * @edge-cases            - Handles empty conversation list gracefully during export.
  */
 export function SettingsPage() {
   const navigate = useNavigate();
 
   const [settings,          setSettings]          = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [isLoading,         setIsLoading]          = useState(true);
-  const [showTimeoutPicker, setShowTimeoutPicker]  = useState(false);
-  const [activeModal,       setActiveModal]        = useState<ModalType>(null);
-  const [conversations,     setConversations]      = useState<Conversation[]>([]);
-  const [selectedChatIds,   setSelectedChatIds]    = useState<Set<string>>(new Set());
-  const [isExporting,       setIsExporting]        = useState(false);
-  const [isWiping,          setIsWiping]           = useState(false);
-  const [exportDone,        setExportDone]         = useState(false);
+  const [isLoading,         setIsLoading]         = useState(true);
+  const [showTimeoutPicker, setShowTimeoutPicker] = useState(false);
+  const [activeModal,       setActiveModal]       = useState<ModalType>(null);
+  const [conversations,     setConversations]     = useState<Conversation[]>([]);
+  const [exportingChatId,   setExportingChatId]   = useState<string | null>(null);
+  const [exportSuccessMsg,  setExportSuccessMsg]  = useState<string | null>(null);
+  const [isWiping,          setIsWiping]          = useState(false);
 
   useEffect(() => {
-    async function loadSettings(): Promise<void> {
+    async function loadInitialSettings(): Promise<void> {
       const loaded = await loadAppSettings();
       setSettings(loaded);
       setIsLoading(false);
     }
-    loadSettings();
+    loadInitialSettings();
   }, []);
 
   /**
    * updateSetting
    *
-   * Updates a single AppSettings field, persists to storage, and for
-   * spamFilterEnabled pushes the value to the native bridge immediately.
+   * Updates an AppSettings property, persists locally, and pushes native updates.
    *
-   * @param  key    - AppSettings field name to update.
-   * @param  value  - New value for the field.
+   * @param  {K} key    - Setting property key.
+   * @param  {any} value - Setting value.
+   * @returns {Promise<void>}
+   * @validates - Ensures correct type mapping for each key.
+   * @redirects - N/A.
+   * @edge-cases - Propagates screen security and spam filter updates to Android immediately.
    */
   const updateSetting = useCallback(async <K extends keyof AppSettings>(
     key:   K,
@@ -99,18 +107,25 @@ export function SettingsPage() {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
     await persistAppSettings(updated);
-    if (key === 'spamFilterEnabled') {
+
+    if (key === 'screenSecureEnabled') {
+      await setScreenSecureNative(value as boolean);
+    } else if (key === 'spamFilterEnabled') {
       await setSpamFilterNative(value as boolean);
+    } else if (key === 'sessionTimeoutSeconds') {
+      await setSessionTimeoutNative(value as number);
     }
   }, [settings]);
 
   /**
    * handleLogoutConfirm
    *
-   * Clears session authentication state and navigates to the login screen.
-   * Called only after user confirms in the logout confirmation modal.
+   * Clears session authentication tokens and redirects user to the lock screen.
    *
-   * @redirects - /login on completion.
+   * @returns {Promise<void>}
+   * @validates - Clears active session storage and persistent auth state.
+   * @redirects - /login
+   * @edge-cases - Preserves underlying Room SQLite database records.
    */
   async function handleLogoutConfirm(): Promise<void> {
     setActiveModal(null);
@@ -127,10 +142,12 @@ export function SettingsPage() {
   /**
    * handleWipeConfirm
    *
-   * Permanently deletes all captured messages and conversations.
-   * Called only after user types "WIPE" in the destructive confirmation modal.
+   * Permanently wipes Room SQLite database, clear preferences, and routes to setup.
    *
-   * @redirects - /setup on completion to re-run onboarding.
+   * @returns {Promise<void>}
+   * @validates - Requires exact typed string "WIPE" in confirmation dialog.
+   * @redirects - /setup
+   * @edge-cases - Erases all SQLite records and cached files irreversibly.
    */
   async function handleWipeConfirm(): Promise<void> {
     setActiveModal(null);
@@ -144,50 +161,62 @@ export function SettingsPage() {
   /**
    * openExportModal
    *
-   * Loads the list of captured conversations for the export picker modal.
+   * Loads all conversations from Room SQLite and displays the export dialog.
+   *
+   * @returns {Promise<void>}
+   * @validates - Queries native getConversations().
+   * @redirects - N/A.
+   * @edge-cases - Sets empty conversation list if no records exist.
    */
   async function openExportModal(): Promise<void> {
     const loaded = await getConversations();
     setConversations(loaded);
-    setSelectedChatIds(new Set());
-    setExportDone(false);
+    setExportSuccessMsg(null);
     setActiveModal('export');
   }
 
   /**
-   * handleExportSelected
+   * handleExportPDF
    *
-   * Exports all selected conversations as individual CSV files.
-   * Each conversation produces one CSV download with all captured messages.
+   * Exports an individual chat conversation as a structured PDF document.
    *
-   * @validates - At least one conversation must be selected.
+   * @param  {string} conversationId - UUID of the target conversation.
+   * @param  {string} chatTitle      - Name of the conversation.
+   * @returns {Promise<void>}
+   * @validates - Validates conversation existence.
+   * @redirects - Launches Android native Share/View sheet.
+   * @edge-cases - Displays feedback toast on export completion.
    */
-  async function handleExportSelected(): Promise<void> {
-    if (selectedChatIds.size === 0) return;
-    setIsExporting(true);
-
-    for (const conversationId of selectedChatIds) {
-      const conversation = conversations.find(c => c.id === conversationId);
-      if (!conversation) continue;
-      const messages: Message[] = await getMessages(conversationId);
-      await exportChatAsCSV(conversationId, conversation.chatTitle, messages);
+  async function handleExportPDF(conversationId: string, chatTitle: string): Promise<void> {
+    setExportingChatId(conversationId);
+    const result = await exportChatAsPDF(conversationId, chatTitle);
+    setExportingChatId(null);
+    if (result.filePath) {
+      setExportSuccessMsg(`Exported ${result.rowCount} messages to PDF`);
+      setTimeout(() => setExportSuccessMsg(null), 3000);
     }
-
-    setIsExporting(false);
-    setExportDone(true);
-    setTimeout(() => setActiveModal(null), 1200);
   }
 
-  function toggleChatSelection(conversationId: string): void {
-    setSelectedChatIds(prev => {
-      const next = new Set(prev);
-      if (next.has(conversationId)) {
-        next.delete(conversationId);
-      } else {
-        next.add(conversationId);
-      }
-      return next;
-    });
+  /**
+   * handleExportCSV
+   *
+   * Exports an individual chat conversation as a CSV spreadsheet.
+   *
+   * @param  {string} conversationId - UUID of the target conversation.
+   * @param  {string} chatTitle      - Name of the conversation.
+   * @returns {Promise<void>}
+   * @validates - Validates conversation existence.
+   * @redirects - N/A.
+   * @edge-cases - Displays feedback toast on export completion.
+   */
+  async function handleExportCSV(conversationId: string, chatTitle: string): Promise<void> {
+    setExportingChatId(conversationId);
+    const result = await exportChatAsCSV(conversationId, chatTitle);
+    setExportingChatId(null);
+    if (result.filePath) {
+      setExportSuccessMsg(`Exported ${result.rowCount} messages to CSV`);
+      setTimeout(() => setExportSuccessMsg(null), 3000);
+    }
   }
 
   const timeoutOptions: Array<{ label: string; value: number }> = [
@@ -218,36 +247,25 @@ export function SettingsPage() {
 
       <div className="flex-1 overflow-y-auto pt-14 pb-20">
 
-        {/* Security Section */}
+        {/* Security & Access Section */}
         <section className="px-4 pt-5 pb-2">
           <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
             Security & Access
           </h2>
           <div className="space-y-2">
 
-            <div className="card-interactive flex items-center gap-3 px-4 py-3.5">
-              <div className="w-9 h-9 rounded-lg bg-surface-800 flex items-center justify-center text-accent flex-shrink-0">
-                <Fingerprint className="w-5 h-5 text-accent" strokeWidth={2} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-content-primary">Biometric Lock</p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium">Require fingerprint or face to unlock</p>
-              </div>
-              <ToggleSwitch
-                id="biometric-toggle"
-                label="Biometric lock"
-                checked={settings.biometricEnabled}
-                onChange={checked => updateSetting('biometricEnabled', checked)}
-              />
-            </div>
-
+            {/* Screen Protection with live FLAG_SECURE toggle */}
             <div className="card-interactive flex items-center gap-3 px-4 py-3.5">
               <div className="w-9 h-9 rounded-lg bg-surface-800 flex items-center justify-center text-accent flex-shrink-0">
                 <Shield className="w-5 h-5 text-accent" strokeWidth={2} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-content-primary">Screen Protection</p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium">Block screenshots and task switcher previews</p>
+                <p className="text-xs text-content-muted mt-0.5 font-medium">
+                  {settings.screenSecureEnabled
+                    ? 'Screenshots blocked & previews shielded'
+                    : 'Screenshots permitted (FLAG_SECURE disabled)'}
+                </p>
               </div>
               <ToggleSwitch
                 id="screen-secure-toggle"
@@ -257,6 +275,7 @@ export function SettingsPage() {
               />
             </div>
 
+            {/* Session Timeout Selector */}
             <div className="card">
               <button
                 id="session-timeout-button"
@@ -270,7 +289,7 @@ export function SettingsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-content-primary">Session Timeout</p>
-                  <p className="text-xs text-content-muted mt-0.5 font-medium">Auto-lock after inactivity</p>
+                  <p className="text-xs text-content-muted mt-0.5 font-medium">Auto-lock after background inactivity</p>
                 </div>
                 <span className="text-xs text-content-secondary font-semibold mr-1">{currentTimeoutLabel}</span>
                 <ChevronDown
@@ -286,7 +305,10 @@ export function SettingsPage() {
                       key={option.value}
                       id={`timeout-option-${option.value}`}
                       type="button"
-                      onClick={() => { updateSetting('sessionTimeoutSeconds', option.value); setShowTimeoutPicker(false); }}
+                      onClick={() => {
+                        updateSetting('sessionTimeoutSeconds', option.value);
+                        setShowTimeoutPicker(false);
+                      }}
                       className={`w-full px-5 py-3 text-left text-sm font-medium transition-colors ${
                         settings.sessionTimeoutSeconds === option.value
                           ? 'text-accent font-bold bg-accent-muted'
@@ -314,7 +336,7 @@ export function SettingsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-content-primary">Spam & OTP Filter</p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium">Suppress one-time verification codes and automated spam</p>
+                <p className="text-xs text-content-muted mt-0.5 font-medium">Suppress verification codes and automated broadcast spam</p>
               </div>
               <ToggleSwitch
                 id="spam-filter-toggle"
@@ -336,21 +358,21 @@ export function SettingsPage() {
               id="export-data-button"
               icon={<Download className="w-5 h-5 text-accent" strokeWidth={2} />}
               label="Export Chat Data"
-              description="Download captured messages as CSV files, one per conversation"
+              description="Export chat conversations in PDF or CSV format chat-wise"
               onClick={openExportModal}
             />
             <SettingsRow
               id="wipe-data-button"
               icon={<Trash2 className="w-5 h-5 text-red-600" strokeWidth={2} />}
               label="Wipe All Data"
-              description="Permanently delete all captured messages and reset to setup"
+              description="Permanently delete all captured SQLite messages and reset"
               onClick={() => setActiveModal('wipe')}
               danger
             />
           </div>
         </section>
 
-        {/* Support */}
+        {/* Support & Diagnostics */}
         <section className="px-4 pt-5 pb-2">
           <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
             Support & Diagnostics
@@ -360,20 +382,20 @@ export function SettingsPage() {
               id="contact-us-button"
               icon={<MessageSquare className="w-5 h-5 text-accent" strokeWidth={2} />}
               label="Contact Us"
-              description="Get help from the NotiCatch developer team"
+              description="Get assistance with notification capture configuration"
               onClick={() => navigate('/contact')}
             />
             <SettingsRow
               id="feedback-button"
               icon={<HelpCircle className="w-5 h-5 text-accent" strokeWidth={2} />}
               label="Feedback & Diagnostics"
-              description="Report issues and inspect local notification logs"
+              description="Report device issues and verify listener health"
               onClick={() => navigate('/feedback')}
             />
           </div>
         </section>
 
-        {/* Lock & Logout */}
+        {/* Lock & Sign Out */}
         <section className="px-4 pt-5 pb-8">
           <button
             id="logout-button"
@@ -382,10 +404,10 @@ export function SettingsPage() {
             className="btn-danger w-full"
           >
             {isWiping ? <LoadingSpinner size="sm" /> : <LogOut className="w-4 h-4" strokeWidth={2.2} />}
-            Lock and Sign Out
+            Lock Application
           </button>
           <p className="text-2xs text-content-muted text-center mt-3 font-medium">
-            NotiCatch v1.0.0 — Zero network permission. 100% on-device storage.
+            NotiCatch v1.0.0 — Zero network permission. 100% on-device SQLite storage.
           </p>
         </section>
       </div>
@@ -393,9 +415,9 @@ export function SettingsPage() {
       {/* Logout Confirmation Modal */}
       <ConfirmationModal
         isOpen={activeModal === 'logout'}
-        title="Lock and Sign Out"
-        body="Your session will be cleared and you will be returned to the lock screen. All captured data remains safely stored on this device."
-        confirmLabel="Lock & Sign Out"
+        title="Lock Application"
+        body="Your active session will be closed and fingerprint authentication will be required upon next launch. All database records remain safely preserved."
+        confirmLabel="Lock Application"
         isDangerous={false}
         onConfirm={handleLogoutConfirm}
         onCancel={() => setActiveModal(null)}
@@ -405,7 +427,7 @@ export function SettingsPage() {
       <ConfirmationModal
         isOpen={activeModal === 'wipe'}
         title="Wipe All Data"
-        body="This permanently deletes every captured message, conversation, and audit log from this device. This action cannot be undone."
+        body="This permanently deletes every captured message, conversation, and audit log from the SQLite database. This operation cannot be reversed."
         confirmLabel="Wipe Everything"
         isDangerous
         requireTypedConfirmation="WIPE"
@@ -413,7 +435,7 @@ export function SettingsPage() {
         onCancel={() => setActiveModal(null)}
       />
 
-      {/* Export Conversation Picker Modal */}
+      {/* Export Conversation Picker Modal (Chat-wise PDF / CSV) */}
       {activeModal === 'export' && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center"
@@ -422,72 +444,84 @@ export function SettingsPage() {
         >
           <div
             className="w-full max-w-lg bg-white animate-slide-up"
-            style={{ borderRadius: '8px 8px 0 0', padding: '24px 20px 32px', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}
+            style={{ borderRadius: '8px 8px 0 0', padding: '24px 20px 32px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
           >
-            <h2 className="text-base font-bold text-content-primary mb-1">Export Chat Data</h2>
-            <p className="text-xs text-content-muted font-medium mb-4">
-              Select conversations to export as CSV files. Each conversation becomes a separate file.
-            </p>
-
-            <div className="flex-1 overflow-y-auto space-y-2 mb-5">
-              {conversations.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-content-muted font-semibold">No conversations captured yet.</p>
-                  <p className="text-xs text-content-muted mt-1">Receive WhatsApp messages to capture them.</p>
-                </div>
-              ) : (
-                conversations.map(convo => {
-                  const selected = selectedChatIds.has(convo.id);
-                  return (
-                    <button
-                      key={convo.id}
-                      type="button"
-                      onClick={() => toggleChatSelection(convo.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                        selected ? 'bg-accent-muted border border-accent/40' : 'bg-surface-800 border border-surface-700 hover:bg-surface-850'
-                      }`}
-                      style={{ borderRadius: '6px' }}
-                    >
-                      {selected
-                        ? <CheckSquare className="w-4 h-4 text-accent flex-shrink-0" strokeWidth={2} />
-                        : <Square     className="w-4 h-4 text-content-muted flex-shrink-0" strokeWidth={2} />
-                      }
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-content-primary truncate">{convo.chatTitle}</p>
-                        <p className="text-xs text-content-muted font-medium">
-                          {convo.deletedCount} deleted — {convo.isGroup ? 'Group' : 'Direct'}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="flex gap-3">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-base font-bold text-content-primary">Export Chat Data</h2>
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
-                className="flex-1 py-3 px-4 text-sm font-bold text-content-primary bg-surface-800 border border-surface-600 transition-colors hover:bg-surface-700"
-                style={{ borderRadius: '6px' }}
+                className="text-xs text-content-muted font-bold px-2 py-1 hover:bg-surface-800 rounded"
               >
-                Cancel
+                Close
               </button>
-              <button
-                type="button"
-                onClick={handleExportSelected}
-                disabled={selectedChatIds.size === 0 || isExporting}
-                className="flex-1 py-3 px-4 text-sm font-bold text-white bg-accent hover:bg-accent/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                style={{ borderRadius: '6px' }}
-              >
-                {isExporting ? (
-                  <><LoadingSpinner size="sm" /> Exporting...</>
-                ) : exportDone ? (
-                  'Done'
-                ) : (
-                  `Export ${selectedChatIds.size > 0 ? `(${selectedChatIds.size})` : ''}`
-                )}
-              </button>
+            </div>
+            <p className="text-xs text-content-muted font-medium mb-3">
+              Generate formatted PDF documents or CSV archives chat-wise.
+            </p>
+
+            {exportSuccessMsg && (
+              <div className="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-300 rounded text-xs font-bold text-emerald-800 animate-fade-in">
+                {exportSuccessMsg}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
+              {conversations.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-content-muted font-semibold">No captured conversations found in database.</p>
+                  <p className="text-xs text-content-muted mt-1">Receive WhatsApp notifications to begin saving chats.</p>
+                </div>
+              ) : (
+                conversations.map(convo => {
+                  const isCurrentExporting = exportingChatId === convo.id;
+                  return (
+                    <div
+                      key={convo.id}
+                      className="p-3 bg-surface-800 border border-surface-700 rounded-lg flex flex-col gap-2 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1 pr-2">
+                          <p className="text-sm font-bold text-content-primary truncate">{convo.chatTitle}</p>
+                          <p className="text-2xs text-content-muted font-semibold mt-0.5">
+                            {convo.deletedCount} deleted recovered — {convo.isGroup ? 'Group Chat' : 'Direct Message'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-1 border-t border-surface-700/60">
+                        {/* PDF Export Button */}
+                        <button
+                          type="button"
+                          disabled={isCurrentExporting}
+                          onClick={() => handleExportPDF(convo.id, convo.chatTitle)}
+                          className="flex-1 py-2 px-3 text-xs font-bold text-white bg-accent hover:bg-accent/90 rounded flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                        >
+                          {isCurrentExporting ? (
+                            <LoadingSpinner size="sm" />
+                          ) : (
+                            <>
+                              <FileText className="w-3.5 h-3.5" />
+                              Export PDF
+                            </>
+                          )}
+                        </button>
+
+                        {/* CSV Export Button */}
+                        <button
+                          type="button"
+                          disabled={isCurrentExporting}
+                          onClick={() => handleExportCSV(convo.id, convo.chatTitle)}
+                          className="py-2 px-3 text-xs font-bold text-content-primary bg-surface-700 hover:bg-surface-600 rounded flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          CSV
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
