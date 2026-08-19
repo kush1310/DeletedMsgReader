@@ -72,16 +72,19 @@ export function TopAppBar({ title, subtitle, leading, trailing }: TopAppBarProps
  * a security badge icon and a muted version chip.
  * Plain text only — no abbreviation icons beside the name.
  */
-export function AppBrand({ className = '' }: { readonly className?: string }) {
+export function AppBrand({ className = '', subtitle, size: _size = 'md' }: { readonly className?: string; readonly subtitle?: string; readonly size?: string }) {
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="w-8 h-8 rounded-xl bg-accent-muted flex items-center justify-center">
-        <ShieldCheck className="w-5 h-5 text-accent" strokeWidth={2.2} />
+    <div className={`flex flex-col items-center gap-1 ${className}`}>
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-xl bg-accent-muted flex items-center justify-center">
+          <ShieldCheck className="w-5 h-5 text-accent" strokeWidth={2.2} />
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xl font-extrabold text-content-primary tracking-tight">NotiCatch</span>
+          <span className="text-2xs font-bold text-content-muted bg-surface-800 border border-surface-700 px-1.5 py-0.5 rounded-full">v1.0</span>
+        </div>
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-xl font-bold text-content-primary tracking-tight">NotiCatch</span>
-        <span className="text-2xs font-bold text-content-muted bg-surface-800 border border-surface-700 px-1.5 py-0.5 rounded-full">v1.0</span>
-      </div>
+      {subtitle && <p className="text-xs text-content-muted font-medium">{subtitle}</p>}
     </div>
   );
 }

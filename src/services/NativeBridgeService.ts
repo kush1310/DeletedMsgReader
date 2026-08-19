@@ -344,3 +344,15 @@ export async function persistAppSettings(settings: AppSettings): Promise<void> {
     setSessionTimeoutNative(settings.sessionTimeoutSeconds),
   ]);
 }
+
+/* =============================================================
+   Backward Compatibility Aliases
+   ============================================================= */
+
+export const getMessages = getMessagesByConversation;
+export const exportChatAsPDF = exportChatAsPDFNative;
+export const exportChatAsCSV = exportChatAsCSVNative;
+export const openAutostartSettings = openAutostartSettingsNative;
+export const requestBatteryOptimizationExemption = requestBatteryExemptionNative;
+export const simulateNotification = simulateNotificationNative;
+

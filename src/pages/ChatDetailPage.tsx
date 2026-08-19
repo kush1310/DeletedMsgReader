@@ -64,7 +64,7 @@ export function ChatDetailPage() {
       getConversations(),
       getMessages(conversationId),
     ]);
-    const found = convos.find(c => c.id === conversationId) ?? null;
+    const found = convos.find((c: Conversation) => c.id === conversationId) ?? null;
     setConversation(found);
     setAllMessages(msgs);
     setIsLoading(false);

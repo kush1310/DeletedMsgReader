@@ -74,7 +74,7 @@ export function validateNotificationPayload(payload: RawNotificationPayload): bo
   if (payload.title.length > MAX_SENDER_NAME_LENGTH) {
     return false;
   }
-  if (payload.text.length > MAX_MESSAGE_TEXT_LENGTH) {
+  if (payload.text !== null && payload.text !== undefined && payload.text.length > MAX_MESSAGE_TEXT_LENGTH) {
     return false;
   }
   if (payload.timestamp <= 0) {

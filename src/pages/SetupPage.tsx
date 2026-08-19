@@ -19,7 +19,7 @@ import { LoadingSpinner, ThreeSecurityCanvas } from '@/components/common';
 import {
   checkNotificationListenerEnabled,
   requestNotificationListenerPermission,
-  requestBatteryOptimizationExemption,
+  requestBatteryExemptionNative,
   isNativeAndroid,
 } from '@/services/NativeBridgeService';
 
@@ -83,8 +83,8 @@ export function SetupPage() {
     if (!notifGranted || batteryRequested || !native) return;
     setBatteryRequested(true);
 
-    requestBatteryOptimizationExemption().then(granted => {
-      setBatteryGranted(granted);
+    requestBatteryExemptionNative().then(() => {
+      setBatteryGranted(true);
     });
   }, [notifGranted, batteryRequested, native]);
 

@@ -105,8 +105,8 @@ export interface KernelSocketStats {
 export type DiffType = 'ADDED' | 'REMOVED' | 'UNCHANGED';
 
 export interface DiffChunk {
-  readonly type:  DiffType;
-  readonly text:  string;
+  readonly type: DiffType;
+  readonly text: string;
 }
 
 /* =============================================================
@@ -135,37 +135,40 @@ export type AuditEventType =
   | 'DATABASE_PURGED'
   | 'SECURITY_EVENT';
 
-export type ClassificationType =
+export type NotificationClassification =
+  | 'USER_MESSAGE'
   | 'STANDARD_MESSAGE'
-  | 'SYSTEM_DELETION'
-  | 'USER_DELETION'
-  | 'SYSTEM_EDIT'
-  | 'MEDIA_IMAGE'
-  | 'MEDIA_AUDIO'
-  | 'MEDIA_VIDEO'
-  | 'MEDIA_DOCUMENT'
-  | 'SPAM_OTP'
-  | 'UNKNOWN';
+  | 'DELETION_SIGNAL'
+  | 'EDIT_SIGNAL'
+  | 'SYSTEM_NOTICE'
+  | 'OTP_SPAM'
+  | 'UNKNOWN_PACKAGE'
+  | 'EMPTY_PAYLOAD';
+
+export type ClassificationType = NotificationClassification;
 
 export interface ClassificationResult {
-  readonly type:                   ClassificationType;
-  readonly isDeletion:             boolean;
-  readonly isEdit:                 boolean;
-  readonly confidence:             number;
-  readonly extractedSender:        string | null;
+  readonly classification:       NotificationClassification;
+  readonly type?:                NotificationClassification;
+  readonly isDeletion:           boolean;
+  readonly isEdit:               boolean;
+  readonly isSystemMessage?:     boolean;
+  readonly normalizedText?:      string | null;
+  readonly confidence:           number;
+  readonly extractedSender:      string | null;
   readonly extractedOriginalText?: string | null;
-  readonly matchedPattern:         string | null;
+  readonly matchedPattern:       string | null;
 }
 
 export interface SearchMatch {
-  readonly messageId:      string;
-  readonly conversationId: string;
-  readonly senderName:     string;
-  readonly messageText:    string;
-  readonly timestamp:      number;
-  readonly isDeleted:      boolean;
-  readonly isEdited:       boolean;
-  readonly score:          number;
+  readonly messageId:        string;
+  readonly conversationId:   string;
+  readonly senderName:       string;
+  readonly messageText:      string;
+  readonly timestamp:        number;
+  readonly isDeleted:        boolean;
+  readonly isEdited:         boolean;
+  readonly score:            number;
   readonly highlightIndices: readonly [number, number][];
 }
 
@@ -193,3 +196,12 @@ export interface RawNotificationPayload {
 }
 
 export type NavTab = 'chats' | 'deleted' | 'settings';
+
+export type ToastSeverity = 'info' | 'success' | 'warning' | 'error';
+
+export interface ToastMessage {
+  readonly id:        string;
+  readonly message:   string;
+  readonly severity:  ToastSeverity;
+  readonly timestamp: number;
+}

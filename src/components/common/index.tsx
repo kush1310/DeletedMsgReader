@@ -278,17 +278,18 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
 }
 
 /* =============================================================
-   List Row with Chevron
+   List Row with Chevron or Control
    ============================================================= */
 
 interface SettingsRowProps {
-  readonly icon: React.ReactNode;
-  readonly label: string;
+  readonly icon:         React.ReactNode;
+  readonly label:        string;
   readonly description?: string;
-  readonly value?: string;
-  readonly onClick?: () => void;
-  readonly id: string;
-  readonly danger?: boolean;
+  readonly value?:       string;
+  readonly control?:     React.ReactNode;
+  readonly onClick?:     () => void | Promise<any>;
+  readonly id?:          string;
+  readonly danger?:      boolean;
 }
 
 /**
@@ -296,7 +297,30 @@ interface SettingsRowProps {
  *
  * Tappable settings list row with neumorphic surface.
  */
-export function SettingsRow({ icon, label, description, value, onClick, id, danger = false }: SettingsRowProps) {
+export function SettingsRow({ icon, label, description, value, control, onClick, id, danger = false }: SettingsRowProps) {
+  if (control) {
+    return (
+      <div
+        id={id}
+        onClick={onClick}
+        className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 border-b border-surface-700/60 ${danger ? 'hover:bg-red-50' : 'hover:bg-surface-850'} transition-colors`}
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-skeuo-chip border border-white/80 ${danger ? 'bg-red-100 text-red-700' : 'bg-surface-800 text-accent'}`}>
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-bold truncate ${danger ? 'text-red-700' : 'text-content-primary'}`}>{label}</p>
+            {description && <p className="text-xs text-content-muted mt-0.5 font-medium">{description}</p>}
+          </div>
+        </div>
+        <div className="flex-shrink-0 ml-2">
+          {control}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <button
       id={id}
@@ -387,9 +411,9 @@ export function ToastContainer({ toasts, onDismiss }: { readonly toasts: ToastMe
 
 interface ToggleSwitchProps {
   readonly checked: boolean;
-  readonly onChange: (checked: boolean) => void;
-  readonly id: string;
-  readonly label: string;
+  readonly onChange: (checked: boolean) => void | Promise<any>;
+  readonly id?: string;
+  readonly label?: string;
   readonly disabled?: boolean;
 }
 
@@ -398,7 +422,7 @@ interface ToggleSwitchProps {
  *
  * Tactile skeuomorphic switch with convex thumb.
  */
-export function ToggleSwitch({ checked, onChange, id, label, disabled = false }: ToggleSwitchProps) {
+export function ToggleSwitch({ checked, onChange, id, label = 'Toggle', disabled = false }: ToggleSwitchProps) {
   return (
     <label htmlFor={id} className={`relative inline-flex items-center ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
       <input
