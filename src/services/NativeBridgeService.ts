@@ -18,6 +18,9 @@ type CapacitorWindow = {
       MessageBridge: {
         openNotificationSettings:      ()                                                  => Promise<{ opened: boolean }>;
         isNotificationListenerEnabled: ()                                                  => Promise<{ enabled: boolean }>;
+        openAutostartSettings:         ()                                                  => Promise<{ opened: boolean }>;
+        simulateNotification:          (args: { chatTitle?: string; senderName?: string; messageText?: string; isDeleted?: boolean; isGroup?: boolean }) => Promise<{ success: boolean; conversationId?: string; messageId?: string }>;
+        checkDeviceSecurity:           ()                                                  => Promise<{ isRooted: boolean; isEmulator: boolean; airGapVerified: boolean }>;
         authenticateBiometric:         (args: { title: string; subtitle: string })         => Promise<{ success: boolean; error: string | null }>;
         setScreenSecure:               (args: { enabled: boolean })                        => Promise<{ updated: boolean }>;
         setSessionTimeout:             (args: { timeoutSeconds: number })                  => Promise<{ updated: boolean }>;
@@ -131,6 +134,68 @@ export async function requestBatteryOptimizationExemption(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * openAutostartSettings
+ *
+ * Opens the OEM-specific Autostart settings page (MIUI/HyperOS, Oppo, Vivo, Huawei).
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function openAutostartSettings(): Promise<boolean> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return false;
+    const result = await bridge.openAutostartSettings();
+    return result.opened;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * simulateNotification
+ *
+ * Simulates an incoming or deleted WhatsApp notification for on-device testing.
+ *
+ * @param  options - Payload override options.
+ * @returns {Promise<boolean>}
+ */
+export async function simulateNotification(options: {
+  chatTitle?:   string;
+  senderName?:  string;
+  messageText?: string;
+  isDeleted?:   boolean;
+  isGroup?:     boolean;
+} = {}): Promise<boolean> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return false;
+    const result = await bridge.simulateNotification(options);
+    return result.success;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * checkDeviceSecurity
+ *
+ * Inspects device root state, emulator flags, and air-gap posture.
+ *
+ * @returns {Promise<{ isRooted: boolean; isEmulator: boolean; airGapVerified: boolean }>}
+ */
+export async function checkDeviceSecurity(): Promise<{ isRooted: boolean; isEmulator: boolean; airGapVerified: boolean }> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return { isRooted: false, isEmulator: false, airGapVerified: true };
+    return await bridge.checkDeviceSecurity();
+  } catch {
+    return { isRooted: false, isEmulator: false, airGapVerified: true };
+  }
+}
+
+
 
 /* =============================================================
    Biometric & Window Security Controls

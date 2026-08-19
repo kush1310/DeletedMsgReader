@@ -200,3 +200,39 @@ export function generateUUID(): string {
   const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0'));
   return `${hex.slice(0,4).join('')}-${hex.slice(4,6).join('')}-${hex.slice(6,8).join('')}-${hex.slice(8,10).join('')}-${hex.slice(10).join('')}`;
 }
+
+/**
+ * neutralizeCsvFormula
+ *
+ * Prevents CSV / Dynamic Data Exchange (DDE) formula injection attacks
+ * by prefixing strings that start with '=', '+', '-', '@' with a single apostrophe.
+ *
+ * @param  {string} cell - Raw CSV cell text.
+ * @returns {string}     - Neutralized safe CSV string.
+ */
+export function neutralizeCsvFormula(cell: string): string {
+  if (!cell) return '';
+  const trimmed = cell.trim();
+  if (
+    trimmed.startsWith('=') ||
+    trimmed.startsWith('+') ||
+    trimmed.startsWith('-') ||
+    trimmed.startsWith('@')
+  ) {
+    return `'${trimmed}`;
+  }
+  return trimmed;
+}
+
+/**
+ * zeroMemoryBuffer
+ *
+ * Overwrites sensitive memory byte arrays with zeroes.
+ *
+ * @param  {Uint8Array} buffer - Memory buffer to zeroize.
+ * @returns {void}
+ */
+export function zeroMemoryBuffer(buffer: Uint8Array): void {
+  buffer.fill(0);
+}
+

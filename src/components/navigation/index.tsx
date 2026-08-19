@@ -69,17 +69,19 @@ export function TopAppBar({ title, subtitle, leading, trailing }: TopAppBarProps
  * AppBrand
  *
  * Displays the NotiCatch application name as plain styled text with
- * a security badge icon. Plain text only, adhering to global rules.
+ * a security badge icon and a muted version chip.
+ * Plain text only — no abbreviation icons beside the name.
  */
 export function AppBrand({ className = '' }: { readonly className?: string }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="w-8 h-8 rounded-xl bg-accent-muted flex items-center justify-center text-accent">
+      <div className="w-8 h-8 rounded-xl bg-accent-muted flex items-center justify-center">
         <ShieldCheck className="w-5 h-5 text-accent" strokeWidth={2.2} />
       </div>
-      <span className="text-xl font-bold text-content-primary tracking-tight">
-        NotiCatch
-      </span>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-xl font-bold text-content-primary tracking-tight">NotiCatch</span>
+        <span className="text-2xs font-bold text-content-muted bg-surface-800 border border-surface-700 px-1.5 py-0.5 rounded-full">v1.0</span>
+      </div>
     </div>
   );
 }
@@ -89,8 +91,9 @@ export function AppBrand({ className = '' }: { readonly className?: string }) {
    ============================================================= */
 
 interface BottomNavbarProps {
-  readonly activeTab: NavTab;
-  readonly onTabChange: (tab: NavTab) => void;
+  readonly activeTab:        NavTab;
+  readonly onTabChange:      (tab: NavTab) => void;
+  readonly deletedBadgeCount?: number;
 }
 
 const navItems: Array<{ tab: NavTab; label: string; icon: React.ReactNode; id: string }> = [
@@ -119,13 +122,14 @@ const navItems: Array<{ tab: NavTab; label: string; icon: React.ReactNode; id: s
  *
  * Fixed bottom navigation bar with three primary tabs:
  *   - Chats: Conversation list view
- *   - Deleted: Filtered deleted-messages view
+ *   - Deleted: Filtered deleted-messages view with amber badge count
  *   - Settings: Security and configuration controls
  *
- * The active tab is highlighted with WhatsApp Emerald Teal (#008069).
- * Uses pb-safe to respect Android gesture navigation bar height.
+ * @param  {NavTab}   activeTab         - Currently active route tab.
+ * @param  {Function} onTabChange       - Tab switch callback.
+ * @param  {number}   deletedBadgeCount - Unread deleted message count for the Deleted tab badge.
  */
-export function BottomNavbar({ activeTab, onTabChange }: BottomNavbarProps) {
+export function BottomNavbar({ activeTab, onTabChange, deletedBadgeCount = 0 }: BottomNavbarProps) {
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       <div className="flex items-center">
@@ -150,16 +154,22 @@ export function BottomNavbar({ activeTab, onTabChange }: BottomNavbarProps) {
                   style={{ marginTop: '-1px' }}
                 />
               )}
-              <div
-                className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`}
-              >
-                {item.icon}
+              <div className="relative w-5 h-5 transition-transform duration-200">
+                <div className={`${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
+                  {item.icon}
+                </div>
+                {item.tab === 'deleted' && deletedBadgeCount > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-white text-[0.5rem] font-extrabold flex items-center justify-center shadow-xs"
+                    aria-label={`${deletedBadgeCount} unread deleted messages`}
+                  >
+                    {deletedBadgeCount > 9 ? '9+' : deletedBadgeCount}
+                  </span>
+                )}
               </div>
-              <span
-                className={`text-2xs transition-all duration-200 ${
-                  isActive ? 'opacity-100 font-bold' : 'opacity-80 font-medium'
-                }`}
-              >
+              <span className={`text-2xs transition-all duration-200 ${
+                isActive ? 'opacity-100 font-bold' : 'opacity-80 font-medium'
+              }`}>
                 {item.label}
               </span>
             </button>

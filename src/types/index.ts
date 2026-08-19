@@ -1,88 +1,50 @@
 /**
- * Central TypeScript type definitions for the Ghost Reader application.
+ * Central TypeScript type definitions for the NotiCatch application.
  *
- * All models map directly to the SQLite database schema defined in the
- * implementation plan. Strong typing is enforced throughout — no `any` types.
+ * All models map directly to the SQLite database schema and native bridge interfaces.
+ * Strong typing is enforced throughout — zero `any` types.
  */
 
 /* =============================================================
    Core Domain Models
    ============================================================= */
 
-/**
- * Represents a WhatsApp contact whose notifications have been intercepted.
- *
- * @field id            - UUIDv4 primary key generated locally.
- * @field jid           - WhatsApp internal JID identifier (e.g. "915551234567@s.whatsapp.net").
- * @field displayName   - Human-readable name from notification title or contact book.
- * @field avatarUri     - Local file URI for cached contact avatar (nullable).
- * @field createdAt     - Unix epoch milliseconds when first seen.
- * @field updatedAt     - Unix epoch milliseconds of last modification.
- */
 export interface Contact {
-  id:          string;
-  jid:         string;
-  displayName: string;
-  avatarUri:   string | null;
-  createdAt:   number;
-  updatedAt:   number;
+  readonly id:          string;
+  readonly jid:         string;
+  readonly displayName: string;
+  readonly avatarUri:   string | null;
+  readonly createdAt:   number;
+  readonly updatedAt:   number;
 }
 
-/**
- * Represents a WhatsApp conversation thread (individual or group).
- *
- * @field id                  - UUIDv4 primary key.
- * @field contactId           - FK → contacts.id
- * @field chatTitle           - Display name of conversation (contact or group name).
- * @field isGroup             - Whether this is a group conversation.
- * @field unreadCount         - Count of messages not yet reviewed by user.
- * @field lastMessageTimestamp - Unix epoch ms of the most recent captured message.
- * @field deletedCount        - Number of deleted messages recovered in this conversation.
- */
 export interface Conversation {
-  id:                   string;
-  contactId:            string;
-  chatTitle:            string;
-  isGroup:              boolean;
-  unreadCount:          number;
-  lastMessageTimestamp: number;
-  deletedCount:         number;
+  readonly id:                   string;
+  readonly conversationKey?:     string;
+  readonly contactId?:           string;
+  readonly chatTitle:            string;
+  readonly isGroup:              boolean;
+  readonly unreadCount:          number;
+  readonly lastMessageTimestamp: number;
+  readonly deletedCount:         number;
 }
 
-/**
- * Represents a single captured WhatsApp message or media notification.
- *
- * @field id                 - UUIDv4 primary key.
- * @field conversationId     - FK → conversations.id
- * @field senderName         - Name of the message sender within the notification.
- * @field messageText        - Captured notification body text (may be null for media-only).
- * @field notificationId     - Android system notification ID used for deduplication.
- * @field timestamp          - Unix epoch ms when notification was received.
- * @field isDeletedBySender  - True when a deletion notification was detected for this message.
- * @field isEdited           - True when an edit notification was detected.
- * @field mediaType          - Type of media attachment if present (null for text-only).
- * @field mediaPath          - Local file path to saved media file (nullable).
- * @field hashSignature      - SHA-256 of (senderName + timestamp + messageText + conversationId)
- *                             used for tamper detection and deduplication.
- */
 export interface Message {
-  id:                string;
-  conversationId:    string;
-  senderName:        string;
-  messageText:       string | null;
-  notificationId:    number;
-  timestamp:         number;
-  isDeletedBySender: boolean;
-  isEdited:          boolean;
-  mediaType:         MediaType | null;
-  mediaPath:         string | null;
-  hashSignature:     string;
+  readonly id:                string;
+  readonly conversationId:    string;
+  readonly senderName:        string;
+  readonly messageText:       string | null;
+  readonly notificationId:    number;
+  readonly timestamp:         number;
+  readonly isDeletedBySender: boolean;
+  readonly isEdited:          boolean;
+  readonly mediaType:         MediaType | null;
+  readonly mediaPath:         string | null;
+  readonly hashSignature:     string;
+  readonly isPurged?:         boolean;
+  readonly purgedAt?:         number | null;
 }
 
-/**
- * Enumeration of supported WhatsApp media attachment types
- * that may appear in notification payloads.
- */
 export type MediaType =
   | 'image'
   | 'video'
@@ -92,28 +54,51 @@ export type MediaType =
   | 'contact'
   | 'location';
 
-/**
- * Represents a tamper-evident audit log entry.
- * Each entry contains the HMAC-SHA256 of the previous entry's log_hash,
- * forming an append-only chain for integrity verification.
- *
- * @field id           - UUIDv4 primary key.
- * @field eventType    - Classification of the audit event.
- * @field eventPayload - JSON-serialized event context (sanitized, no raw message text).
- * @field timestamp    - Unix epoch ms.
- * @field logHash      - HMAC-SHA256(previousLogHash + eventType + eventPayload + timestamp).
- */
-export interface AuditLog {
-  id:           string;
-  eventType:    AuditEventType;
-  eventPayload: string;
-  timestamp:    number;
-  logHash:      string;
+/* =============================================================
+   Entity Extraction & Heuristic Classification
+   ============================================================= */
+
+export type ExtractedEntityType =
+  | 'PHONE_NUMBER'
+  | 'URL'
+  | 'EMAIL'
+  | 'MEETING_TIME'
+  | 'OTP_CODE'
+  | 'ADDRESS';
+
+export interface ExtractedEntity {
+  readonly type:  ExtractedEntityType;
+  readonly value: string;
+  readonly label: string;
 }
 
-/**
- * Valid audit event type identifiers for classification.
- */
+export interface MerkleAuditResult {
+  readonly isValid:         boolean;
+  readonly totalMessages:   number;
+  readonly rootHash:        string;
+  readonly verifiedAt:      number;
+  readonly compromisedCount: number;
+}
+
+export interface DeviceSecurityStatus {
+  readonly isRooted:        boolean;
+  readonly isEmulator:      boolean;
+  readonly airGapVerified:  boolean;
+  readonly flagSecureActive: boolean;
+}
+
+/* =============================================================
+   Audit Log & Classification Engine Types
+   ============================================================= */
+
+export interface AuditLog {
+  readonly id:           string;
+  readonly eventType:    AuditEventType;
+  readonly eventPayload: string;
+  readonly timestamp:    number;
+  readonly logHash:      string;
+}
+
 export type AuditEventType =
   | 'APP_UNLOCKED'
   | 'APP_LOCKED'
@@ -123,55 +108,28 @@ export type AuditEventType =
   | 'NOTIFICATION_SERVICE_STOPPED'
   | 'SETTINGS_CHANGED'
   | 'EXPORT_PERFORMED'
-  | 'DATABASE_WIPED';
+  | 'DATABASE_WIPED'
+  | 'MERKLE_AUDIT_VERIFIED';
 
-/* =============================================================
-   Classification Engine Types
-   ============================================================= */
-
-/**
- * Input payload fed to the ClassificationEngine from a raw Android notification.
- *
- * @field packageName    - Source app package (expected: "com.whatsapp" or "com.whatsapp.w4b").
- * @field notificationId - Android system notification identifier.
- * @field title          - Notification title (typically sender or group name).
- * @field text           - Notification body text.
- * @field subText        - Notification sub-text or summary (nullable).
- * @field timestamp      - Unix epoch ms when notification event fired.
- * @field groupKey       - Notification group key for multi-message grouping (nullable).
- */
 export interface RawNotificationPayload {
-  packageName:    string;
-  notificationId: number;
-  title:          string;
-  text:           string;
-  subText:        string | null;
-  timestamp:      number;
-  groupKey:       string | null;
+  readonly packageName:    string;
+  readonly notificationId: number;
+  readonly title:          string;
+  readonly text:           string;
+  readonly subText:        string | null;
+  readonly timestamp:      number;
+  readonly groupKey:       string | null;
 }
 
-/**
- * Result produced by the ClassificationEngine for a single notification.
- *
- * @field classification  - Primary classification category.
- * @field confidence      - Confidence score between 0.0 and 1.0.
- * @field isDeletion      - True if this notification signals a message deletion.
- * @field isEdit          - True if this notification signals a message edit.
- * @field isSystemMessage - True if this is a WhatsApp system notification (not user message).
- * @field normalizedText  - Sanitized and normalized message text for storage.
- */
 export interface ClassificationResult {
-  classification:  NotificationClassification;
-  confidence:      number;
-  isDeletion:      boolean;
-  isEdit:          boolean;
-  isSystemMessage: boolean;
-  normalizedText:  string | null;
+  readonly classification:  NotificationClassification;
+  readonly confidence:      number;
+  readonly isDeletion:      boolean;
+  readonly isEdit:          boolean;
+  readonly isSystemMessage: boolean;
+  readonly normalizedText:  string | null;
 }
 
-/**
- * Classification categories for incoming WhatsApp notifications.
- */
 export type NotificationClassification =
   | 'USER_MESSAGE'
   | 'DELETION_SIGNAL'
@@ -182,62 +140,44 @@ export type NotificationClassification =
   | 'UNKNOWN';
 
 /* =============================================================
-   UI / Application State Types
+   UI & Application State Types
    ============================================================= */
 
-/**
- * Application-level authentication and session state.
- */
 export interface AuthState {
-  isAuthenticated:     boolean;
-  isBiometricEnabled:  boolean;
-  isPinEnabled:        boolean;
-  sessionStartedAt:    number | null;
-  sessionTimeoutMs:    number;
+  readonly isAuthenticated:    boolean;
+  readonly isBiometricEnabled: boolean;
+  readonly isPinEnabled:       boolean;
+  readonly sessionStartedAt:   number | null;
+  readonly sessionTimeoutMs:   number;
 }
 
-/**
- * Statistics summary displayed on the Landing Page dashboard.
- */
 export interface AppStats {
-  totalMessagesCaputred: number;
-  totalDeletedRecovered: number;
-  totalConversations:    number;
-  totalContacts:         number;
-  oldestCaptureTimestamp: number | null;
-  storageSizeBytes:      number;
+  readonly totalMessagesCaputred:  number;
+  readonly totalDeletedRecovered:  number;
+  readonly totalConversations:     number;
+  readonly totalContacts:          number;
+  readonly oldestCaptureTimestamp: number | null;
+  readonly storageSizeBytes:       number;
 }
 
-/**
- * Configuration settings persisted in encrypted preferences.
- */
 export interface AppSettings {
-  sessionTimeoutSeconds:  number;
-  biometricEnabled:       boolean;
-  pinEnabled:             boolean;
-  screenSecureEnabled:    boolean;
-  autoDeleteAfterDays:    number | null;
-  notificationEnabled:    boolean;
-  captureMediaEnabled:    boolean;
-  spamFilterEnabled:      boolean;
+  readonly sessionTimeoutSeconds: number;
+  readonly biometricEnabled:      boolean;
+  readonly pinEnabled:            boolean;
+  readonly screenSecureEnabled:   boolean;
+  readonly autoDeleteAfterDays:   number | null;
+  readonly notificationEnabled:   boolean;
+  readonly captureMediaEnabled:   boolean;
+  readonly spamFilterEnabled:     boolean;
 }
 
-/**
- * Navigation tab identifier for the Bottom Navigation Bar.
- */
 export type NavTab = 'chats' | 'deleted' | 'settings';
 
-/**
- * Toast notification severity levels for user feedback.
- */
 export type ToastSeverity = 'info' | 'success' | 'warning' | 'error';
 
-/**
- * In-app toast notification payload.
- */
 export interface ToastMessage {
-  id:       string;
-  message:  string;
-  severity: ToastSeverity;
-  durationMs: number;
+  readonly id:         string;
+  readonly message:    string;
+  readonly severity:   ToastSeverity;
+  readonly durationMs: number;
 }

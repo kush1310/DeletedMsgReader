@@ -179,9 +179,10 @@ export function SearchInput({
    ============================================================= */
 
 interface AvatarProps {
-  readonly name: string;
-  readonly size?: 'sm' | 'md' | 'lg';
-  readonly isGroup?: boolean;
+  readonly name:               string;
+  readonly size?:              'sm' | 'md' | 'lg';
+  readonly isGroup?:           boolean;
+  readonly hasRecentDeletion?: boolean;
 }
 
 /**
@@ -189,7 +190,7 @@ interface AvatarProps {
  *
  * Renders contact initials with skeuomorphic bevel and shadow.
  */
-export function Avatar({ name, size = 'md', isGroup = false }: AvatarProps) {
+export function Avatar({ name, size = 'md', isGroup = false, hasRecentDeletion = false }: AvatarProps) {
   const sizeMap = { sm: 'w-8 h-8 text-xs', md: 'w-11 h-11 text-sm', lg: 'w-14 h-14 text-base' };
   const initials = name.trim().split(' ').slice(0, 2).map(word => word[0]).join('').toUpperCase();
 
@@ -206,7 +207,9 @@ export function Avatar({ name, size = 'md', isGroup = false }: AvatarProps) {
 
   return (
     <div
-      className={`${sizeMap[size]} ${bgClass} rounded-2xl border flex items-center justify-center font-extrabold flex-shrink-0 select-none shadow-skeuo-chip`}
+      className={`${sizeMap[size]} ${bgClass} rounded-2xl border flex items-center justify-center font-extrabold flex-shrink-0 select-none shadow-skeuo-chip relative ${
+        hasRecentDeletion ? 'ring-2 ring-amber-400 ring-offset-1' : ''
+      }`}
       aria-label={`Avatar for ${name}`}
     >
       {initials}
@@ -261,8 +264,9 @@ interface EmptyStateProps {
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 px-8 py-16 text-center animate-fade-in">
-      <div className="w-16 h-16 rounded-3xl bg-surface-900 border border-white shadow-neu-flat flex items-center justify-center text-accent">
-        {icon}
+      <div className="w-16 h-16 rounded-3xl bg-surface-900 border border-white shadow-neu-flat flex items-center justify-center text-accent relative overflow-hidden empty-state-grid">
+        <div className="absolute inset-0 bg-surface-900/85" />
+        <span className="relative z-10">{icon}</span>
       </div>
       <div className="space-y-1">
         <p className="font-bold text-content-primary text-base tracking-tight">{title}</p>
@@ -409,16 +413,159 @@ export function ToggleSwitch({ checked, onChange, id, label, disabled = false }:
       <div
         className={`w-12 h-6 rounded-full border transition-all duration-200 ease-spring relative flex items-center px-0.5 ${
           checked
-            ? 'bg-gradient-to-r from-[#00A884] to-[#008069] border-[#006A57] shadow-sm'
-            : 'bg-surface-700 border-surface-600 shadow-inner'
+            ? 'bg-gradient-to-r from-[#00A884] to-[#008069] border-[#006A57]'
+            : 'border-surface-600'
         }`}
+        style={checked
+          ? { boxShadow: '0 2px 8px rgba(0,128,105,0.25), inset 0 1px 0 rgba(255,255,255,0.2)' }
+          : { boxShadow: 'inset 2px 2px 5px rgba(166,175,195,0.4), inset -2px -2px 5px rgba(255,255,255,0.8)', backgroundColor: '#E2E8F0' }
+        }
       >
         <div
-          className={`w-5 h-5 rounded-full bg-white shadow-md border border-slate-200/80 transition-transform duration-200 ease-spring ${
+          className={`w-5 h-5 rounded-full bg-white border border-slate-200/80 transition-transform duration-200 ease-spring ${
             checked ? 'translate-x-6' : 'translate-x-0'
           }`}
+          style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.9)' }}
         />
       </div>
     </label>
+  );
+}
+
+/* =============================================================
+   Inline AirGap Status Ribbon
+   ============================================================= */
+
+interface InlineAirGapRibbonProps {
+  readonly className?: string;
+}
+
+/**
+ * InlineAirGapRibbon
+ *
+ * Displays a slim horizontal status ribbon confirming zero active network
+ * connections and on-device-only storage. Uses a pulsing green dot indicator.
+ *
+ * @param  {string} className - Optional additional Tailwind classes.
+ * @returns {JSX.Element}
+ */
+export function InlineAirGapRibbon({ className = '' }: InlineAirGapRibbonProps) {
+  return (
+    <div className={`air-gap-ribbon ${className}`}>
+      <span className="status-dot-green" />
+      <span>0 open sockets&nbsp;&nbsp;&middot;&nbsp;&nbsp;100% on-device&nbsp;&nbsp;&middot;&nbsp;&nbsp;Air-gapped storage</span>
+    </div>
+  );
+}
+
+/* =============================================================
+   Floating Pill Button (Jump to Next Deleted)
+   ============================================================= */
+
+interface FloatingPillProps {
+  readonly label:   string;
+  readonly icon:    React.ReactNode;
+  readonly onClick: () => void;
+  readonly id:      string;
+  readonly bottom?: number;
+  readonly right?:  number;
+}
+
+/**
+ * FloatingPill
+ *
+ * Fixed-position floating pill button displayed above the bottom nav bar.
+ * Used for the "Jump to Next Deleted" affordance in ChatDetailPage.
+ *
+ * @param  {string}        label   - Accessible button label and visible text.
+ * @param  {ReactNode}     icon    - Lucide icon to render before the label.
+ * @param  {Function}      onClick - Action triggered on tap.
+ * @param  {string}        id      - Unique element ID.
+ * @param  {number}        bottom  - Bottom offset in pixels from viewport edge.
+ * @param  {number}        right   - Right offset in pixels from viewport edge.
+ * @returns {JSX.Element}
+ */
+export function FloatingPill({ label, icon, onClick, id, bottom = 88, right = 16 }: FloatingPillProps) {
+  return (
+    <button
+      type="button"
+      id={id}
+      onClick={onClick}
+      aria-label={label}
+      className="floating-pill animate-fade-in"
+      style={{ bottom: `${bottom}px`, right: `${right}px` }}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/* =============================================================
+   Session Countdown Ring
+   ============================================================= */
+
+interface SessionCountdownRingProps {
+  readonly totalSeconds:     number;
+  readonly remainingSeconds: number;
+  readonly size?:            number;
+}
+
+/**
+ * SessionCountdownRing
+ *
+ * SVG radial countdown ring displaying remaining session time.
+ * Hidden when totalSeconds is 0 (Never timeout mode).
+ *
+ * @param  {number} totalSeconds     - Maximum session length in seconds.
+ * @param  {number} remainingSeconds - Current seconds remaining.
+ * @param  {number} size             - Diameter of the ring in pixels.
+ * @returns {JSX.Element | null}     - Null when totalSeconds === 0.
+ */
+export function SessionCountdownRing({ totalSeconds, remainingSeconds, size = 32 }: SessionCountdownRingProps) {
+  if (totalSeconds === 0) return null;
+
+  const radius      = (size - 4) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress    = Math.max(0, Math.min(1, remainingSeconds / totalSeconds));
+  const dashOffset  = circumference * (1 - progress);
+
+  const minsLeft = Math.ceil(remainingSeconds / 60);
+  const label    = minsLeft <= 0 ? '0m' : minsLeft < 60 ? `${minsLeft}m` : `${Math.ceil(minsLeft / 60)}h`;
+
+  const ringColor = progress > 0.5 ? '#008069' : progress > 0.25 ? '#D97706' : '#DC2626';
+
+  return (
+    <div
+      className="relative flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size }}
+      title={`Session expires in ${label}`}
+    >
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#E2E8F0"
+          strokeWidth={3}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={ringColor}
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          style={{ transition: 'stroke-dashoffset 1s linear, stroke 500ms ease' }}
+        />
+      </svg>
+      <span className="absolute text-2xs font-extrabold tabular-nums" style={{ color: ringColor, fontSize: '0.5rem' }}>
+        {label}
+      </span>
+    </div>
   );
 }

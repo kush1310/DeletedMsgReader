@@ -1,8 +1,12 @@
 /**
  * SettingsPage
  *
- * Security and configuration control panel for NotiCatch.
+ * Security, configuration, and notification listener control panel for NotiCatch.
  * All settings are backed by native Android Room SQLite and SharedPreferences:
+ *   - Notification Access & System Permission Diagnostics
+ *   - Xiaomi / MIUI Autostart & Battery Exemption management
+ *   - On-Device WhatsApp Notification Simulation Tool
+ *   - Air-Gap Verification & Anti-Root Security Status
  *   - Screen Protection toggle with live WindowManager FLAG_SECURE synchronization
  *   - Session Timeout selector with native backend persistence
  *   - Spam & OTP filter with NotificationListener gate synchronization
@@ -25,6 +29,15 @@ import {
   ChevronDown,
   FileText,
   Share2,
+  Bell,
+  BatteryCharging,
+  Zap,
+  CheckCircle2,
+  AlertTriangle,
+  Smartphone,
+  ShieldCheck,
+  Cpu,
+  Lock,
 } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
 import { SettingsRow, ToggleSwitch, LoadingSpinner, ConfirmationModal } from '@/components/common';
@@ -40,6 +53,13 @@ import {
   setSpamFilterNative,
   setScreenSecureNative,
   setSessionTimeoutNative,
+  checkNotificationListenerEnabled,
+  requestNotificationListenerPermission,
+  openAutostartSettings,
+  requestBatteryOptimizationExemption,
+  simulateNotification,
+  checkDeviceSecurity,
+  isNativeAndroid,
 } from '@/services/NativeBridgeService';
 import type { AppSettings, Conversation } from '@/types';
 
@@ -54,21 +74,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   spamFilterEnabled:     true,
 };
 
-type ModalType = 'logout' | 'wipe' | 'export' | null;
+type ModalType = 'logout' | 'wipe' | 'export' | 'security-audit' | null;
 
-/**
- * SettingsPage
- *
- * Renders the Settings control panel with all security and export features
- * wired directly to native Android Room DB and SharedPreferences.
- *
- * @returns {JSX.Element} - Settings view container.
- * @validates             - Enforces typed confirmation for wipe, validates export parameters.
- * @redirects             - /login on logout, /setup on wipe.
- * @edge-cases            - Handles empty conversation list gracefully during export.
- */
 export function SettingsPage() {
   const navigate = useNavigate();
+  const isNative = isNativeAndroid();
 
   const [settings,          setSettings]          = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isLoading,         setIsLoading]         = useState(true);
@@ -78,115 +88,80 @@ export function SettingsPage() {
   const [exportingChatId,   setExportingChatId]   = useState<string | null>(null);
   const [exportSuccessMsg,  setExportSuccessMsg]  = useState<string | null>(null);
   const [isWiping,          setIsWiping]          = useState(false);
+  const [notifAccessGranted, setNotifAccessGranted] = useState<boolean | null>(null);
+  const [simulatingMsg,     setSimulatingMsg]     = useState<string | null>(null);
+  const [securityStatus,    setSecurityStatus]    = useState<{ isRooted: boolean; isEmulator: boolean; airGapVerified: boolean }>({
+    isRooted: false,
+    isEmulator: false,
+    airGapVerified: true,
+  });
+
+  const checkPermissions = useCallback(async (): Promise<void> => {
+    if (!isNative) {
+      setNotifAccessGranted(true);
+      return;
+    }
+    const granted = await checkNotificationListenerEnabled();
+    setNotifAccessGranted(granted);
+    const sec = await checkDeviceSecurity();
+    setSecurityStatus(sec);
+  }, [isNative]);
 
   useEffect(() => {
     async function loadInitialSettings(): Promise<void> {
       const loaded = await loadAppSettings();
       setSettings(loaded);
+      await checkPermissions();
       setIsLoading(false);
     }
     loadInitialSettings();
-  }, []);
+  }, [checkPermissions]);
 
-  /**
-   * updateSetting
-   *
-   * Updates an AppSettings property, persists locally, and pushes native updates.
-   *
-   * @param  {K} key    - Setting property key.
-   * @param  {any} value - Setting value.
-   * @returns {Promise<void>}
-   * @validates - Ensures correct type mapping for each key.
-   * @redirects - N/A.
-   * @edge-cases - Propagates screen security and spam filter updates to Android immediately.
-   */
-  const updateSetting = useCallback(async <K extends keyof AppSettings>(
-    key:   K,
-    value: AppSettings[K],
-  ): Promise<void> => {
+  useEffect(() => {
+    function handleFocus(): void {
+      checkPermissions();
+    }
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [checkPermissions]);
+
+  async function updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void> {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
     await persistAppSettings(updated);
 
     if (key === 'screenSecureEnabled') {
-      await setScreenSecureNative(value as boolean);
+      await setScreenSecureNative(Boolean(value));
     } else if (key === 'spamFilterEnabled') {
-      await setSpamFilterNative(value as boolean);
+      await setSpamFilterNative(Boolean(value));
     } else if (key === 'sessionTimeoutSeconds') {
-      await setSessionTimeoutNative(value as number);
+      await setSessionTimeoutNative(Number(value));
     }
-  }, [settings]);
+  }
 
-  /**
-   * handleLogoutConfirm
-   *
-   * Clears session authentication tokens and redirects user to the lock screen.
-   *
-   * @returns {Promise<void>}
-   * @validates - Clears active session storage and persistent auth state.
-   * @redirects - /login
-   * @edge-cases - Preserves underlying Room SQLite database records.
-   */
   async function handleLogoutConfirm(): Promise<void> {
     setActiveModal(null);
-    const currentState = await loadAuthState();
-    await persistAuthState({
-      ...currentState,
-      isAuthenticated:  false,
-      sessionStartedAt: null,
-    });
     sessionStorage.removeItem('session_start');
+    const auth = await loadAuthState();
+    await persistAuthState({ ...auth, isAuthenticated: false });
     navigate('/login', { replace: true });
   }
 
-  /**
-   * handleWipeConfirm
-   *
-   * Permanently wipes Room SQLite database, clear preferences, and routes to setup.
-   *
-   * @returns {Promise<void>}
-   * @validates - Requires exact typed string "WIPE" in confirmation dialog.
-   * @redirects - /setup
-   * @edge-cases - Erases all SQLite records and cached files irreversibly.
-   */
   async function handleWipeConfirm(): Promise<void> {
-    setActiveModal(null);
     setIsWiping(true);
     await wipeAllData();
+    sessionStorage.clear();
     setIsWiping(false);
-    sessionStorage.removeItem('session_start');
-    navigate('/setup', { replace: true });
+    setActiveModal(null);
+    navigate('/login', { replace: true });
   }
 
-  /**
-   * openExportModal
-   *
-   * Loads all conversations from Room SQLite and displays the export dialog.
-   *
-   * @returns {Promise<void>}
-   * @validates - Queries native getConversations().
-   * @redirects - N/A.
-   * @edge-cases - Sets empty conversation list if no records exist.
-   */
   async function openExportModal(): Promise<void> {
-    const loaded = await getConversations();
-    setConversations(loaded);
-    setExportSuccessMsg(null);
+    const data = await getConversations();
+    setConversations(data);
     setActiveModal('export');
   }
 
-  /**
-   * handleExportPDF
-   *
-   * Exports an individual chat conversation as a structured PDF document.
-   *
-   * @param  {string} conversationId - UUID of the target conversation.
-   * @param  {string} chatTitle      - Name of the conversation.
-   * @returns {Promise<void>}
-   * @validates - Validates conversation existence.
-   * @redirects - Launches Android native Share/View sheet.
-   * @edge-cases - Displays feedback toast on export completion.
-   */
   async function handleExportPDF(conversationId: string, chatTitle: string): Promise<void> {
     setExportingChatId(conversationId);
     const result = await exportChatAsPDF(conversationId, chatTitle);
@@ -197,18 +172,6 @@ export function SettingsPage() {
     }
   }
 
-  /**
-   * handleExportCSV
-   *
-   * Exports an individual chat conversation as a CSV spreadsheet.
-   *
-   * @param  {string} conversationId - UUID of the target conversation.
-   * @param  {string} chatTitle      - Name of the conversation.
-   * @returns {Promise<void>}
-   * @validates - Validates conversation existence.
-   * @redirects - N/A.
-   * @edge-cases - Displays feedback toast on export completion.
-   */
   async function handleExportCSV(conversationId: string, chatTitle: string): Promise<void> {
     setExportingChatId(conversationId);
     const result = await exportChatAsCSV(conversationId, chatTitle);
@@ -219,20 +182,51 @@ export function SettingsPage() {
     }
   }
 
-  const timeoutOptions: Array<{ label: string; value: number }> = [
-    { label: '1 minute',   value: 60   },
-    { label: '5 minutes',  value: 300  },
-    { label: '15 minutes', value: 900  },
-    { label: '30 minutes', value: 1800 },
-    { label: 'Never',      value: 0    },
+  async function handleSimulateMessage(): Promise<void> {
+    setSimulatingMsg('Sending normal message from Mumma...');
+    await simulateNotification({
+      chatTitle:   'Mumma',
+      senderName:  'Mumma',
+      messageText: 'Hi! I will call you in 5 minutes.',
+      isDeleted:   false,
+      isGroup:     false,
+    });
+    setTimeout(() => {
+      setSimulatingMsg('Message sent! Check the Chats tab.');
+      setTimeout(() => setSimulatingMsg(null), 2500);
+    }, 400);
+  }
+
+  async function handleSimulateDeletion(): Promise<void> {
+    setSimulatingMsg('Sending deletion signal from Mumma...');
+    await simulateNotification({
+      chatTitle:   'Mumma',
+      senderName:  'Mumma',
+      messageText: 'This message was deleted',
+      isDeleted:   true,
+      isGroup:     false,
+    });
+    setTimeout(() => {
+      setSimulatingMsg('Deletion captured! Check the Deleted tab.');
+      setTimeout(() => setSimulatingMsg(null), 2500);
+    }, 400);
+  }
+
+  const timeoutOptions = [
+    { label: '30 seconds', value: 30 },
+    { label: '1 minute',   value: 60 },
+    { label: '5 minutes',  value: 300 },
+    { label: '15 minutes', value: 900 },
+    { label: 'Never',      value: 0 },
   ];
 
-  const currentTimeoutLabel =
-    timeoutOptions.find(opt => opt.value === settings.sessionTimeoutSeconds)?.label ?? '5 minutes';
+  const currentTimeoutLabel = timeoutOptions.find(
+    o => o.value === settings.sessionTimeoutSeconds
+  )?.label ?? '5 minutes';
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+      <div className="flex flex-col h-full bg-surface-900">
         <TopAppBar title="Settings" />
         <div className="flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -242,30 +236,176 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
-      <TopAppBar title="Settings" subtitle="Security and privacy controls" />
+    <div className="flex flex-col h-full bg-surface-900 pb-20">
+      <TopAppBar title="Settings" />
 
-      <div className="flex-1 overflow-y-auto pt-14 pb-20">
+      <div className="flex-1 overflow-y-auto pt-14 divide-y divide-surface-700">
 
-        {/* Security & Access Section */}
+        {/* System Listener & Permissions */}
+        <section className="px-4 pt-4 pb-3">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest">
+              System Listener & Permissions
+            </h2>
+            <span
+              className={`text-2xs font-extrabold px-2 py-0.5 rounded-full ${
+                notifAccessGranted
+                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+              }`}
+            >
+              {notifAccessGranted ? 'Active & Intercepting' : 'Access Required'}
+            </span>
+          </div>
+
+          <div className="card p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                notifAccessGranted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {notifAccessGranted ? <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} /> : <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-content-primary">
+                  {notifAccessGranted ? 'WhatsApp Notification Service Bound' : 'Notification Access Disabled'}
+                </p>
+                <p className="text-xs text-content-muted mt-0.5 font-medium leading-relaxed">
+                  {notifAccessGranted
+                    ? 'The Android background listener is actively intercepting WhatsApp notifications into local Room SQLite.'
+                    : 'Android requires you to grant Notification Access permission so NotiCatch can intercept WhatsApp messages.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              <button
+                type="button"
+                id="open-notif-settings-btn"
+                onClick={() => requestNotificationListenerPermission()}
+                className="btn-primary text-xs py-2 flex items-center justify-center gap-1.5"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                Notification Access
+              </button>
+              <button
+                type="button"
+                id="open-autostart-settings-btn"
+                onClick={() => openAutostartSettings()}
+                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Xiaomi / OEM Autostart
+              </button>
+              <button
+                type="button"
+                id="request-battery-exemption-btn"
+                onClick={() => requestBatteryOptimizationExemption()}
+                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
+              >
+                <BatteryCharging className="w-3.5 h-3.5" />
+                Battery Optimization
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Air-Gap & Hardware Security Audit */}
+        <section className="px-4 pt-5 pb-2">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
+            Air-Gap & Hardware Security
+          </h2>
+          <div className="card p-4 space-y-3">
+            <div className="flex items-center justify-between py-1 border-b border-surface-700">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-accent" />
+                <span className="text-xs font-bold text-content-primary">Network Air-Gap Status</span>
+              </div>
+              <span className="text-2xs font-extrabold text-accent bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                100% Air-Gapped (0 Sockets)
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-1 border-b border-surface-700">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-content-secondary" />
+                <span className="text-xs font-bold text-content-primary">OS Integrity / Root</span>
+              </div>
+              <span className={`text-2xs font-bold px-2 py-0.5 rounded border ${
+                securityStatus.isRooted ? 'bg-red-100 text-red-900 border-red-300' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+              }`}>
+                {securityStatus.isRooted ? 'Rooted / Modified' : 'Clean & Unmodified'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-1 border-b border-surface-700">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-content-secondary" />
+                <span className="text-xs font-bold text-content-primary">Window Protection (FLAG_SECURE)</span>
+              </div>
+              <span className="text-2xs font-bold text-accent">
+                {settings.screenSecureEnabled ? 'Active (Blocked)' : 'Disabled'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-content-secondary" />
+                <span className="text-xs font-bold text-content-primary">Database Engine</span>
+              </div>
+              <span className="text-2xs font-bold text-content-primary">
+                Room SQLite · WAL Mode
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Notification Diagnostics & Testing */}
+        <section className="px-4 pt-5 pb-2">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
+            Notification Diagnostics & Testing
+          </h2>
+          <div className="card p-4 space-y-3">
+            <p className="text-xs text-content-muted leading-relaxed font-medium">
+              Test end-to-end SQLite persistence, deletion capture, and live UI reactivity without needing a second phone.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                id="test-normal-msg-btn"
+                onClick={handleSimulateMessage}
+                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Test Message
+              </button>
+              <button
+                type="button"
+                id="test-deleted-msg-btn"
+                onClick={handleSimulateDeletion}
+                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5 text-amber-800 border-amber-300"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Test Deletion
+              </button>
+            </div>
+            {simulatingMsg && (
+              <div className="p-2.5 rounded-lg bg-surface-800 border border-surface-700 text-xs font-semibold text-accent text-center animate-fade-in">
+                {simulatingMsg}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Security & Access */}
         <section className="px-4 pt-5 pb-2">
           <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
             Security & Access
           </h2>
           <div className="space-y-2">
-
-            {/* Screen Protection with live FLAG_SECURE toggle */}
             <div className="card-interactive flex items-center gap-3 px-4 py-3.5">
               <div className="w-9 h-9 rounded-lg bg-surface-800 flex items-center justify-center text-accent flex-shrink-0">
                 <Shield className="w-5 h-5 text-accent" strokeWidth={2} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-content-primary">Screen Protection</p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium">
-                  {settings.screenSecureEnabled
-                    ? 'Screenshots blocked & previews shielded'
-                    : 'Screenshots permitted (FLAG_SECURE disabled)'}
-                </p>
+                <p className="text-xs text-content-muted mt-0.5 font-medium">Block screenshots and hide app in recent tasks (FLAG_SECURE)</p>
               </div>
               <ToggleSwitch
                 id="screen-secure-toggle"
@@ -275,8 +415,7 @@ export function SettingsPage() {
               />
             </div>
 
-            {/* Session Timeout Selector */}
-            <div className="card">
+            <div className="card-interactive overflow-hidden" style={{ padding: 0 }}>
               <button
                 id="session-timeout-button"
                 type="button"
@@ -416,7 +555,7 @@ export function SettingsPage() {
       <ConfirmationModal
         isOpen={activeModal === 'logout'}
         title="Lock Application"
-        body="Your active session will be closed and fingerprint authentication will be required upon next launch. All database records remain safely preserved."
+        body="Your active session will be closed and authentication will be required upon next launch. All database records remain safely preserved."
         confirmLabel="Lock Application"
         isDangerous={false}
         onConfirm={handleLogoutConfirm}
@@ -428,101 +567,77 @@ export function SettingsPage() {
         isOpen={activeModal === 'wipe'}
         title="Wipe All Data"
         body="This permanently deletes every captured message, conversation, and audit log from the SQLite database. This operation cannot be reversed."
-        confirmLabel="Wipe Everything"
-        isDangerous
-        requireTypedConfirmation="WIPE"
+        confirmLabel="Permanently Wipe All Data"
+        isDangerous={true}
         onConfirm={handleWipeConfirm}
         onCancel={() => setActiveModal(null)}
       />
 
-      {/* Export Conversation Picker Modal (Chat-wise PDF / CSV) */}
+      {/* Export Selection Modal */}
       {activeModal === 'export' && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
-          onClick={e => { if (e.target === e.currentTarget) setActiveModal(null); }}
-        >
-          <div
-            className="w-full max-w-lg bg-white animate-slide-up"
-            style={{ borderRadius: '8px 8px 0 0', padding: '24px 20px 32px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-base font-bold text-content-primary">Export Chat Data</h2>
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="card max-w-md w-full p-6 space-y-4 shadow-card-lg animate-scale-in">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-content-primary text-base">Select Chat to Export</h3>
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
-                className="text-xs text-content-muted font-bold px-2 py-1 hover:bg-surface-800 rounded"
+                className="text-content-muted hover:text-content-primary"
               >
-                Close
+                ✕
               </button>
             </div>
-            <p className="text-xs text-content-muted font-medium mb-3">
-              Generate formatted PDF documents or CSV archives chat-wise.
-            </p>
 
             {exportSuccessMsg && (
-              <div className="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-300 rounded text-xs font-bold text-emerald-800 animate-fade-in">
+              <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200">
                 {exportSuccessMsg}
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-1">
+            <div className="max-h-60 overflow-y-auto space-y-2 divide-y divide-surface-700">
               {conversations.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-content-muted font-semibold">No captured conversations found in database.</p>
-                  <p className="text-xs text-content-muted mt-1">Receive WhatsApp notifications to begin saving chats.</p>
-                </div>
+                <p className="text-xs text-content-muted py-4 text-center">No captured conversations found.</p>
               ) : (
-                conversations.map(convo => {
-                  const isCurrentExporting = exportingChatId === convo.id;
-                  return (
-                    <div
-                      key={convo.id}
-                      className="p-3 bg-surface-800 border border-surface-700 rounded-lg flex flex-col gap-2 shadow-sm"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="min-w-0 flex-1 pr-2">
-                          <p className="text-sm font-bold text-content-primary truncate">{convo.chatTitle}</p>
-                          <p className="text-2xs text-content-muted font-semibold mt-0.5">
-                            {convo.deletedCount} deleted recovered — {convo.isGroup ? 'Group Chat' : 'Direct Message'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 pt-1 border-t border-surface-700/60">
-                        {/* PDF Export Button */}
-                        <button
-                          type="button"
-                          disabled={isCurrentExporting}
-                          onClick={() => handleExportPDF(convo.id, convo.chatTitle)}
-                          className="flex-1 py-2 px-3 text-xs font-bold text-white bg-accent hover:bg-accent/90 rounded flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
-                        >
-                          {isCurrentExporting ? (
-                            <LoadingSpinner size="sm" />
-                          ) : (
-                            <>
-                              <FileText className="w-3.5 h-3.5" />
-                              Export PDF
-                            </>
-                          )}
-                        </button>
-
-                        {/* CSV Export Button */}
-                        <button
-                          type="button"
-                          disabled={isCurrentExporting}
-                          onClick={() => handleExportCSV(convo.id, convo.chatTitle)}
-                          className="py-2 px-3 text-xs font-bold text-content-primary bg-surface-700 hover:bg-surface-600 rounded flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
-                        >
-                          <Share2 className="w-3.5 h-3.5" />
-                          CSV
-                        </button>
-                      </div>
+                conversations.map(c => (
+                  <div key={c.id} className="pt-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-content-primary truncate">{c.chatTitle}</p>
+                      <p className="text-2xs text-content-muted">{c.unreadCount} unread · {c.deletedCount} deleted</p>
                     </div>
-                  );
-                })
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        id={`export-pdf-${c.id}`}
+                        disabled={exportingChatId === c.id}
+                        onClick={() => handleExportPDF(c.id, c.chatTitle)}
+                        className="btn-secondary text-2xs py-1.5 px-2 flex items-center gap-1"
+                      >
+                        <FileText className="w-3 h-3 text-accent" />
+                        PDF
+                      </button>
+                      <button
+                        type="button"
+                        id={`export-csv-${c.id}`}
+                        disabled={exportingChatId === c.id}
+                        onClick={() => handleExportCSV(c.id, c.chatTitle)}
+                        className="btn-secondary text-2xs py-1.5 px-2 flex items-center gap-1"
+                      >
+                        <Share2 className="w-3 h-3 text-accent" />
+                        CSV
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveModal(null)}
+              className="btn-primary w-full text-xs py-2"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

@@ -3,85 +3,118 @@
  *
  * Shows ALL messages flagged as deleted by sender across ALL conversations.
  * Data is loaded from Room DB via NativeBridgeService on Android.
- * No filtering is applied beyond the isDeletedBySender flag — OTP/spam
- * was already excluded at ingestion time by the spam filter gate.
  *
- * Real-time refresh via 'noticatch:new-message' CustomEvent.
- * Search: Boyer-Moore-Horspool & Damerau-Levenshtein.
+ * Features:
+ *   - Filter pills: [All] [Groups] [Direct] [Phones] [Links] [OTPs] [Today]
+ *   - Sort controls: [Newest] [Oldest] [By Chat]
+ *   - Total character count summary strip
+ *   - Interactive entity chips on each card
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowUpDown } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
 import { SearchInput, EmptyState, LoadingSpinner } from '@/components/common';
 import { DeletedMessageCard } from '@/components/chat';
-import {
-  getDeletedMessages,
-  getConversations,
-} from '@/services/NativeBridgeService';
+import { getDeletedMessages, getConversations } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
+import { extractEntities } from '@/services/EntityExtractor';
 import type { Conversation, Message } from '@/types';
 
-/**
- * DeletedOnlyPage
- *
- * Renders all recovered deleted messages across all captured conversations.
- * Shows conversation title alongside each deleted message row for context.
- */
+type DeletedFilter = 'all' | 'groups' | 'direct' | 'phones' | 'links' | 'otps' | 'today';
+type SortMode = 'newest' | 'oldest' | 'chat';
+
+const FILTER_LABELS: Record<DeletedFilter, string> = {
+  all:    'All',
+  groups: 'Groups',
+  direct: 'Direct',
+  phones: 'Phones',
+  links:  'Links',
+  otps:   'OTPs',
+  today:  'Today',
+};
+
+const SORT_LABELS: Record<SortMode, string> = {
+  newest: 'Newest',
+  oldest: 'Oldest',
+  chat:   'By Chat',
+};
+
+function isToday(timestamp: number): boolean {
+  const date = new Date(timestamp);
+  const now  = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth()    === now.getMonth()    &&
+    date.getDate()     === now.getDate()
+  );
+}
+
 export function DeletedOnlyPage() {
   const navigate = useNavigate();
 
-  const [searchQuery,       setSearchQuery]       = useState('');
-  const [deletedMessages,   setDeletedMessages]   = useState<Message[]>([]);
-  const [conversations,     setConversations]     = useState<Conversation[]>([]);
-  const [isLoading,         setIsLoading]         = useState(true);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [deletedMessages, setDeletedMessages] = useState<Message[]>([]);
+  const [conversations,   setConversations]   = useState<Conversation[]>([]);
+  const [isLoading,       setIsLoading]       = useState(true);
+  const [activeFilter,    setActiveFilter]    = useState<DeletedFilter>('all');
+  const [sortMode,        setSortMode]        = useState<SortMode>('newest');
 
-  /**
-   * loadData
-   *
-   * Fetches all deleted messages and conversations directly from Room SQLite database.
-   */
   const loadData = useCallback(async (): Promise<void> => {
-    const [deleted, convos] = await Promise.all([
-      getDeletedMessages(),
-      getConversations(),
-    ]);
+    const [deleted, convos] = await Promise.all([getDeletedMessages(), getConversations()]);
     setDeletedMessages(deleted);
     setConversations(convos);
     setIsLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  /* Real-time refresh */
   useEffect(() => {
-    function handleNewMessage(): void {
-      loadData();
-    }
+    function handleNewMessage(): void { loadData(); }
     window.addEventListener('noticatch:new-message', handleNewMessage);
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
 
-  /* Build conversation lookup map */
   const conversationMap = useMemo(() => {
     const map = new Map<string, Conversation>();
-    for (const conv of conversations) {
-      map.set(conv.id, conv);
-    }
+    for (const conv of conversations) { map.set(conv.id, conv); }
     return map;
   }, [conversations]);
 
-  /* Apply Boyer-Moore-Horspool search across deleted messages */
-  const searchResults = useMemo(() => {
-    return searchAndRank(
-      deletedMessages,
-      message => `${message.senderName} ${message.messageText ?? ''}`,
-      searchQuery,
-    );
-  }, [deletedMessages, searchQuery]);
+  const searchResults = useMemo(() => searchAndRank(
+    deletedMessages,
+    message => `${message.senderName} ${message.messageText ?? ''}`,
+    searchQuery,
+  ), [deletedMessages, searchQuery]);
+
+  const displayedMessages = useMemo(() => {
+    let filtered = searchResults.map(r => r.item);
+
+    switch (activeFilter) {
+      case 'groups': filtered = filtered.filter(m => conversationMap.get(m.conversationId)?.isGroup === true); break;
+      case 'direct': filtered = filtered.filter(m => conversationMap.get(m.conversationId)?.isGroup === false); break;
+      case 'phones': filtered = filtered.filter(m => extractEntities(m.messageText).some(e => e.type === 'PHONE_NUMBER')); break;
+      case 'links':  filtered = filtered.filter(m => extractEntities(m.messageText).some(e => e.type === 'URL')); break;
+      case 'otps':   filtered = filtered.filter(m => extractEntities(m.messageText).some(e => e.type === 'OTP_CODE')); break;
+      case 'today':  filtered = filtered.filter(m => isToday(m.timestamp)); break;
+      default: break;
+    }
+
+    switch (sortMode) {
+      case 'oldest': return [...filtered].sort((a, b) => a.timestamp - b.timestamp);
+      case 'chat':   return [...filtered].sort((a, b) => {
+        const ta = conversationMap.get(a.conversationId)?.chatTitle ?? '';
+        const tb = conversationMap.get(b.conversationId)?.chatTitle ?? '';
+        return ta.localeCompare(tb);
+      });
+      default: return [...filtered].sort((a, b) => b.timestamp - a.timestamp);
+    }
+  }, [searchResults, activeFilter, sortMode, conversationMap]);
+
+  const totalChars = useMemo(() =>
+    displayedMessages.reduce((sum, m) => sum + (m.messageText?.length ?? 0), 0),
+  [displayedMessages]);
 
   if (isLoading) {
     return (
@@ -105,50 +138,89 @@ export function DeletedOnlyPage() {
         }
       />
 
-      {/* Fixed Search Bar */}
-      <div className="pt-14 z-20 bg-surface-800 border-b border-surface-700/80 px-4 py-2.5 shadow-xs">
-        <SearchInput
-          id="deleted-search-input"
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search deleted messages..."
-          matchCount={searchQuery ? searchResults.length : undefined}
-          algorithmLabel="Boyer-Moore-Horspool O(n/m)"
-        />
+      <div className="pt-14 z-20 bg-surface-800 border-b border-surface-700/80 shadow-xs">
+        <div className="px-4 pt-2.5 pb-2">
+          <SearchInput
+            id="deleted-search-input"
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search deleted messages..."
+            matchCount={searchQuery ? displayedMessages.length : undefined}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 px-4 pb-2 overflow-x-auto" role="tablist" aria-label="Message filters">
+          {(Object.keys(FILTER_LABELS) as DeletedFilter[]).map(filter => (
+            <button
+              key={filter}
+              id={`deleted-filter-${filter}`}
+              type="button"
+              role="tab"
+              aria-selected={activeFilter === filter}
+              onClick={() => setActiveFilter(filter)}
+              className={activeFilter === filter ? 'filter-pill-active' : 'filter-pill-inactive'}
+            >
+              {FILTER_LABELS[filter]}
+            </button>
+          ))}
+          <div className="flex-1" />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <ArrowUpDown className="w-3 h-3 text-content-muted" strokeWidth={2} />
+            {(Object.keys(SORT_LABELS) as SortMode[]).map(mode => (
+              <button
+                key={mode}
+                id={`deleted-sort-${mode}`}
+                type="button"
+                onClick={() => setSortMode(mode)}
+                className={`text-2xs px-2 py-0.5 rounded font-semibold transition-colors ${
+                  sortMode === mode ? 'text-accent font-extrabold bg-accent-muted' : 'text-content-muted hover:text-content-primary'
+                }`}
+              >
+                {SORT_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {displayedMessages.length > 0 && (
+          <div className="px-4 py-1.5 bg-surface-850 border-t border-surface-700/50 flex items-center justify-between text-2xs text-content-muted">
+            <span className="font-semibold">{displayedMessages.length} item{displayedMessages.length !== 1 ? 's' : ''} shown</span>
+            <span className="font-mono font-medium">{totalChars.toLocaleString()} characters total</span>
+          </div>
+        )}
       </div>
 
-      {/* Scrollable Deleted Message Cards */}
-      <div className="flex-1 overflow-y-auto pb-20">
-        {searchResults.length > 0 ? (
-          <div className="px-4 py-3 space-y-3">
-            {searchResults.map((result, index) => {
-              const message      = result.item;
-              const conversation = conversationMap.get(message.conversationId);
-              return (
-                <div
-                  key={message.id}
-                  className="animate-slide-up"
-                  style={{ animationDelay: `${Math.min(index * 30, 250)}ms` }}
-                >
-                  <DeletedMessageCard
-                    message={message}
-                    chatTitle={conversation?.chatTitle ?? 'Unknown conversation'}
-                    onClick={conversation ? () => navigate(`/chats/${conversation.id}`) : undefined}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        ) : (
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-24">
+        {displayedMessages.length === 0 ? (
           <EmptyState
-            icon={<Trash2 className="w-8 h-8 text-amber-600" strokeWidth={2} />}
-            title={searchQuery ? 'No results found' : 'No deleted messages recovered yet'}
+            icon={<Trash2 className="w-8 h-8 text-content-muted" />}
+            title="No Deleted Messages Found"
             description={
-              searchQuery
-                ? `No deleted messages match "${searchQuery}".`
-                : 'When someone deletes a WhatsApp message, the original text will appear here automatically.'
+              searchQuery || activeFilter !== 'all'
+                ? 'No messages match your active search or filter selection.'
+                : 'When contacts delete messages in WhatsApp, they will be captured and displayed here.'
+            }
+            action={
+              activeFilter !== 'all' ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter('all')}
+                  className="btn-secondary text-xs py-2 px-4"
+                >
+                  Reset Filters
+                </button>
+              ) : undefined
             }
           />
+        ) : (
+          displayedMessages.map(message => (
+            <DeletedMessageCard
+              key={message.id}
+              message={message}
+              chatTitle={conversationMap.get(message.conversationId)?.chatTitle ?? 'Unknown Chat'}
+              onClick={() => navigate(`/chats/${message.conversationId}`)}
+            />
+          ))
         )}
       </div>
     </div>

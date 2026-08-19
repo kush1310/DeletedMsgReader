@@ -20,7 +20,7 @@ export default {
         /* === Clean Material Light Surface Palette === */
         surface: {
           900: '#FFFFFF', // Crisp White Cards / Skeuomorphic Top Glass
-          850: '#F8FAFC', // Subtle Off-White Inner Containers
+          850: '#F4F7FA', // Mid Off-White: hover / inner container backdrop
           800: '#EEF2F6', // Neumorphic Canvas Background (Soft Cool Slate)
           700: '#E2E8F0', // Card Borders / Dividers / Neutral Hover
           600: '#CBD5E1', // Outline Borders / Inactive Dividers
@@ -107,15 +107,25 @@ export default {
           '0%, 100%': { transform: 'translateY(0px)' },
           '50%':      { transform: 'translateY(-6px)' },
         },
+        'slide-down': {
+          '0%':   { opacity: '0', transform: 'translateY(-10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'count-up': {
+          '0%':   { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'slide-up':       'slide-up 300ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'slide-down':     'slide-down 250ms cubic-bezier(0.16, 1, 0.3, 1) both',
         'slide-in-right': 'slide-in-right 300ms cubic-bezier(0.16, 1, 0.3, 1) both',
         'fade-in':        'fade-in 200ms ease-in-out both',
         'scale-in':       'scale-in 250ms cubic-bezier(0.16, 1, 0.3, 1) both',
         'pulse-soft':     'pulse-soft 2s ease-in-out infinite',
         'shimmer':        'shimmer 1.6s linear infinite',
         'float':          'float 3s ease-in-out infinite',
+        'count-up':       'count-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both',
       },
       boxShadow: {
         'xs':      '0 1px 2px rgba(15, 23, 42, 0.05)',

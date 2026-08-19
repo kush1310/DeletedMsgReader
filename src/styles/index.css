@@ -4,6 +4,318 @@
 
 /* =========================================================
    NotiCatch — High-End Neumorphic & Skeuomorphic Design System
+   Outfit Font Stack + Material Design 3 Light Mode
+   All custom utilities fully defined — no silent class failures
+   ========================================================= */
+
+@layer base {
+  :root {
+    --color-accent:           #008069;
+    --color-accent-hover:     #006A57;
+    --color-accent-muted:     #E8FAF6;
+    --color-emerald:          #25D366;
+    --color-warning:          #D97706;
+    --color-surface-900:      #FFFFFF;
+    --color-surface-850:      #F4F7FA;
+    --color-surface-800:      #EEF2F6;
+    --color-surface-700:      #E2E8F0;
+    --color-content-primary:  #0F172A;
+    --color-content-secondary:#334155;
+    --color-content-muted:    #64748B;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+    background-color: #EEF2F6;
+    color: #0F172A;
+  }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #EEF2F6; }
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 100px;
+    box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+  * { -webkit-tap-highlight-color: transparent; }
+
+  :focus-visible {
+    outline: 2px solid #008069;
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  ::selection {
+    background-color: rgba(0, 128, 105, 0.18);
+    color: #0F172A;
+  }
+}
+
+@layer components {
+  /* === Surface Cards === */
+  .card {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .card-neu {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 6px 6px 14px rgba(166, 175, 195, 0.35), -6px -6px 14px rgba(255, 255, 255, 0.9);
+    transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .card-interactive {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(15, 23, 42, 0.04);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+  }
+  .card-interactive:hover {
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+    border-color: rgba(0, 128, 105, 0.3);
+    transform: translateY(-1px);
+  }
+  .card-interactive:active {
+    transform: scale(0.985);
+    transform: translateY(0);
+  }
+
+  /* === Modal / Bottom Sheet === */
+  .overlay { @apply fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-sm; }
+
+  .bottom-sheet {
+    @apply fixed bottom-0 left-0 right-0 z-50 bg-surface-900 p-6 border-t border-surface-700 animate-slide-up;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15);
+  }
+
+  /* === Badges === */
+  .badge-deleted {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5
+           bg-gradient-to-b from-amber-50 to-amber-100 text-amber-900 text-2xs font-bold
+           rounded-full border border-amber-300 uppercase tracking-wider;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+  }
+
+  .badge-recovered {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5
+           bg-gradient-to-b from-emerald-50 to-emerald-100 text-emerald-900 text-2xs font-bold
+           rounded-full border border-emerald-300 uppercase tracking-wider;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+  }
+
+  .badge-online {
+    @apply w-3 h-3 rounded-full border-2 border-white;
+    background-color: #25D366;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  /* === Message Bubbles === */
+  .bubble-received {
+    @apply bg-surface-900 text-content-primary rounded-2xl rounded-tl-none
+           px-4 py-2.5 max-w-[82%] border border-surface-700/80 text-sm leading-relaxed;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .bubble-deleted {
+    @apply text-amber-950 rounded-2xl rounded-tl-none px-4 py-2.5 max-w-[82%] text-sm leading-relaxed;
+    background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+    border: 1.5px solid #FCD34D;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 0 0 3px rgba(252, 211, 77, 0.12);
+  }
+
+  /* === Buttons === */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-b from-[#00A884] to-[#008069]
+           hover:from-[#00B892] hover:to-[#006A57]
+           text-white font-bold text-sm px-5 py-3 border-t border-white/25;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px -1px rgba(0, 128, 105, 0.25), 0 2px 4px -2px rgba(0, 128, 105, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-primary:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2); }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           bg-surface-800/80 hover:bg-surface-700 active:scale-[0.97]
+           text-content-secondary hover:text-content-primary font-semibold text-sm
+           px-4 py-2.5 border border-surface-700/60;
+    border-radius: 6px;
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gradient-to-b from-red-50 to-red-100 hover:from-red-100 hover:to-red-200
+           text-red-700 hover:text-red-800 font-bold text-sm px-5 py-3 border border-red-300;
+    border-radius: 6px;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-danger:active { transform: translateY(1px); }
+
+  /* === Inputs === */
+  .input-field {
+    @apply w-full bg-surface-900 border border-surface-600/80
+           text-content-primary placeholder-content-muted
+           px-4 py-3 text-sm
+           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+    border-radius: 6px;
+    box-shadow: inset 3px 3px 6px rgba(166, 175, 195, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .search-bar { @apply input-field pl-10; }
+
+  /* === Skeleton Loader === */
+  .skeleton {
+    @apply bg-surface-700 rounded-lg animate-shimmer bg-[length:200%_100%];
+    background-image: linear-gradient(90deg, #E2E8F0 0%, #F1F5F9 50%, #E2E8F0 100%);
+  }
+
+  /* === App Bars === */
+  .top-bar {
+    @apply fixed top-0 left-0 right-0 z-30 bg-surface-900/90 backdrop-blur-md border-b border-surface-700/80;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-30 bg-surface-900/95 backdrop-blur-md border-t border-surface-700/80 pb-safe;
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.05);
+  }
+
+  /* === Step & Stat Cards === */
+  .step-card {
+    @apply card p-4 flex items-start gap-4;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .step-icon {
+    @apply w-11 h-11 flex items-center justify-center flex-shrink-0 border border-white/60;
+    border-radius: 8px;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 4px rgba(15, 23, 42, 0.04);
+  }
+
+  .stat-card { @apply card-neu p-4 flex flex-col gap-1; }
+
+  /* === Filter Pill Tabs === */
+  .filter-pill {
+    @apply flex-shrink-0 px-3.5 py-1.5 text-xs font-bold rounded-full border transition-all duration-200;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8);
+  }
+  .filter-pill-active {
+    @apply filter-pill bg-accent text-white border-accent/80;
+    box-shadow: 0 2px 8px rgba(0, 128, 105, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  .filter-pill-inactive {
+    @apply filter-pill bg-surface-900 text-content-secondary border-surface-700 hover:border-accent/50 hover:text-accent;
+  }
+
+  /* === Sort Control Pills === */
+  .sort-pill { @apply flex-shrink-0 px-3 py-1 text-2xs font-bold rounded border transition-all duration-150 flex items-center gap-1; }
+  .sort-pill-active  { @apply sort-pill bg-accent-muted text-accent border-accent/40; }
+  .sort-pill-inactive { @apply sort-pill bg-surface-800 text-content-muted border-surface-700 hover:text-content-secondary; }
+
+  /* === Floating Action Pill (Jump to Next Deleted) === */
+  .floating-pill {
+    @apply fixed z-40 flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white rounded-full;
+    background: linear-gradient(135deg, #D97706 0%, #B45309 100%);
+    box-shadow: 0 4px 16px rgba(217, 119, 6, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .floating-pill:active { transform: scale(0.95); }
+
+  /* === AirGap Status Ribbon === */
+  .air-gap-ribbon {
+    @apply flex items-center gap-2.5 px-3.5 py-2 text-2xs font-bold rounded-lg border border-emerald-300/80 text-emerald-900;
+    background: linear-gradient(90deg, rgba(220, 252, 231, 0.9) 0%, rgba(187, 247, 208, 0.6) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  /* === Empty State Dot-Grid Background === */
+  .empty-state-grid {
+    background-image: radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* === Quick Action Pill Row === */
+  .quick-action-pill {
+    @apply flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-full border transition-all duration-200 flex-1;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+}
+
+@layer utilities {
+  .delay-75  { animation-delay: 75ms; }
+  .delay-100 { animation-delay: 100ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+
+  .pt-safe  { padding-top:    env(safe-area-inset-top, 0px); }
+  .pb-safe  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .px-safe  { padding-left:   env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+
+  .h-page     { height: calc(100dvh - 120px); }
+  .min-h-page { min-height: calc(100dvh - 120px); }
+
+  .text-gradient-accent {
+    background: linear-gradient(135deg, #008069 0%, #00A884 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, #128C7E 0%, #25D366 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  /* Pulsing online status dot */
+  .status-dot-green {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+    background-color: #25D366;
+    animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.5); }
+    50%       { box-shadow: 0 0 0 5px rgba(37, 211, 102, 0); }
+  }
+}
+
+
+/* =========================================================
+   NotiCatch — High-End Neumorphic & Skeuomorphic Design System
    AegisRx Font Stack (Outfit) + Material Design 3 Light Mode
    ========================================================= */
 
@@ -280,10 +592,9 @@
 
   .pt-safe  { padding-top:    env(safe-area-inset-top, 0px); }
   .pb-safe  { padding-bottom: env(safe-area-inset-bottom, 0px); }
-  .px-safe  { padding-left:   env(safe-area-inset-left, 0px);
-               padding-right:  env(safe-area-inset-right, 0px); }
+  .px-safe  { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
 
-  .h-page   { height: calc(100dvh - 120px); }
+  .h-page     { height: calc(100dvh - 120px); }
   .min-h-page { min-height: calc(100dvh - 120px); }
 
   .text-gradient-accent {
@@ -301,4 +612,72 @@
   }
 
   .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  .status-dot-green {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background-color: #25D366;
+    animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.5); }
+    50%       { box-shadow: 0 0 0 5px rgba(37, 211, 102, 0); }
+  }
+
+  /* === Filter Pill Tabs (ChatsPage / DeletedOnlyPage) === */
+  .filter-pill-active {
+    @apply flex-shrink-0 px-3 py-1 rounded-full text-2xs font-extrabold
+           text-white border transition-all duration-200 whitespace-nowrap;
+    background: linear-gradient(135deg, #008069 0%, #00A884 100%);
+    border-color: #006A57;
+    box-shadow: 0 2px 8px rgba(0, 128, 105, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .filter-pill-inactive {
+    @apply flex-shrink-0 px-3 py-1 rounded-full text-2xs font-bold
+           text-content-muted border border-surface-600 bg-surface-800
+           hover:text-content-primary hover:border-surface-500
+           transition-all duration-200 whitespace-nowrap;
+    box-shadow: inset 1px 1px 3px rgba(166, 175, 195, 0.25), inset -1px -1px 3px rgba(255, 255, 255, 0.7);
+  }
+
+  /* === Sort Pill Controls (DeletedOnlyPage) === */
+  .sort-pill-active {
+    @apply flex-shrink-0 px-2 py-0.5 rounded-full text-2xs font-extrabold
+           text-accent bg-accent-muted border border-accent/30
+           transition-all duration-200 whitespace-nowrap;
+  }
+
+  .sort-pill-inactive {
+    @apply flex-shrink-0 px-2 py-0.5 rounded-full text-2xs font-medium
+           text-content-muted hover:text-content-secondary
+           transition-all duration-200 whitespace-nowrap;
+  }
+
+  /* === Floating Pill Button (Jump to Next Deleted) === */
+  .floating-pill {
+    @apply fixed z-30 flex items-center gap-1.5 px-3.5 py-2 rounded-full
+           text-2xs font-extrabold text-white
+           transition-all duration-200 active:scale-90;
+    background: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
+    box-shadow: 0 4px 16px rgba(217, 119, 6, 0.35), 0 2px 4px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  /* === Inline AirGap Status Ribbon === */
+  .air-gap-ribbon {
+    @apply flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-2xs font-semibold
+           text-emerald-900 bg-emerald-50 border border-emerald-200;
+    box-shadow: inset 0 1px 2px rgba(0, 128, 105, 0.1), 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  /* === EmptyState icon background dot grid === */
+  .empty-state-grid {
+    background-image: radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+    background-size: 8px 8px;
+  }
 }
+

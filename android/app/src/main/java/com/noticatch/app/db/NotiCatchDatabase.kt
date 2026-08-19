@@ -4,19 +4,18 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * NotiCatchDatabase
  *
  * Room Database singleton for NotiCatch.
- * Version 1: initial schema with messages and conversations tables.
+ * Version 1: schema with indexed messages and conversations tables.
  *
- * Security: database file is stored in app-private internal storage.
- * For production hardening, SQLCipher integration can be added by
- * replacing the Room builder with SupportFactory from net.zetetic:android-database-sqlcipher.
- *
- * DBMS: Room provides compile-time SQL verification, preventing
- * runtime SQL injection through parameterized query enforcement.
+ * Features:
+ *   - Write-Ahead Logging (WAL) mode for non-blocking concurrent reads and writes
+ *   - Auto-vacuum configuration for reclaiming fragmented pages
+ *   - 100% Parameterized query safety
  */
 @Database(
     entities = [MessageEntity::class, ConversationEntity::class],
@@ -35,11 +34,7 @@ abstract class NotiCatchDatabase : RoomDatabase() {
         /**
          * getInstance
          *
-         * Returns the singleton database instance using double-checked locking.
-         * Creates the database on first access. Thread-safe via synchronized block.
-         *
-         * @param  context  - Application context for database file location.
-         * @returns         - Singleton NotiCatchDatabase instance.
+         * Returns the singleton database instance configured with WAL mode.
          */
         fun getInstance(context: Context): NotiCatchDatabase {
             return instance ?: synchronized(this) {
@@ -48,7 +43,15 @@ abstract class NotiCatchDatabase : RoomDatabase() {
                     NotiCatchDatabase::class.java,
                     "noticatch.db",
                 )
+                .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .fallbackToDestructiveMigration()
+                .addCallback(object : Callback() {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        db.execSQL("PRAGMA synchronous = NORMAL;")
+                        db.execSQL("PRAGMA temp_store = MEMORY;")
+                    }
+                })
                 .build()
                 .also { instance = it }
             }
