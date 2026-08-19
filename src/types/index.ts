@@ -30,19 +30,24 @@ export interface Conversation {
 }
 
 export interface Message {
-  readonly id:                string;
-  readonly conversationId:    string;
-  readonly senderName:        string;
-  readonly messageText:       string | null;
-  readonly notificationId:    number;
-  readonly timestamp:         number;
-  readonly isDeletedBySender: boolean;
-  readonly isEdited:          boolean;
-  readonly mediaType:         MediaType | null;
-  readonly mediaPath:         string | null;
-  readonly hashSignature:     string;
-  readonly isPurged?:         boolean;
-  readonly purgedAt?:         number | null;
+  readonly id:                    string;
+  readonly conversationId:        string;
+  readonly senderName:            string;
+  readonly messageText:           string | null;
+  readonly originalText?:         string | null;
+  readonly notificationId:        number;
+  readonly timestamp:             number;
+  readonly isDeletedBySender:     boolean;
+  readonly isEdited:              boolean;
+  readonly editCount?:            number;
+  readonly editedAt?:             number | null;
+  readonly mediaType:             MediaType | null;
+  readonly mediaPath:             string | null;
+  readonly audioDurationSeconds?: number | null;
+  readonly isDisappearing?:       boolean;
+  readonly hashSignature:         string;
+  readonly isPurged?:             boolean;
+  readonly purgedAt?:             number | null;
 }
 
 export type MediaType =
@@ -73,18 +78,35 @@ export interface ExtractedEntity {
 }
 
 export interface MerkleAuditResult {
-  readonly isValid:         boolean;
-  readonly totalMessages:   number;
-  readonly rootHash:        string;
-  readonly verifiedAt:      number;
+  readonly isValid:          boolean;
+  readonly totalMessages:    number;
+  readonly rootHash:         string;
+  readonly verifiedAt:       number;
   readonly compromisedCount: number;
 }
 
 export interface DeviceSecurityStatus {
-  readonly isRooted:        boolean;
-  readonly isEmulator:      boolean;
-  readonly airGapVerified:  boolean;
+  readonly isRooted:         boolean;
+  readonly isEmulator:       boolean;
+  readonly airGapVerified:   boolean;
   readonly flagSecureActive: boolean;
+}
+
+export interface KernelSocketStats {
+  readonly activeSockets:              number;
+  readonly openTcpPorts:               number;
+  readonly openUdpPorts:               number;
+  readonly bytesTransmitted:           number;
+  readonly bytesReceived:              number;
+  readonly airGapVerified:             boolean;
+  readonly internetPermissionPresent:  boolean;
+}
+
+export type DiffType = 'ADDED' | 'REMOVED' | 'UNCHANGED';
+
+export interface DiffChunk {
+  readonly type:  DiffType;
+  readonly text:  string;
 }
 
 /* =============================================================
@@ -100,84 +122,74 @@ export interface AuditLog {
 }
 
 export type AuditEventType =
-  | 'APP_UNLOCKED'
-  | 'APP_LOCKED'
-  | 'MESSAGE_CAPTURED'
-  | 'MESSAGE_DELETED_DETECTED'
-  | 'NOTIFICATION_SERVICE_STARTED'
-  | 'NOTIFICATION_SERVICE_STOPPED'
-  | 'SETTINGS_CHANGED'
-  | 'EXPORT_PERFORMED'
-  | 'DATABASE_WIPED'
-  | 'MERKLE_AUDIT_VERIFIED';
+  | 'DATABASE_INIT'
+  | 'KEY_DERIVATION'
+  | 'MESSAGE_PERSISTED'
+  | 'MESSAGE_DELETED_BY_SENDER'
+  | 'MESSAGE_EDITED_BY_SENDER'
+  | 'INTEGRITY_CHECK_PASSED'
+  | 'INTEGRITY_CHECK_FAILED'
+  | 'SESSION_UNLOCKED'
+  | 'SESSION_LOCKED'
+  | 'DATA_EXPORTED'
+  | 'DATABASE_PURGED'
+  | 'SECURITY_EVENT';
+
+export type ClassificationType =
+  | 'STANDARD_MESSAGE'
+  | 'SYSTEM_DELETION'
+  | 'USER_DELETION'
+  | 'SYSTEM_EDIT'
+  | 'MEDIA_IMAGE'
+  | 'MEDIA_AUDIO'
+  | 'MEDIA_VIDEO'
+  | 'MEDIA_DOCUMENT'
+  | 'SPAM_OTP'
+  | 'UNKNOWN';
+
+export interface ClassificationResult {
+  readonly type:                   ClassificationType;
+  readonly isDeletion:             boolean;
+  readonly isEdit:                 boolean;
+  readonly confidence:             number;
+  readonly extractedSender:        string | null;
+  readonly extractedOriginalText?: string | null;
+  readonly matchedPattern:         string | null;
+}
+
+export interface SearchMatch {
+  readonly messageId:      string;
+  readonly conversationId: string;
+  readonly senderName:     string;
+  readonly messageText:    string;
+  readonly timestamp:      number;
+  readonly isDeleted:      boolean;
+  readonly isEdited:       boolean;
+  readonly score:          number;
+  readonly highlightIndices: readonly [number, number][];
+}
+
+export interface AppSettings {
+  readonly biometricEnabled:      boolean;
+  readonly isPinSet:              boolean;
+  readonly isDuressPinSet:        boolean;
+  readonly sessionTimeoutSeconds: number;
+  readonly screenSecureEnabled:   boolean;
+  readonly airGapModeActive:      boolean;
+  readonly spamFilterEnabled:     boolean;
+  readonly theme:                 'light' | 'dark' | 'system';
+  readonly lastIntegrityCheck:    number | null;
+  readonly databaseVersion:       number;
+}
 
 export interface RawNotificationPayload {
   readonly packageName:    string;
   readonly notificationId: number;
   readonly title:          string;
-  readonly text:           string;
+  readonly text:           string | null;
   readonly subText:        string | null;
   readonly timestamp:      number;
   readonly groupKey:       string | null;
 }
 
-export interface ClassificationResult {
-  readonly classification:  NotificationClassification;
-  readonly confidence:      number;
-  readonly isDeletion:      boolean;
-  readonly isEdit:          boolean;
-  readonly isSystemMessage: boolean;
-  readonly normalizedText:  string | null;
-}
-
-export type NotificationClassification =
-  | 'USER_MESSAGE'
-  | 'DELETION_SIGNAL'
-  | 'EDIT_SIGNAL'
-  | 'SYSTEM_NOTICE'
-  | 'OTP_SPAM'
-  | 'GROUP_METADATA'
-  | 'UNKNOWN';
-
-/* =============================================================
-   UI & Application State Types
-   ============================================================= */
-
-export interface AuthState {
-  readonly isAuthenticated:    boolean;
-  readonly isBiometricEnabled: boolean;
-  readonly isPinEnabled:       boolean;
-  readonly sessionStartedAt:   number | null;
-  readonly sessionTimeoutMs:   number;
-}
-
-export interface AppStats {
-  readonly totalMessagesCaputred:  number;
-  readonly totalDeletedRecovered:  number;
-  readonly totalConversations:     number;
-  readonly totalContacts:          number;
-  readonly oldestCaptureTimestamp: number | null;
-  readonly storageSizeBytes:       number;
-}
-
-export interface AppSettings {
-  readonly sessionTimeoutSeconds: number;
-  readonly biometricEnabled:      boolean;
-  readonly pinEnabled:            boolean;
-  readonly screenSecureEnabled:   boolean;
-  readonly autoDeleteAfterDays:   number | null;
-  readonly notificationEnabled:   boolean;
-  readonly captureMediaEnabled:   boolean;
-  readonly spamFilterEnabled:     boolean;
-}
-
 export type NavTab = 'chats' | 'deleted' | 'settings';
-
-export type ToastSeverity = 'info' | 'success' | 'warning' | 'error';
-
-export interface ToastMessage {
-  readonly id:         string;
-  readonly message:    string;
-  readonly severity:   ToastSeverity;
-  readonly durationMs: number;
-}

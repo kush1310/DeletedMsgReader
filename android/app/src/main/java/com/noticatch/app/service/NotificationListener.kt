@@ -22,7 +22,7 @@ import java.util.UUID
  *
  * High-reliability Android NotificationListenerService for NotiCatch.
  * Delegates message extraction to WhatsAppNotificationParser and persists records
- * to local Room SQLite with SHA-256 integrity signatures.
+ * to local Room SQLite with SHA-256 integrity signatures, edit revisions, and duration metadata.
  */
 class NotificationListener : NotificationListenerService() {
 
@@ -143,26 +143,49 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 3. Standard message insertion */
+        /* 3. Edit signal processing */
+        if (parsed.isEdit && !parsed.messageText.isNullOrBlank()) {
+            val existing = database.messageDao().findRecentForEdit(conversation.id, parsed.senderName, parsed.timestamp)
+            if (existing != null) {
+                val updated = existing.copy(
+                    originalText = existing.originalText ?: existing.messageText,
+                    messageText  = parsed.messageText,
+                    isEdited     = true,
+                    editCount    = existing.editCount + 1,
+                    editedAt     = parsed.timestamp,
+                )
+                database.messageDao().update(updated)
+                Log.i(TAG, "Updated message edit revision: id=${existing.id}")
+                broadcastNewMessage(existing.senderName, parsed.messageText, conversation.id, false, parsed.timestamp)
+                return
+            }
+        }
+
+        /* 4. Standard message insertion */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
             val rawSignature = "${conversation.id}|${parsed.senderName}|${parsed.timestamp}|$text"
             val sha256Signature = computeSha256(rawSignature)
 
             val message = MessageEntity(
-                id                = UUID.randomUUID().toString(),
-                conversationId    = conversation.id,
-                senderName        = parsed.senderName,
-                messageText       = text,
-                notificationId    = parsed.notificationId,
-                timestamp         = parsed.timestamp,
-                isDeletedBySender = false,
-                isEdited          = false,
-                mediaType         = null,
-                mediaPath         = null,
-                hashSignature     = sha256Signature,
-                isPurged          = false,
-                purgedAt          = null,
+                id                   = UUID.randomUUID().toString(),
+                conversationId       = conversation.id,
+                senderName           = parsed.senderName,
+                messageText          = text,
+                originalText         = null,
+                notificationId       = parsed.notificationId,
+                timestamp            = parsed.timestamp,
+                isDeletedBySender    = false,
+                isEdited             = parsed.isEdit,
+                editCount            = if (parsed.isEdit) 1 else 0,
+                editedAt             = if (parsed.isEdit) parsed.timestamp else null,
+                mediaType            = if (parsed.audioDurationSeconds != null) "audio" else null,
+                mediaPath            = null,
+                audioDurationSeconds = parsed.audioDurationSeconds,
+                isDisappearing       = parsed.isDisappearing,
+                hashSignature        = sha256Signature,
+                isPurged             = false,
+                purgedAt             = null,
             )
             database.messageDao().insert(message)
             Log.i(TAG, "Persisted message: chat='${parsed.chatTitle}', sender='${parsed.senderName}'")

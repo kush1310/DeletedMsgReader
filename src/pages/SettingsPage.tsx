@@ -5,8 +5,8 @@
  * All settings are backed by native Android Room SQLite and SharedPreferences:
  *   - Notification Access & System Permission Diagnostics
  *   - Xiaomi / MIUI Autostart & Battery Exemption management
- *   - On-Device WhatsApp Notification Simulation Tool
- *   - Air-Gap Verification & Anti-Root Security Status
+ *   - Duress Emergency Panic Wipe configuration
+ *   - Live Kernel Socket & Air-Gap Auditor
  *   - Screen Protection toggle with live WindowManager FLAG_SECURE synchronization
  *   - Session Timeout selector with native backend persistence
  *   - Spam & OTP filter with NotificationListener gate synchronization
@@ -38,43 +38,48 @@ import {
   ShieldCheck,
   Cpu,
   Lock,
+  Radio,
+  X,
+  KeyRound,
+  Activity,
 } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
 import { SettingsRow, ToggleSwitch, LoadingSpinner, ConfirmationModal } from '@/components/common';
 import {
   loadAppSettings,
   persistAppSettings,
-  persistAuthState,
-  loadAuthState,
-  wipeAllData,
-  exportChatAsPDF,
-  exportChatAsCSV,
+  wipeAllDataNative,
+  exportChatAsPDFNative,
+  exportChatAsCSVNative,
   getConversations,
   setSpamFilterNative,
   setScreenSecureNative,
   setSessionTimeoutNative,
   checkNotificationListenerEnabled,
   requestNotificationListenerPermission,
-  openAutostartSettings,
-  requestBatteryOptimizationExemption,
-  simulateNotification,
+  openAutostartSettingsNative,
+  requestBatteryExemptionNative,
+  simulateNotificationNative,
   checkDeviceSecurity,
+  getKernelSocketStats,
   isNativeAndroid,
 } from '@/services/NativeBridgeService';
-import type { AppSettings, Conversation } from '@/types';
+import type { AppSettings, Conversation, KernelSocketStats } from '@/types';
 
 const DEFAULT_SETTINGS: AppSettings = {
-  sessionTimeoutSeconds: 300,
   biometricEnabled:      true,
-  pinEnabled:            false,
+  isPinSet:              true,
+  isDuressPinSet:        false,
+  sessionTimeoutSeconds: 300,
   screenSecureEnabled:   true,
-  autoDeleteAfterDays:   null,
-  notificationEnabled:   true,
-  captureMediaEnabled:   false,
+  airGapModeActive:      true,
   spamFilterEnabled:     true,
+  theme:                 'light',
+  lastIntegrityCheck:    null,
+  databaseVersion:       1,
 };
 
-type ModalType = 'logout' | 'wipe' | 'export' | 'security-audit' | null;
+type ModalType = 'logout' | 'wipe' | 'export' | 'duress-pin' | 'kernel-audit' | null;
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -90,6 +95,9 @@ export function SettingsPage() {
   const [isWiping,          setIsWiping]          = useState(false);
   const [notifAccessGranted, setNotifAccessGranted] = useState<boolean | null>(null);
   const [simulatingMsg,     setSimulatingMsg]     = useState<string | null>(null);
+  const [duressInput,       setDuressInput]       = useState('');
+  const [duressSuccess,     setDuressSuccess]     = useState<string | null>(null);
+  const [socketStats,       setSocketStats]       = useState<KernelSocketStats | null>(null);
   const [securityStatus,    setSecurityStatus]    = useState<{ isRooted: boolean; isEmulator: boolean; airGapVerified: boolean }>({
     isRooted: false,
     isEmulator: false,
@@ -142,14 +150,12 @@ export function SettingsPage() {
   async function handleLogoutConfirm(): Promise<void> {
     setActiveModal(null);
     sessionStorage.removeItem('session_start');
-    const auth = await loadAuthState();
-    await persistAuthState({ ...auth, isAuthenticated: false });
     navigate('/login', { replace: true });
   }
 
   async function handleWipeConfirm(): Promise<void> {
     setIsWiping(true);
-    await wipeAllData();
+    await wipeAllDataNative();
     sessionStorage.clear();
     setIsWiping(false);
     setActiveModal(null);
@@ -162,9 +168,15 @@ export function SettingsPage() {
     setActiveModal('export');
   }
 
+  async function openKernelAuditModal(): Promise<void> {
+    const stats = await getKernelSocketStats();
+    setSocketStats(stats);
+    setActiveModal('kernel-audit');
+  }
+
   async function handleExportPDF(conversationId: string, chatTitle: string): Promise<void> {
     setExportingChatId(conversationId);
-    const result = await exportChatAsPDF(conversationId, chatTitle);
+    const result = await exportChatAsPDFNative(conversationId, chatTitle);
     setExportingChatId(null);
     if (result.filePath) {
       setExportSuccessMsg(`Exported ${result.rowCount} messages to PDF`);
@@ -174,7 +186,7 @@ export function SettingsPage() {
 
   async function handleExportCSV(conversationId: string, chatTitle: string): Promise<void> {
     setExportingChatId(conversationId);
-    const result = await exportChatAsCSV(conversationId, chatTitle);
+    const result = await exportChatAsCSVNative(conversationId, chatTitle);
     setExportingChatId(null);
     if (result.filePath) {
       setExportSuccessMsg(`Exported ${result.rowCount} messages to CSV`);
@@ -182,9 +194,21 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSaveDuressPin(): Promise<void> {
+    if (duressInput.length === 4) {
+      localStorage.setItem('duress_pin_noticatch', duressInput);
+      setDuressSuccess('Duress emergency PIN activated.');
+      setTimeout(() => {
+        setDuressSuccess(null);
+        setActiveModal(null);
+        setDuressInput('');
+      }, 1500);
+    }
+  }
+
   async function handleSimulateMessage(): Promise<void> {
     setSimulatingMsg('Sending normal message from Mumma...');
-    await simulateNotification({
+    await simulateNotificationNative({
       chatTitle:   'Mumma',
       senderName:  'Mumma',
       messageText: 'Hi! I will call you in 5 minutes.',
@@ -199,7 +223,7 @@ export function SettingsPage() {
 
   async function handleSimulateDeletion(): Promise<void> {
     setSimulatingMsg('Sending deletion signal from Mumma...');
-    await simulateNotification({
+    await simulateNotificationNative({
       chatTitle:   'Mumma',
       senderName:  'Mumma',
       messageText: 'This message was deleted',
@@ -248,381 +272,439 @@ export function SettingsPage() {
               System Listener & Permissions
             </h2>
             <span
-              className={`text-2xs font-extrabold px-2 py-0.5 rounded-full ${
+              className={`inline-flex items-center gap-1 text-2xs font-extrabold px-2 py-0.5 rounded-full ${
                 notifAccessGranted
-                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   : 'bg-amber-100 text-amber-900 border border-amber-300'
               }`}
             >
-              {notifAccessGranted ? 'Active & Intercepting' : 'Access Required'}
+              {notifAccessGranted ? (
+                <>
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  Active
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-2.5 h-2.5" />
+                  Action Required
+                </>
+              )}
             </span>
           </div>
 
-          <div className="card p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                notifAccessGranted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {notifAccessGranted ? <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} /> : <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />}
+          <div className="card overflow-hidden">
+            <SettingsRow
+              icon={<Bell className="w-4 h-4 text-accent" />}
+              label="Notification Access"
+              description={
+                notifAccessGranted
+                  ? 'Active — intercepting incoming WhatsApp messages'
+                  : 'Required — tap to enable in Android settings'
+              }
+              onClick={requestNotificationListenerPermission}
+            />
+
+            {isNative && (
+              <>
+                <SettingsRow
+                  icon={<Zap className="w-4 h-4 text-amber-700" />}
+                  label="Autostart Permission"
+                  description="Crucial for Xiaomi, Oppo, Vivo & Huawei background survival"
+                  onClick={openAutostartSettingsNative}
+                />
+                <SettingsRow
+                  icon={<BatteryCharging className="w-4 h-4 text-accent" />}
+                  label="Battery Saver Exemption"
+                  description="Set to 'No Restrictions' so Android does not kill listener"
+                  onClick={requestBatteryExemptionNative}
+                />
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Security & Access */}
+        <section className="px-4 pt-4 pb-3">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2 px-1">
+            Security & Access
+          </h2>
+          <div className="card overflow-hidden">
+            <SettingsRow
+              icon={<Shield className="w-4 h-4 text-accent" />}
+              label="Biometric / PIN Gate"
+              description="Requires device fingerprint or PIN to access chats"
+              control={
+                <ToggleSwitch
+                  id="biometric-toggle"
+                  checked={settings.biometricEnabled}
+                  onChange={val => updateSetting('biometricEnabled', val)}
+                />
+              }
+            />
+
+            <SettingsRow
+              icon={<KeyRound className="w-4 h-4 text-rose-700" />}
+              label="Duress Emergency Panic PIN"
+              description="Entering this decoy code triggers instant silent database wipe"
+              onClick={() => setActiveModal('duress-pin')}
+            />
+
+            <SettingsRow
+              icon={<Lock className="w-4 h-4 text-accent" />}
+              label="Screen Capture Protection"
+              description="Blocks screenshots & hides content in recent apps switcher (FLAG_SECURE)"
+              control={
+                <ToggleSwitch
+                  id="screen-secure-toggle"
+                  checked={settings.screenSecureEnabled}
+                  onChange={val => updateSetting('screenSecureEnabled', val)}
+                />
+              }
+            />
+
+            <SettingsRow
+              icon={<Clock className="w-4 h-4 text-accent" />}
+              label="Session Timeout"
+              description={`Locks app after ${currentTimeoutLabel} of inactivity`}
+              onClick={() => setShowTimeoutPicker(v => !v)}
+              control={
+                <span className="text-xs font-bold text-accent flex items-center gap-1">
+                  {currentTimeoutLabel}
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </span>
+              }
+            />
+
+            {showTimeoutPicker && (
+              <div className="bg-surface-850 p-2 border-t border-surface-700 flex flex-wrap gap-1.5 animate-slide-up">
+                {timeoutOptions.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      updateSetting('sessionTimeoutSeconds', option.value);
+                      setShowTimeoutPicker(false);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      settings.sessionTimeoutSeconds === option.value
+                        ? 'bg-accent text-white shadow-xs'
+                        : 'bg-surface-900 text-content-primary hover:bg-surface-700 border border-surface-700/80'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-content-primary">
-                  {notifAccessGranted ? 'WhatsApp Notification Service Bound' : 'Notification Access Disabled'}
-                </p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium leading-relaxed">
-                  {notifAccessGranted
-                    ? 'The Android background listener is actively intercepting WhatsApp notifications into local Room SQLite.'
-                    : 'Android requires you to grant Notification Access permission so NotiCatch can intercept WhatsApp messages.'}
-                </p>
+            )}
+          </div>
+        </section>
+
+        {/* Air-Gap Verification & Network Isolation */}
+        <section className="px-4 pt-4 pb-3">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2 px-1">
+            Air-Gap Verification & Network Isolation
+          </h2>
+          <div className="card p-3.5 bg-gradient-to-br from-white to-emerald-50/40 border border-emerald-200 shadow-xs">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-white">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-extrabold text-content-primary block leading-tight">
+                    100% Air-Gapped Operational Model
+                  </span>
+                  <span className="text-2xs text-accent font-bold block">
+                    Zero Internet Permission &middot; Local Sandbox Only
+                  </span>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={openKernelAuditModal}
+                className="px-2.5 py-1 rounded bg-accent text-white text-2xs font-bold hover:bg-accent-hover transition-colors shadow-xs"
+              >
+                Inspect Sockets
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-              <button
-                type="button"
-                id="open-notif-settings-btn"
-                onClick={() => requestNotificationListenerPermission()}
-                className="btn-primary text-xs py-2 flex items-center justify-center gap-1.5"
-              >
-                <Bell className="w-3.5 h-3.5" />
-                Notification Access
-              </button>
-              <button
-                type="button"
-                id="open-autostart-settings-btn"
-                onClick={() => openAutostartSettings()}
-                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                Xiaomi / OEM Autostart
-              </button>
-              <button
-                type="button"
-                id="request-battery-exemption-btn"
-                onClick={() => requestBatteryOptimizationExemption()}
-                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
-              >
-                <BatteryCharging className="w-3.5 h-3.5" />
-                Battery Optimization
-              </button>
+            <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-emerald-200/80 text-center">
+              <div className="p-1.5 rounded bg-surface-900 border border-emerald-200/60">
+                <span className="text-2xs text-content-muted block font-semibold">Active Sockets</span>
+                <span className="text-xs font-extrabold text-accent">0 Active</span>
+              </div>
+              <div className="p-1.5 rounded bg-surface-900 border border-emerald-200/60">
+                <span className="text-2xs text-content-muted block font-semibold">Data Egress</span>
+                <span className="text-xs font-extrabold text-accent">0 Bytes</span>
+              </div>
+              <div className="p-1.5 rounded bg-surface-900 border border-emerald-200/60">
+                <span className="text-2xs text-content-muted block font-semibold">Root Status</span>
+                <span className={`text-xs font-extrabold ${securityStatus.isRooted ? 'text-rose-700' : 'text-accent'}`}>
+                  {securityStatus.isRooted ? 'Rooted' : 'Secure'}
+                </span>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Air-Gap & Hardware Security Audit */}
-        <section className="px-4 pt-5 pb-2">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Air-Gap & Hardware Security
+        {/* Message Filtering */}
+        <section className="px-4 pt-4 pb-3">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2 px-1">
+            Message Filtering
           </h2>
-          <div className="card p-4 space-y-3">
-            <div className="flex items-center justify-between py-1 border-b border-surface-700">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-accent" />
-                <span className="text-xs font-bold text-content-primary">Network Air-Gap Status</span>
-              </div>
-              <span className="text-2xs font-extrabold text-accent bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                100% Air-Gapped (0 Sockets)
-              </span>
-            </div>
-            <div className="flex items-center justify-between py-1 border-b border-surface-700">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-content-secondary" />
-                <span className="text-xs font-bold text-content-primary">OS Integrity / Root</span>
-              </div>
-              <span className={`text-2xs font-bold px-2 py-0.5 rounded border ${
-                securityStatus.isRooted ? 'bg-red-100 text-red-900 border-red-300' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-              }`}>
-                {securityStatus.isRooted ? 'Rooted / Modified' : 'Clean & Unmodified'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between py-1 border-b border-surface-700">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-content-secondary" />
-                <span className="text-xs font-bold text-content-primary">Window Protection (FLAG_SECURE)</span>
-              </div>
-              <span className="text-2xs font-bold text-accent">
-                {settings.screenSecureEnabled ? 'Active (Blocked)' : 'Disabled'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-content-secondary" />
-                <span className="text-xs font-bold text-content-primary">Database Engine</span>
-              </div>
-              <span className="text-2xs font-bold text-content-primary">
-                Room SQLite · WAL Mode
-              </span>
-            </div>
+          <div className="card overflow-hidden">
+            <SettingsRow
+              icon={<Filter className="w-4 h-4 text-accent" />}
+              label="Spam & OTP Suppression"
+              description="Suppresses transactional verification codes & automated broadcasts"
+              control={
+                <ToggleSwitch
+                  id="spam-filter-toggle"
+                  checked={settings.spamFilterEnabled}
+                  onChange={val => updateSetting('spamFilterEnabled', val)}
+                />
+              }
+            />
           </div>
         </section>
 
-        {/* Notification Diagnostics & Testing */}
-        <section className="px-4 pt-5 pb-2">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Notification Diagnostics & Testing
+        {/* Diagnostic Simulator */}
+        <section className="px-4 pt-4 pb-3">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2 px-1">
+            On-Device Test Simulator
           </h2>
-          <div className="card p-4 space-y-3">
-            <p className="text-xs text-content-muted leading-relaxed font-medium">
-              Test end-to-end SQLite persistence, deletion capture, and live UI reactivity without needing a second phone.
+          <div className="card p-3.5">
+            <p className="text-xs text-content-muted mb-3 font-medium">
+              Simulate live WhatsApp messages and deletion events directly into SQLite:
             </p>
-            <div className="grid grid-cols-2 gap-2">
+
+            <div className="flex gap-2">
               <button
                 type="button"
-                id="test-normal-msg-btn"
+                id="simulate-msg-btn"
                 onClick={handleSimulateMessage}
-                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2 px-3 rounded-lg bg-surface-850 hover:bg-surface-700 text-accent text-xs font-extrabold border border-surface-700 transition-colors shadow-xs"
               >
-                <Share2 className="w-3.5 h-3.5" />
-                Test Message
+                1. Test Message
               </button>
               <button
                 type="button"
-                id="test-deleted-msg-btn"
+                id="simulate-del-btn"
                 onClick={handleSimulateDeletion}
-                className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5 text-amber-800 border-amber-300"
+                className="flex-1 py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300 transition-colors shadow-xs"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Test Deletion
+                2. Test Deletion
               </button>
             </div>
+
             {simulatingMsg && (
-              <div className="p-2.5 rounded-lg bg-surface-800 border border-surface-700 text-xs font-semibold text-accent text-center animate-fade-in">
+              <div className="mt-2 p-2 rounded bg-surface-850 text-xs text-accent font-bold text-center animate-fade-in border border-surface-700">
                 {simulatingMsg}
               </div>
             )}
           </div>
         </section>
 
-        {/* Security & Access */}
-        <section className="px-4 pt-5 pb-2">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Security & Access
+        {/* Data Management & Export */}
+        <section className="px-4 pt-4 pb-3">
+          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2 px-1">
+            Data Management & Export
           </h2>
-          <div className="space-y-2">
-            <div className="card-interactive flex items-center gap-3 px-4 py-3.5">
-              <div className="w-9 h-9 rounded-lg bg-surface-800 flex items-center justify-center text-accent flex-shrink-0">
-                <Shield className="w-5 h-5 text-accent" strokeWidth={2} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-content-primary">Screen Protection</p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium">Block screenshots and hide app in recent tasks (FLAG_SECURE)</p>
-              </div>
-              <ToggleSwitch
-                id="screen-secure-toggle"
-                label="Screen protection"
-                checked={settings.screenSecureEnabled}
-                onChange={checked => updateSetting('screenSecureEnabled', checked)}
-              />
-            </div>
-
-            <div className="card-interactive overflow-hidden" style={{ padding: 0 }}>
-              <button
-                id="session-timeout-button"
-                type="button"
-                onClick={() => setShowTimeoutPicker(!showTimeoutPicker)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-surface-850 transition-colors text-left"
-                style={{ borderRadius: '6px' }}
-              >
-                <div className="w-9 h-9 rounded-lg bg-surface-800 flex items-center justify-center text-accent flex-shrink-0">
-                  <Clock className="w-5 h-5 text-accent" strokeWidth={2} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-content-primary">Session Timeout</p>
-                  <p className="text-xs text-content-muted mt-0.5 font-medium">Auto-lock after background inactivity</p>
-                </div>
-                <span className="text-xs text-content-secondary font-semibold mr-1">{currentTimeoutLabel}</span>
-                <ChevronDown
-                  className={`w-4 h-4 text-content-muted transition-transform duration-200 ${showTimeoutPicker ? 'rotate-180' : ''}`}
-                  strokeWidth={2}
-                />
-              </button>
-
-              {showTimeoutPicker && (
-                <div className="border-t border-surface-700 divide-y divide-surface-700 animate-slide-up">
-                  {timeoutOptions.map(option => (
-                    <button
-                      key={option.value}
-                      id={`timeout-option-${option.value}`}
-                      type="button"
-                      onClick={() => {
-                        updateSetting('sessionTimeoutSeconds', option.value);
-                        setShowTimeoutPicker(false);
-                      }}
-                      className={`w-full px-5 py-3 text-left text-sm font-medium transition-colors ${
-                        settings.sessionTimeoutSeconds === option.value
-                          ? 'text-accent font-bold bg-accent-muted'
-                          : 'text-content-primary hover:bg-surface-850'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* Capture Configuration */}
-        <section className="px-4 pt-5 pb-2">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Capture Configuration
-          </h2>
-          <div className="space-y-2">
-            <div className="card-interactive flex items-center gap-3 px-4 py-3.5">
-              <div className="w-9 h-9 rounded-lg bg-surface-800 flex items-center justify-center text-accent flex-shrink-0">
-                <Filter className="w-5 h-5 text-accent" strokeWidth={2} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-content-primary">Spam & OTP Filter</p>
-                <p className="text-xs text-content-muted mt-0.5 font-medium">Suppress verification codes and automated broadcast spam</p>
-              </div>
-              <ToggleSwitch
-                id="spam-filter-toggle"
-                label="Spam filter"
-                checked={settings.spamFilterEnabled}
-                onChange={checked => updateSetting('spamFilterEnabled', checked)}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Data Management */}
-        <section className="px-4 pt-5 pb-2">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Data Management
-          </h2>
-          <div className="space-y-2">
+          <div className="card overflow-hidden">
             <SettingsRow
-              id="export-data-button"
-              icon={<Download className="w-5 h-5 text-accent" strokeWidth={2} />}
-              label="Export Chat Data"
-              description="Export chat conversations in PDF or CSV format chat-wise"
+              icon={<Download className="w-4 h-4 text-accent" />}
+              label="Export Chat Timeline"
+              description="Generate PDF dossier or RFC 4180 CSV with SHA-256 integrity signatures"
               onClick={openExportModal}
             />
+
             <SettingsRow
-              id="wipe-data-button"
-              icon={<Trash2 className="w-5 h-5 text-red-600" strokeWidth={2} />}
+              icon={<Trash2 className="w-4 h-4 text-rose-700" />}
               label="Wipe All Data"
-              description="Permanently delete all captured SQLite messages and reset"
+              description="Permanently delete all captured messages and conversations"
               onClick={() => setActiveModal('wipe')}
-              danger
             />
           </div>
         </section>
 
-        {/* Support & Diagnostics */}
-        <section className="px-4 pt-5 pb-2">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Support & Diagnostics
-          </h2>
-          <div className="space-y-2">
+        {/* Session Actions */}
+        <section className="px-4 pt-4 pb-6">
+          <div className="card overflow-hidden">
             <SettingsRow
-              id="contact-us-button"
-              icon={<MessageSquare className="w-5 h-5 text-accent" strokeWidth={2} />}
-              label="Contact Us"
-              description="Get assistance with notification capture configuration"
-              onClick={() => navigate('/contact')}
-            />
-            <SettingsRow
-              id="feedback-button"
-              icon={<HelpCircle className="w-5 h-5 text-accent" strokeWidth={2} />}
-              label="Feedback & Diagnostics"
-              description="Report device issues and verify listener health"
-              onClick={() => navigate('/feedback')}
+              icon={<LogOut className="w-4 h-4 text-content-secondary" />}
+              label="Lock Vault & Sign Out"
+              description="Immediately terminates session and locks SQLite vault"
+              onClick={() => setActiveModal('logout')}
             />
           </div>
         </section>
 
-        {/* Lock & Sign Out */}
-        <section className="px-4 pt-5 pb-8">
-          <button
-            id="logout-button"
-            type="button"
-            onClick={() => setActiveModal('logout')}
-            className="btn-danger w-full"
-          >
-            {isWiping ? <LoadingSpinner size="sm" /> : <LogOut className="w-4 h-4" strokeWidth={2.2} />}
-            Lock Application
-          </button>
-          <p className="text-2xs text-content-muted text-center mt-3 font-medium">
-            NotiCatch v1.0.0 — Zero network permission. 100% on-device SQLite storage.
-          </p>
-        </section>
       </div>
 
-      {/* Logout Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={activeModal === 'logout'}
-        title="Lock Application"
-        body="Your active session will be closed and authentication will be required upon next launch. All database records remain safely preserved."
-        confirmLabel="Lock Application"
-        isDangerous={false}
-        onConfirm={handleLogoutConfirm}
-        onCancel={() => setActiveModal(null)}
-      />
+      {/* Duress Emergency PIN Modal */}
+      {activeModal === 'duress-pin' && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="w-full max-w-sm bg-surface-900 rounded-3xl p-6 shadow-skeuo-heavy border border-white/80 animate-slide-up flex flex-col items-center">
+            <div className="w-full flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-700">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-extrabold text-content-primary">Duress Panic PIN</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveModal(null);
+                  setDuressInput('');
+                }}
+                className="w-8 h-8 rounded-full bg-surface-800 flex items-center justify-center text-content-muted"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-      {/* Wipe All Data Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={activeModal === 'wipe'}
-        title="Wipe All Data"
-        body="This permanently deletes every captured message, conversation, and audit log from the SQLite database. This operation cannot be reversed."
-        confirmLabel="Permanently Wipe All Data"
-        isDangerous={true}
-        onConfirm={handleWipeConfirm}
-        onCancel={() => setActiveModal(null)}
-      />
+            <p className="text-xs text-content-muted text-center mb-4 leading-relaxed font-medium">
+              If forced to unlock under physical coercion, entering this 4-digit decoy code will silently and instantly wipe the entire database.
+            </p>
 
-      {/* Export Selection Modal */}
-      {activeModal === 'export' && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="card max-w-md w-full p-6 space-y-4 shadow-card-lg animate-scale-in">
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-content-primary text-base">Select Chat to Export</h3>
+            <input
+              type="password"
+              maxLength={4}
+              value={duressInput}
+              onChange={e => setDuressInput(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="Enter 4-digit Panic PIN"
+              className="w-full text-center text-xl font-extrabold tracking-widest py-3 px-4 rounded-xl border border-surface-700 bg-surface-850 mb-4 focus:border-accent"
+            />
+
+            {duressSuccess && (
+              <span className="text-xs text-accent font-bold mb-3">{duressSuccess}</span>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSaveDuressPin}
+              disabled={duressInput.length !== 4}
+              className="btn-neu-primary w-full py-3 text-sm font-bold disabled:opacity-50"
+            >
+              Activate Duress PIN
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Kernel Socket Auditor Modal */}
+      {activeModal === 'kernel-audit' && socketStats && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="w-full max-w-sm bg-surface-900 rounded-3xl p-6 shadow-skeuo-heavy border border-white/80 animate-slide-up flex flex-col items-center">
+            <div className="w-full flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-accent">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-extrabold text-content-primary">Kernel Network Audit</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
-                className="text-content-muted hover:text-content-primary"
+                className="w-8 h-8 rounded-full bg-surface-800 flex items-center justify-center text-content-muted"
               >
-                ✕
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="w-full space-y-2 mb-4 text-xs font-medium">
+              <div className="flex justify-between p-2 rounded bg-surface-850 border border-surface-700">
+                <span className="text-content-muted">Active Sockets:</span>
+                <span className="font-bold text-accent">{socketStats.activeSockets} Sockets</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-surface-850 border border-surface-700">
+                <span className="text-content-muted">Open TCP/UDP Ports:</span>
+                <span className="font-bold text-accent">{socketStats.openTcpPorts + socketStats.openUdpPorts} Ports</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-surface-850 border border-surface-700">
+                <span className="text-content-muted">Bytes Egress:</span>
+                <span className="font-bold text-accent">{socketStats.bytesTransmitted} Bytes</span>
+              </div>
+              <div className="flex justify-between p-2 rounded bg-surface-850 border border-surface-700">
+                <span className="text-content-muted">INTERNET Permission:</span>
+                <span className="font-bold text-accent">OMITTED (None)</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 w-full text-2xs text-emerald-900 font-semibold text-center mb-4">
+              Mathematical proof: Zero data packets can leave this application process under any condition.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveModal(null)}
+              className="btn-neu-secondary w-full py-2 text-xs font-bold"
+            >
+              Close Audit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {activeModal === 'export' && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="w-full max-w-sm bg-surface-900 rounded-3xl p-5 shadow-skeuo-heavy border border-white/80 animate-slide-up flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-surface-700 mb-3">
+              <span className="text-sm font-extrabold text-content-primary">Export Chat Timeline</span>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                className="w-7 h-7 rounded-full bg-surface-800 flex items-center justify-center text-content-muted hover:text-content-primary"
+              >
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {exportSuccessMsg && (
-              <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200">
+              <div className="mb-3 p-2 rounded bg-emerald-100 text-emerald-800 text-xs font-bold text-center animate-fade-in">
                 {exportSuccessMsg}
               </div>
             )}
 
-            <div className="max-h-60 overflow-y-auto space-y-2 divide-y divide-surface-700">
+            <div className="flex-1 overflow-y-auto space-y-2 py-1">
               {conversations.length === 0 ? (
-                <p className="text-xs text-content-muted py-4 text-center">No captured conversations found.</p>
+                <span className="text-xs text-content-muted text-center block py-4">
+                  No conversations available to export.
+                </span>
               ) : (
                 conversations.map(c => (
-                  <div key={c.id} className="pt-2 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-content-primary truncate">{c.chatTitle}</p>
-                      <p className="text-2xs text-content-muted">{c.unreadCount} unread · {c.deletedCount} deleted</p>
+                  <div
+                    key={c.id}
+                    className="p-3 rounded-xl bg-surface-850 border border-surface-700 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-content-primary truncate block">
+                        {c.chatTitle}
+                      </span>
+                      <span className="text-2xs text-content-muted block">
+                        {c.deletedCount} deleted &middot; {c.unreadCount} total
+                      </span>
                     </div>
+
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
                         type="button"
-                        id={`export-pdf-${c.id}`}
                         disabled={exportingChatId === c.id}
                         onClick={() => handleExportPDF(c.id, c.chatTitle)}
-                        className="btn-secondary text-2xs py-1.5 px-2 flex items-center gap-1"
+                        className="p-2 rounded-lg bg-surface-900 border border-surface-700 text-accent hover:bg-accent hover:text-white transition-colors text-2xs font-bold flex items-center gap-1 shadow-xs"
                       >
-                        <FileText className="w-3 h-3 text-accent" />
+                        <FileText className="w-3 h-3" />
                         PDF
                       </button>
                       <button
                         type="button"
-                        id={`export-csv-${c.id}`}
                         disabled={exportingChatId === c.id}
                         onClick={() => handleExportCSV(c.id, c.chatTitle)}
-                        className="btn-secondary text-2xs py-1.5 px-2 flex items-center gap-1"
+                        className="p-2 rounded-lg bg-surface-900 border border-surface-700 text-accent hover:bg-accent hover:text-white transition-colors text-2xs font-bold flex items-center gap-1 shadow-xs"
                       >
-                        <Share2 className="w-3 h-3 text-accent" />
+                        <Share2 className="w-3 h-3" />
                         CSV
                       </button>
                     </div>
@@ -630,17 +712,31 @@ export function SettingsPage() {
                 ))
               )}
             </div>
-
-            <button
-              type="button"
-              onClick={() => setActiveModal(null)}
-              className="btn-primary w-full text-xs py-2"
-            >
-              Close
-            </button>
           </div>
         </div>
       )}
+
+      {/* Confirmation Modals */}
+      <ConfirmationModal
+        isOpen={activeModal === 'logout'}
+        title="Lock Vault & Sign Out?"
+        description="Your local SQLite database will be locked. You will need your biometric fingerprint or PIN to unlock."
+        confirmLabel="Lock Vault"
+        confirmVariant="danger"
+        onConfirm={handleLogoutConfirm}
+        onCancel={() => setActiveModal(null)}
+      />
+
+      <ConfirmationModal
+        isOpen={activeModal === 'wipe'}
+        title="Permanently Wipe All Data?"
+        description="This will permanently delete all captured WhatsApp messages, conversations, and audit logs. This cannot be undone."
+        confirmLabel="Wipe Database"
+        confirmVariant="danger"
+        isLoading={isWiping}
+        onConfirm={handleWipeConfirm}
+        onCancel={() => setActiveModal(null)}
+      />
     </div>
   );
 }

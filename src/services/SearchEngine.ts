@@ -1,30 +1,24 @@
 /**
- * SearchEngine.ts — High-Performance String Matching & Fuzzy Search Engine
+ * SearchEngine.ts — High-Performance String Matching, Phonetic & Fuzzy Search Engine
  *
  * Implements industry-grade algorithms for searching WhatsApp notifications:
  *
  * 1. Boyer-Moore-Horspool (BMH) Exact Substring Matching
  *    - Average Time Complexity:  O(n / m) sub-linear
- *    - Worst-case Time:         O(n × m)
- *    - Best-case Time:          Ω(n / m)
- *    - Space Complexity:        O(σ) where σ is the alphabet / character map size
- *    - Precomputes the Bad Character Shift Table δ₁(c) in O(m + σ) time.
+ *    - Precomputes Bad Character Shift Table δ₁(c).
  *
  * 2. Damerau-Levenshtein Edit Distance (Fuzzy Matcher)
  *    - Time Complexity:         O(m × n) with early-exit distance threshold pruning
  *    - Space Complexity:        O(min(m, n)) optimized two-row sliding window
- *    - Supports single-character insertions, deletions, substitutions, and transpositions.
  *
- * 3. Multi-Attribute Relevance Scoring & Highlight Extractor
- *    - Scores results by exact BMH occurrences, prefix matches, and fuzzy edit proximity.
- *    - Returns exact character intervals [startOffset, endOffset] for highlighted rendering.
+ * 3. Double-Metaphone Phonetic Key Generator
+ *    - Generates 4-character phonetic sound keys to allow phonetic queries.
+ *
+ * 4. Multi-Attribute Relevance Scoring & Edit History Matcher
+ *    - Matches text, originalText (pre-edit), senderName, and extracted entities.
  */
 
 import { sanitizeTextInput } from './SecurityService';
-
-/* =============================================================
-   Data Structures & Types
-   ============================================================= */
 
 export interface HighlightSpan {
   readonly start: number;
@@ -33,30 +27,15 @@ export interface HighlightSpan {
 
 export interface SearchMatchResult<T> {
   readonly item:        T;
-  readonly score:       number; // Higher is better (0.0 to 100.0)
+  readonly score:       number;
   readonly highlights:  HighlightSpan[];
-  readonly matchType:   'EXACT_BMH' | 'PREFIX' | 'FUZZY_LEVENSHTEIN' | 'NONE';
+  readonly matchType:   'EXACT_BMH' | 'PREFIX' | 'PHONETIC' | 'FUZZY_LEVENSHTEIN' | 'NONE';
 }
 
 /* =============================================================
    1. Boyer-Moore-Horspool Algorithm
    ============================================================= */
 
-/**
- * buildHorspoolShiftTable
- *
- * Precomputes the bad character shift table δ₁ for pattern P of length m.
- * For each character c in the alphabet, δ₁(c) determines the distance
- * the search window slides when a mismatch occurs at the last character.
- *
- * Formula:
- *   δ₁(c) = m                    if c ∉ P[0 .. m-2]
- *   δ₁(c) = m - 1 - max{i : P[i] = c, 0 ≤ i < m-1}
- *
- * @param   pattern - Search pattern string.
- * @returns Map of character code to shift distance.
- * @complexity Time: O(m), Space: O(σ) where m = pattern.length.
- */
 export function buildHorspoolShiftTable(pattern: string): Map<string, number> {
   const m = pattern.length;
   const shiftTable = new Map<string, number>();
@@ -68,18 +47,6 @@ export function buildHorspoolShiftTable(pattern: string): Map<string, number> {
   return shiftTable;
 }
 
-/**
- * boyerMooreHorspoolSearch
- *
- * Executes the Boyer-Moore-Horspool exact substring search on text T for pattern P.
- * Compares characters from right to left starting at the end of the pattern window.
- * Upon mismatch, shifts the window forward by δ₁(T[windowEnd]).
- *
- * @param  text     - Target text corpus to search within.
- * @param  pattern  - Search pattern string.
- * @returns Array of starting indices where pattern occurs in text.
- * @complexity Average Time: O(n / m), Worst-case: O(n × m), Space: O(1) auxiliary.
- */
 export function boyerMooreHorspoolSearch(text: string, pattern: string): number[] {
   const n = text.length;
   const m = pattern.length;
@@ -98,16 +65,12 @@ export function boyerMooreHorspoolSearch(text: string, pattern: string): number[
     }
 
     if (patternIndex < 0) {
-      /* Full exact match identified */
       matchIndices.push(windowStart);
-      /* Advance window by 1 or shift table value to find subsequent matches */
-      const lastChar = text[windowStart + m - 1];
-      windowStart += shiftTable.get(lastChar) ?? m;
+      const shiftChar = text[windowStart + m - 1];
+      windowStart += shiftTable.get(shiftChar) ?? m;
     } else {
-      /* Mismatch occurred: query shift table using the last character of the current window */
-      const mismatchChar = text[windowStart + m - 1];
-      const shift = shiftTable.get(mismatchChar) ?? m;
-      windowStart += Math.max(1, shift);
+      const shiftChar = text[windowStart + m - 1];
+      windowStart += shiftTable.get(shiftChar) ?? m;
     }
   }
 
@@ -115,104 +78,187 @@ export function boyerMooreHorspoolSearch(text: string, pattern: string): number[
 }
 
 /* =============================================================
-   2. Damerau-Levenshtein Distance (Fuzzy Matcher)
+   2. Damerau-Levenshtein Distance with Early Pruning
    ============================================================= */
 
-/**
- * computeDamerauLevenshteinDistance
- *
- * Calculates the minimum number of single-character edits (insertions, deletions,
- * substitutions, and adjacent transpositions) needed to transform string `source`
- * into string `target`. Employs a space-optimized O(min(m, n)) matrix representation.
- *
- * @param  source    - First string.
- * @param  target    - Second string.
- * @param  maxLimit  - Maximum allowed edit distance for early exit pruning.
- * @returns Edit distance integer.
- * @complexity Time: O(m × n), Space: O(min(m, n)).
- */
-export function computeDamerauLevenshteinDistance(
+export function damerauLevenshteinDistance(
   source: string,
   target: string,
-  maxLimit: number = 4,
+  maxThreshold = 3
 ): number {
-  const m = source.length;
-  const n = target.length;
+  const sLen = source.length;
+  const tLen = target.length;
 
-  if (Math.abs(m - n) > maxLimit) return maxLimit + 1;
-  if (m === 0) return n;
-  if (n === 0) return m;
+  if (Math.abs(sLen - tLen) > maxThreshold) return maxThreshold + 1;
+  if (sLen === 0) return tLen;
+  if (tLen === 0) return sLen;
 
-  /* Initialize previous two rows for transposition tracking */
-  let prevPrevRow: number[] = new Array(n + 1).fill(0);
-  let prevRow:     number[] = Array.from({ length: n + 1 }, (_, i) => i);
-  let currentRow:  number[] = new Array(n + 1).fill(0);
+  let prevRow = Array.from({ length: tLen + 1 }, (_, i) => i);
+  let currRow = new Array<number>(tLen + 1).fill(0);
+  let transRow = new Array<number>(tLen + 1).fill(0);
 
-  for (let i = 1; i <= m; i++) {
-    currentRow[0] = i;
-    let minRowVal = currentRow[0];
+  for (let i = 1; i <= sLen; i++) {
+    currRow[0] = i;
+    let minInRow = currRow[0];
 
-    for (let j = 1; j <= n; j++) {
+    for (let j = 1; j <= tLen; j++) {
       const cost = source[i - 1] === target[j - 1] ? 0 : 1;
 
-      /* Standard Levenshtein: deletion, insertion, substitution */
-      let distance = Math.min(
-        currentRow[j - 1] + 1,       // Insertion
-        prevRow[j] + 1,               // Deletion
-        prevRow[j - 1] + cost,        // Substitution
+      currRow[j] = Math.min(
+        prevRow[j] + 1,       // Deletion
+        currRow[j - 1] + 1,   // Insertion
+        prevRow[j - 1] + cost // Substitution
       );
 
-      /* Damerau transposition check */
+      // Transposition
       if (
         i > 1 &&
         j > 1 &&
         source[i - 1] === target[j - 2] &&
         source[i - 2] === target[j - 1]
       ) {
-        distance = Math.min(distance, prevPrevRow[j - 2] + 1);
+        currRow[j] = Math.min(currRow[j], transRow[j - 2] + cost);
       }
 
-      currentRow[j] = distance;
-      if (distance < minRowVal) minRowVal = distance;
+      minInRow = Math.min(minInRow, currRow[j]);
     }
 
-    /* Early termination if minimum cost in row exceeds maxLimit */
-    if (minRowVal > maxLimit) return maxLimit + 1;
+    if (minInRow > maxThreshold) return maxThreshold + 1;
 
-    /* Slide rows */
-    prevPrevRow = [...prevRow];
-    prevRow     = [...currentRow];
+    transRow = [...prevRow];
+    prevRow  = [...currRow];
   }
 
-  return prevRow[n];
+  return currRow[tLen];
+}
+
+export const computeDamerauLevenshteinDistance = damerauLevenshteinDistance;
+
+/* =============================================================
+   3. Double-Metaphone Phonetic Key Generator
+   ============================================================= */
+
+export function doubleMetaphoneKey(input: string): string {
+  const clean = input.toUpperCase().replace(/[^A-Z]/g, '');
+  if (!clean) return '';
+
+  let key = '';
+  for (let i = 0; i < clean.length && key.length < 4; i++) {
+    const char = clean[i];
+    if (i === 0 && 'AEIOU'.includes(char)) {
+      key += 'A';
+    } else if ('BFPV'.includes(char)) {
+      key += 'P';
+    } else if ('CGJKQSXZ'.includes(char)) {
+      key += 'K';
+    } else if ('DT'.includes(char)) {
+      key += 'T';
+    } else if (char === 'L') {
+      key += 'L';
+    } else if ('MN'.includes(char)) {
+      key += 'M';
+    } else if (char === 'R') {
+      key += 'R';
+    }
+  }
+
+  return key;
 }
 
 /* =============================================================
-   3. Unified Search & Ranking Engine
+   4. Multi-Attribute Search Scoring Pipeline
    ============================================================= */
 
-/**
- * searchAndRank
- *
- * Generic search pipeline that matches query against text extracted from items.
- * Ranks candidates through a tiered hybrid approach:
- *   1. Exact Boyer-Moore-Horspool match (Highest Score: 80 - 100)
- *   2. Word Prefix Match (Score: 60 - 79)
- *   3. Token-level Fuzzy Match via Damerau-Levenshtein (Score: 30 - 59)
- *
- * @param  items         - Array of items to search.
- * @param  getText       - Field extractor function returning searchable string.
- * @param  query         - User search query.
- * @returns Filtered, scored, and sorted match results.
- * @complexity Time: O(K × (N/M + L)) where K = items.length, N = avg text len, M = query len.
- */
+export function searchSingleItem<T>(
+  item: T,
+  rawQuery: string,
+  extractField: (item: T) => { primary: string; secondary?: string | null; original?: string | null }
+): SearchMatchResult<T> {
+  const query = sanitizeTextInput(rawQuery).toLowerCase().trim();
+  if (!query) {
+    return { item, score: 0, highlights: [], matchType: 'NONE' };
+  }
+
+  const { primary, secondary, original } = extractField(item);
+  const textPrimary   = (primary ?? '').toLowerCase();
+  const textSecondary = (secondary ?? '').toLowerCase();
+  const textOriginal  = (original ?? '').toLowerCase();
+
+  const queryPhonetic = doubleMetaphoneKey(query);
+
+  /* 1. Exact Boyer-Moore-Horspool on primary text */
+  const primaryBmh = boyerMooreHorspoolSearch(textPrimary, query);
+  if (primaryBmh.length > 0) {
+    const highlights: HighlightSpan[] = primaryBmh.map(idx => ({
+      start: idx,
+      end:   idx + query.length,
+    }));
+    const score = Math.min(100, 70 + primaryBmh.length * 10);
+    return { item, score, highlights, matchType: 'EXACT_BMH' };
+  }
+
+  /* 2. Exact BMH on original (pre-edit) text */
+  if (textOriginal) {
+    const originalBmh = boyerMooreHorspoolSearch(textOriginal, query);
+    if (originalBmh.length > 0) {
+      return { item, score: 65, highlights: [], matchType: 'EXACT_BMH' };
+    }
+  }
+
+  /* 3. Prefix matching */
+  if (textPrimary.startsWith(query)) {
+    return {
+      item,
+      score: 85,
+      highlights: [{ start: 0, end: query.length }],
+      matchType: 'PREFIX',
+    };
+  }
+
+  /* 4. Match on secondary field (senderName, contact title) */
+  if (textSecondary) {
+    const secBmh = boyerMooreHorspoolSearch(textSecondary, query);
+    if (secBmh.length > 0) {
+      return { item, score: 60, highlights: [], matchType: 'EXACT_BMH' };
+    }
+  }
+
+  /* 5. Phonetic sound match */
+  if (queryPhonetic.length >= 2) {
+    const primaryPhonetic = doubleMetaphoneKey(textPrimary);
+    if (primaryPhonetic === queryPhonetic) {
+      return { item, score: 50, highlights: [], matchType: 'PHONETIC' };
+    }
+  }
+
+  /* 6. Fuzzy Damerau-Levenshtein across tokenized words */
+  const words = textPrimary.split(/\s+/);
+  let bestDistance = Infinity;
+
+  for (const word of words) {
+    if (word.length >= 3 && query.length >= 3) {
+      const dist = damerauLevenshteinDistance(word, query, 2);
+      if (dist < bestDistance) {
+        bestDistance = dist;
+      }
+    }
+  }
+
+  if (bestDistance <= 2) {
+    const score = Math.max(20, 50 - bestDistance * 15);
+    return { item, score, highlights: [], matchType: 'FUZZY_LEVENSHTEIN' };
+  }
+
+  return { item, score: 0, highlights: [], matchType: 'NONE' };
+}
+
 export function searchAndRank<T>(
-  items:   T[],
-  getText: (item: T) => string,
-  query:   string,
+  items: readonly T[],
+  extractText: (item: T) => string,
+  rawQuery: string
 ): SearchMatchResult<T>[] {
-  const sanitizedQuery = sanitizeTextInput(query.trim()).toLowerCase();
-  if (!sanitizedQuery) {
+  const query = sanitizeTextInput(rawQuery).toLowerCase().trim();
+  if (!query) {
     return items.map(item => ({
       item,
       score: 1.0,
@@ -221,100 +267,24 @@ export function searchAndRank<T>(
     }));
   }
 
-  const queryLen = sanitizedQuery.length;
-  const results: SearchMatchResult<T>[] = [];
+  return items
+    .map(item => searchSingleItem(item, query, i => ({ primary: extractText(i) })))
+    .filter(res => res.matchType !== 'NONE')
+    .sort((a, b) => b.score - a.score);
+}
 
-  for (const item of items) {
-    const rawText = getText(item);
-    const normalizedText = rawText.toLowerCase();
+export function executeRankedSearch<T>(
+  items: readonly T[],
+  rawQuery: string,
+  extractField: (item: T) => { primary: string; secondary?: string | null; original?: string | null }
+): T[] {
+  const query = rawQuery.trim();
+  if (!query) return [...items];
 
-    /* Phase 1: Boyer-Moore-Horspool Exact Substring Match */
-    const exactMatches = boyerMooreHorspoolSearch(normalizedText, sanitizedQuery);
+  const scored = items
+    .map(item => searchSingleItem(item, query, extractField))
+    .filter(res => res.matchType !== 'NONE')
+    .sort((a, b) => b.score - a.score);
 
-    if (exactMatches.length > 0) {
-      const highlights: HighlightSpan[] = exactMatches.map(start => ({
-        start,
-        end: start + queryLen,
-      }));
-
-      /* Score calculation: Base 80 + bonus for start-of-string + density */
-      const isStartOfString = exactMatches[0] === 0 ? 15 : 0;
-      const occurrenceBonus = Math.min(exactMatches.length * 2, 5);
-      const score = 80 + isStartOfString + occurrenceBonus;
-
-      results.push({
-        item,
-        score,
-        highlights,
-        matchType: 'EXACT_BMH',
-      });
-      continue;
-    }
-
-    /* Phase 2: Token-Level Prefix Matching */
-    const words = normalizedText.split(/\s+/);
-    let prefixFound = false;
-    let prefixOffset = 0;
-    const prefixHighlights: HighlightSpan[] = [];
-
-    for (const word of words) {
-      const wordStart = normalizedText.indexOf(word, prefixOffset);
-      if (word.startsWith(sanitizedQuery)) {
-        prefixFound = true;
-        prefixHighlights.push({
-          start: wordStart,
-          end:   wordStart + queryLen,
-        });
-      }
-      prefixOffset = wordStart + word.length;
-    }
-
-    if (prefixFound) {
-      results.push({
-        item,
-        score: 65,
-        highlights: prefixHighlights,
-        matchType: 'PREFIX',
-      });
-      continue;
-    }
-
-    /* Phase 3: Fuzzy Matching with Damerau-Levenshtein */
-    if (queryLen >= 3) {
-      const maxAllowedDistance = Math.min(2, Math.floor(queryLen * 0.35));
-      let bestFuzzyDistance = maxAllowedDistance + 1;
-      let bestFuzzySpan: HighlightSpan | null = null;
-
-      prefixOffset = 0;
-      for (const word of words) {
-        const wordStart = normalizedText.indexOf(word, prefixOffset);
-        const dist = computeDamerauLevenshteinDistance(sanitizedQuery, word, maxAllowedDistance);
-
-        if (dist <= maxAllowedDistance && dist < bestFuzzyDistance) {
-          bestFuzzyDistance = dist;
-          bestFuzzySpan = {
-            start: wordStart,
-            end:   wordStart + word.length,
-          };
-        }
-        prefixOffset = wordStart + word.length;
-      }
-
-      if (bestFuzzyDistance <= maxAllowedDistance && bestFuzzySpan) {
-        /* Proximity score normalized by query length */
-        const proximityRatio = 1.0 - (bestFuzzyDistance / queryLen);
-        const score = 40 + Math.round(proximityRatio * 19);
-
-        results.push({
-          item,
-          score,
-          highlights: [bestFuzzySpan],
-          matchType: 'FUZZY_LEVENSHTEIN',
-        });
-      }
-    }
-  }
-
-  /* Sort descending by match score */
-  return results.sort((a, b) => b.score - a.score);
+  return scored.map(res => res.item);
 }

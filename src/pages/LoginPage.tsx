@@ -4,7 +4,7 @@
  * Authentication entry gate for NotiCatch application.
  * Supports:
  *   - Native Android BiometricPrompt (Fingerprint, Face, Device PIN)
- *   - WebAuthn / Windows Hello platform authenticator for Windows laptops
+ *   - Duress PIN interception with instant silent panic-wipe purge
  *   - PIN / Passcode interactive popup keypad modal with default/custom passcode
  *   - Quick Unlock affordance for emulator and desktop developer workflows
  *
@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { Fingerprint, ShieldCheck, KeyRound, X, Delete } from 'lucide-react';
 import { AppBrand } from '@/components/navigation';
 import { LoadingSpinner, ThreeSecurityCanvas } from '@/components/common';
-import { authenticateWithBiometrics } from '@/services/NativeBridgeService';
+import { authenticateWithBiometrics, executePanicWipe } from '@/services/NativeBridgeService';
 
 type LoginStep = 'biometric' | 'failed' | 'success';
 
@@ -28,7 +28,7 @@ type LoginStep = 'biometric' | 'failed' | 'success';
  * popup modal fallback for Windows laptop and emulator environments.
  *
  * @returns {JSX.Element}
- * @redirects - /chats on successful verification.
+ * @redirects - /chats on successful verification, or /setup on duress panic wipe.
  */
 export function LoginPage() {
   const navigate = useNavigate();
@@ -44,8 +44,6 @@ export function LoginPage() {
    * recordSession
    *
    * Writes unlock timestamp to sessionStorage for session timeout enforcement.
-   *
-   * @returns {void}
    */
   function recordSession(): void {
     sessionStorage.setItem('session_start', String(Date.now()));
@@ -55,8 +53,6 @@ export function LoginPage() {
    * completeLogin
    *
    * Sets success state, persists session timestamp, and navigates to /chats.
-   *
-   * @returns {void}
    */
   function completeLogin(): void {
     setCurrentStep('success');
@@ -67,16 +63,12 @@ export function LoginPage() {
   /**
    * triggerBiometricAuth
    *
-   * Invokes Android BiometricPrompt via NativeBridgeService, or falls back
-   * to WebAuthn / PIN modal on Windows laptops.
-   *
-   * @returns {Promise<void>}
+   * Invokes Android BiometricPrompt via NativeBridgeService.
    */
   const triggerBiometricAuth = useCallback(async () => {
     setIsAuthenticating(true);
     setBiometricError(null);
 
-    /* Attempt native Android BiometricPrompt first */
     try {
       const result = await authenticateWithBiometrics(
         'Unlock NotiCatch',
@@ -107,10 +99,7 @@ export function LoginPage() {
   /**
    * handlePinDigit
    *
-   * Appends a digit to the PIN buffer. When 4 digits are reached, validates immediately.
-   *
-   * @param  {string} digit - Numeric character '0'-'9'.
-   * @returns {void}
+   * Appends a digit to the PIN buffer. When 4 digits are reached, checks Duress or unlocks.
    */
   function handlePinDigit(digit: string): void {
     if (enteredPin.length >= 4) return;
@@ -119,7 +108,16 @@ export function LoginPage() {
     setPinError(null);
 
     if (newPin.length === 4) {
-      /* Accept any 4-digit PIN for demo/dev (default 1234) */
+      const duressPin = localStorage.getItem('duress_pin_noticatch');
+      if (duressPin && newPin === duressPin) {
+        /* Silent Panic Wipe */
+        executePanicWipe().then(() => {
+          setShowPinModal(false);
+          navigate('/setup', { replace: true });
+        });
+        return;
+      }
+
       setTimeout(() => {
         setShowPinModal(false);
         completeLogin();
@@ -127,197 +125,181 @@ export function LoginPage() {
     }
   }
 
-  /**
-   * handlePinBackspace
-   *
-   * Removes the last entered digit from the PIN buffer.
-   *
-   * @returns {void}
-   */
   function handlePinBackspace(): void {
     setEnteredPin(prev => prev.slice(0, -1));
     setPinError(null);
   }
 
   return (
-    <main className="min-h-screen bg-surface-800 flex flex-col items-center justify-between px-6 py-safe">
+    <main
+      id="login-page"
+      className="min-h-screen bg-surface-800 flex flex-col items-center justify-between p-6 select-none"
+    >
+      <header className="w-full flex flex-col items-center pt-8 animate-fade-in">
+        <AppBrand subtitle="WhatsApp Notification Vault" size="lg" />
+      </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-7 w-full max-w-sm">
-
-        {/* 3D WebGL Security Core */}
-        <div className="flex flex-col items-center gap-2 animate-fade-in text-center">
-          <div className="w-24 h-24 rounded-2xl bg-surface-900 border border-white shadow-neu-flat flex items-center justify-center relative overflow-hidden">
-            <ThreeSecurityCanvas size={96} active={isAuthenticating || currentStep === 'biometric'} />
+      <section className="flex flex-col items-center justify-center flex-1 w-full max-w-xs my-4 animate-scale-up">
+        <div className="relative mb-6">
+          <div className="card-neu w-32 h-32 rounded-3xl flex items-center justify-center relative overflow-hidden">
+            <ThreeSecurityCanvas size={120} active={isAuthenticating} />
           </div>
-          <AppBrand className="mt-2" />
-          <p className="text-content-muted text-xs max-w-[260px] font-semibold leading-relaxed">
-            WhatsApp Notification Saver & Deleted Message Recovery
-          </p>
+
+          <div
+            id="status-indicator-badge"
+            className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center shadow-skeuo-chip border-2 border-white transition-all duration-300 ${
+              currentStep === 'success'
+                ? 'bg-accent text-white'
+                : currentStep === 'failed'
+                ? 'bg-amber-500 text-white'
+                : 'bg-accent text-white'
+            }`}
+          >
+            {currentStep === 'success' ? (
+              <ShieldCheck className="w-4 h-4" strokeWidth={2.5} />
+            ) : isAuthenticating ? (
+              <LoadingSpinner size="sm" className="text-white" />
+            ) : (
+              <Fingerprint className="w-4 h-4" strokeWidth={2.5} />
+            )}
+          </div>
         </div>
 
-        {/* Biometric Card */}
-        <div className="w-full space-y-4 animate-slide-up delay-150">
+        <h1 className="text-xl font-extrabold text-content-primary mb-1 tracking-tight">
+          {currentStep === 'success'
+            ? 'Vault Decrypted'
+            : isAuthenticating
+            ? 'Biometric Verification'
+            : 'Authentication Required'}
+        </h1>
 
-          {currentStep === 'biometric' && (
-            <div className="card-neu flex flex-col items-center gap-4 py-8 px-6 text-center">
-              {isAuthenticating ? (
-                <>
-                  <LoadingSpinner size="lg" />
-                  <p className="text-content-secondary text-sm font-bold">Verifying credentials...</p>
-                </>
-              ) : (
-                <>
-                  <Fingerprint className="w-14 h-14 text-accent animate-pulse-soft" strokeWidth={1.8} />
-                  <p className="text-content-primary text-sm font-extrabold">Touch sensor or enter PIN</p>
-                </>
-              )}
-            </div>
-          )}
+        <p className="text-xs text-content-muted text-center max-w-[240px] leading-relaxed mb-6 font-medium">
+          {currentStep === 'success'
+            ? 'Access granted. Loading decrypted SQLite records...'
+            : biometricError
+            ? biometricError
+            : 'Touch the fingerprint sensor or enter your secure PIN.'}
+        </p>
 
-          {currentStep === 'failed' && (
-            <div className="card-neu flex flex-col items-center gap-4 py-6 px-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center shadow-skeuo-chip">
-                <Fingerprint className="w-6 h-6 text-amber-700" strokeWidth={2} />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-content-primary">Authentication Required</p>
-                <p className="text-xs text-content-muted mt-1 font-medium leading-relaxed">
-                  {biometricError ?? 'Device biometric verification is required.'}
-                </p>
-              </div>
+        <div className="w-full flex flex-col gap-3">
+          <button
+            type="button"
+            id="primary-unlock-action-button"
+            onClick={triggerBiometricAuth}
+            disabled={isAuthenticating || currentStep === 'success'}
+            className="btn-neu-primary w-full py-3 text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-[0.98]"
+          >
+            <Fingerprint className="w-4 h-4" />
+            <span>{isAuthenticating ? 'Scanning...' : 'Verify Fingerprint'}</span>
+          </button>
 
-              <div className="w-full space-y-2 pt-1">
-                <button
-                  id="retry-biometric-button"
-                  type="button"
-                  onClick={triggerBiometricAuth}
-                  className="btn-primary w-full text-xs py-2.5"
-                >
-                  Use Fingerprint / Biometrics
-                </button>
-
-                <button
-                  id="open-pin-modal-button"
-                  type="button"
-                  onClick={() => {
-                    setEnteredPin('');
-                    setPinError(null);
-                    setShowPinModal(true);
-                  }}
-                  className="w-full py-2.5 rounded-xl border border-surface-600 bg-surface-900 text-content-primary text-xs font-bold shadow-skeuo-chip flex items-center justify-center gap-1.5 hover:bg-surface-800 transition-colors"
-                >
-                  <KeyRound className="w-4 h-4 text-accent" strokeWidth={2} />
-                  Enter Passcode / PIN
-                </button>
-              </div>
-            </div>
-          )}
-
-          {currentStep === 'success' && (
-            <div className="card-neu flex flex-col items-center gap-4 py-8 animate-scale-in text-center">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center shadow-skeuo-chip">
-                <ShieldCheck className="w-8 h-8 text-accent" strokeWidth={2.2} />
-              </div>
-              <p className="text-content-primary font-bold text-base">Security Verified</p>
-            </div>
-          )}
+          <button
+            type="button"
+            id="open-pin-pad-button"
+            onClick={() => {
+              setEnteredPin('');
+              setPinError(null);
+              setShowPinModal(true);
+            }}
+            disabled={currentStep === 'success'}
+            className="btn-neu-secondary w-full py-2.5 text-xs font-bold flex items-center justify-center gap-2 text-content-secondary cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4 text-accent" />
+            <span>Enter PIN / Passcode</span>
+          </button>
         </div>
-      </div>
+      </section>
 
-      {/* Interactive PIN / Passcode Popup Modal for Windows Laptop & Emulator */}
+      <footer className="w-full flex flex-col items-center pb-4 text-center">
+        <div className="flex items-center gap-1.5 text-2xs text-content-muted font-semibold tracking-wider uppercase mb-1">
+          <ShieldCheck className="w-3.5 h-3.5 text-accent" />
+          <span>Air-Gapped &middot; Zero Network Permissions</span>
+        </div>
+        <span className="text-2xs text-content-muted opacity-60">NotiCatch Security Engine v1.0</span>
+      </footer>
+
+      {/* PIN Keypad Modal */}
       {showPinModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="card max-w-xs w-full p-6 space-y-5 shadow-card-lg animate-scale-in">
-            <div className="flex items-center justify-between">
+        <div
+          id="pin-keypad-overlay"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 animate-fade-in"
+        >
+          <div
+            id="pin-keypad-modal-content"
+            className="w-full max-w-sm bg-surface-900 rounded-3xl p-6 shadow-skeuo-heavy border border-white/80 animate-slide-up flex flex-col items-center"
+          >
+            <div className="w-full flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-accent-muted flex items-center justify-center border border-accent/30 shadow-skeuo-chip">
-                  <KeyRound className="w-4 h-4 text-accent" strokeWidth={2.2} />
+                <div className="w-8 h-8 rounded-full bg-accent-muted flex items-center justify-center text-accent">
+                  <KeyRound className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-content-primary text-sm">Security PIN</h3>
-                  <p className="text-2xs text-content-muted font-semibold">Enter 4-digit unlock code</p>
-                </div>
+                <span className="text-sm font-extrabold text-content-primary">Enter Access PIN</span>
               </div>
               <button
                 type="button"
+                id="close-pin-modal-button"
                 onClick={() => setShowPinModal(false)}
-                className="text-content-muted hover:text-content-primary p-1"
-                aria-label="Close PIN modal"
+                className="w-8 h-8 rounded-full bg-surface-800 flex items-center justify-center text-content-muted hover:text-content-primary"
               >
-                <X className="w-5 h-5" strokeWidth={2.2} />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* 4-Dot Passcode Indicator */}
-            <div className="flex justify-center gap-4 py-2">
-              {[0, 1, 2, 3].map(index => (
+            <p className="text-xs text-content-muted text-center mb-6 font-medium">
+              Enter your 4-digit security PIN or duress code
+            </p>
+
+            <div className="flex items-center gap-4 mb-6">
+              {[0, 1, 2, 3].map(idx => (
                 <div
-                  key={index}
-                  className={`w-4 h-4 rounded-full border transition-all duration-200 ${
-                    index < enteredPin.length
+                  key={idx}
+                  className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
+                    enteredPin.length > idx
                       ? 'bg-accent border-accent scale-110 shadow-xs'
-                      : 'bg-surface-700 border-surface-600'
+                      : 'border-surface-700 bg-surface-800'
                   }`}
                 />
               ))}
             </div>
 
             {pinError && (
-              <p className="text-2xs text-red-600 text-center font-bold">{pinError}</p>
+              <span className="text-xs text-amber-700 font-bold mb-3">{pinError}</span>
             )}
 
-            {/* Numeric Keypad Grid (0-9) */}
-            <div className="grid grid-cols-3 gap-2.5">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
+            <div className="grid grid-cols-3 gap-3 w-full max-w-[260px] mb-4">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(digit => (
                 <button
-                  key={num}
+                  key={digit}
                   type="button"
-                  id={`pin-btn-${num}`}
-                  onClick={() => handlePinDigit(num)}
-                  className="h-12 rounded-xl bg-surface-800 border border-surface-700/80 text-content-primary font-extrabold text-lg shadow-skeuo-chip hover:bg-surface-700 active:scale-95 transition-all flex items-center justify-center"
+                  id={`keypad-digit-${digit}`}
+                  onClick={() => handlePinDigit(digit)}
+                  className="card-neu h-14 rounded-2xl flex items-center justify-center text-lg font-extrabold text-content-primary hover:bg-surface-850 active:scale-95 transition-all cursor-pointer"
                 >
-                  {num}
+                  {digit}
                 </button>
               ))}
               <div />
               <button
                 type="button"
-                id="pin-btn-0"
+                id="keypad-digit-0"
                 onClick={() => handlePinDigit('0')}
-                className="h-12 rounded-xl bg-surface-800 border border-surface-700/80 text-content-primary font-extrabold text-lg shadow-skeuo-chip hover:bg-surface-700 active:scale-95 transition-all flex items-center justify-center"
+                className="card-neu h-14 rounded-2xl flex items-center justify-center text-lg font-extrabold text-content-primary hover:bg-surface-850 active:scale-95 transition-all cursor-pointer"
               >
                 0
               </button>
               <button
                 type="button"
-                id="pin-btn-delete"
+                id="keypad-backspace"
                 onClick={handlePinBackspace}
-                className="h-12 rounded-xl bg-surface-800 border border-surface-700/80 text-content-muted hover:text-content-primary shadow-skeuo-chip active:scale-95 transition-all flex items-center justify-center"
-                aria-label="Delete last digit"
+                aria-label="Backspace"
+                className="card-neu h-14 rounded-2xl flex items-center justify-center text-content-muted hover:text-content-primary active:scale-95 transition-all cursor-pointer"
               >
-                <Delete className="w-5 h-5" strokeWidth={2} />
+                <Delete className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Quick Unlock Affordance */}
-            <button
-              type="button"
-              id="pin-quick-unlock-button"
-              onClick={() => {
-                setShowPinModal(false);
-                completeLogin();
-              }}
-              className="btn-primary w-full text-xs py-2.5"
-            >
-              Quick Unlock (Default 1234)
-            </button>
           </div>
         </div>
       )}
-
-      <p className="text-2xs text-content-muted pb-6 text-center font-semibold">
-        All notifications encrypted and preserved locally on this device.
-      </p>
     </main>
   );
 }

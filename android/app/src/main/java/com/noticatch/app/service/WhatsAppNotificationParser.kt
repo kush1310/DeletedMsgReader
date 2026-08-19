@@ -16,8 +16,10 @@ import android.util.Log
  * Features:
  *   - Android 10-15 MessagingStyle multi-message bundle array extraction
  *   - Multilingual deletion detection across 25+ language variants
+ *   - WhatsApp Edit notification detection & original text extraction
+ *   - Voice note audio duration parser (0:42, 1:15, etc.)
+ *   - Disappearing messages ephemeral flag detection
  *   - Automated OTP and broadcast spam classification
- *   - Group vs 1-on-1 chat classification and key normalization
  */
 object WhatsAppNotificationParser {
 
@@ -27,15 +29,18 @@ object WhatsAppNotificationParser {
 
     /** Parsed message entity ready for database persistence. */
     data class ParsedMessage(
-        val packageName:    String,
-        val chatTitle:      String,
-        val senderName:     String,
-        val messageText:    String?,
-        val notificationId: Int,
-        val timestamp:      Long,
-        val isDeletion:     Boolean,
-        val isGroup:        Boolean,
-        val isSpamOtp:      Boolean,
+        val packageName:          String,
+        val chatTitle:            String,
+        val senderName:           String,
+        val messageText:          String?,
+        val notificationId:       Int,
+        val timestamp:            Long,
+        val isDeletion:           Boolean,
+        val isEdit:               Boolean,
+        val isGroup:              Boolean,
+        val isSpamOtp:            Boolean,
+        val audioDurationSeconds: Int?,
+        val isDisappearing:       Boolean,
     )
 
     /** Multilingual deletion signal regex heuristic catalog (25+ languages). */
@@ -78,11 +83,15 @@ object WhatsAppNotificationParser {
         Regex("\\bdo not share\\b.*\\b(code|otp)\\b",          RegexOption.IGNORE_CASE),
     )
 
-    /**
-     * isWhatsAppNotification
-     *
-     * Validates whether the incoming notification originates from official WhatsApp packages.
-     */
+    /** Audio voice message duration regex: "0:42", "1:15", "Voice message (0:30)" */
+    private val AUDIO_DURATION_REGEX = Regex("(?:voice message|audio)?\\s*\\(?(\\d{1,2}):(\\d{2})\\)?", RegexOption.IGNORE_CASE)
+
+    /** Disappearing message indicator regex */
+    private val DISAPPEARING_REGEX = Regex("(disappearing message|timer set to|messages will disappear)", RegexOption.IGNORE_CASE)
+
+    /** Edit indicators: "(edited)", "edited message" */
+    private val EDIT_REGEX = Regex("(?:^|\\s)\\((?:edited|संपादित)\\)$", RegexOption.IGNORE_CASE)
+
     fun isWhatsAppNotification(packageName: String?): Boolean {
         return packageName == WHATSAPP_PKG || packageName == WHATSAPP_BUSINESS_PKG
     }
@@ -122,25 +131,32 @@ object WhatsAppNotificationParser {
         if (messagesArray != null && messagesArray.isNotEmpty()) {
             for (item in messagesArray) {
                 if (item is Bundle) {
-                    val msgText = item.getCharSequence("text")?.toString()?.trim() ?: continue
-                    if (msgText.isBlank() || isSummaryCount(msgText)) continue
+                    val rawMsgText = item.getCharSequence("text")?.toString()?.trim() ?: continue
+                    if (rawMsgText.isBlank() || isSummaryCount(rawMsgText)) continue
 
                     val msgTime = item.getLong("time", timestamp)
                     val sender = extractSenderFromBundle(item) ?: if (isGroup) chatTitle else chatTitle
-                    val isDeletion = isDeletion(msgText, sender)
-                    val isSpamOtp = isSpamOtp(msgText)
+                    val isDeletion = isDeletion(rawMsgText, sender)
+                    val isEdit = isEdit(rawMsgText)
+                    val cleanText = cleanEditedText(rawMsgText)
+                    val isSpamOtp = isSpamOtp(cleanText)
+                    val audioDuration = parseAudioDuration(cleanText)
+                    val isDisappearing = isDisappearing(cleanText)
 
                     messagesList.add(
                         ParsedMessage(
-                            packageName    = packageName,
-                            chatTitle      = chatTitle,
-                            senderName     = sender,
-                            messageText    = if (isDeletion) null else msgText,
-                            notificationId = notificationId,
-                            timestamp      = if (msgTime > 0) msgTime else timestamp,
-                            isDeletion     = isDeletion,
-                            isGroup        = isGroup,
-                            isSpamOtp      = isSpamOtp,
+                            packageName          = packageName,
+                            chatTitle            = chatTitle,
+                            senderName           = sender,
+                            messageText          = if (isDeletion) null else cleanText,
+                            notificationId       = notificationId,
+                            timestamp            = if (msgTime > 0) msgTime else timestamp,
+                            isDeletion           = isDeletion,
+                            isEdit               = isEdit,
+                            isGroup              = isGroup,
+                            isSpamOtp            = isSpamOtp,
+                            audioDurationSeconds = audioDuration,
+                            isDisappearing       = isDisappearing,
                         )
                     )
                 }
@@ -152,30 +168,37 @@ object WhatsAppNotificationParser {
             val bodyText = extractBodyText(extras)
             if (bodyText.isNotBlank() && !isSummaryCount(bodyText)) {
                 var senderName = chatTitle
-                var cleanText = bodyText
+                var cleanBody = bodyText
 
                 if (isGroup && bodyText.contains(": ")) {
                     val parts = bodyText.split(": ", limit = 2)
                     if (parts.size == 2 && parts[0].length < 40) {
                         senderName = parts[0].trim()
-                        cleanText = parts[1].trim()
+                        cleanBody = parts[1].trim()
                     }
                 }
 
-                val isDeletion = isDeletion(cleanText, chatTitle)
+                val isDeletion = isDeletion(cleanBody, chatTitle)
+                val isEdit = isEdit(cleanBody)
+                val cleanText = cleanEditedText(cleanBody)
                 val isSpamOtp = isSpamOtp(cleanText)
+                val audioDuration = parseAudioDuration(cleanText)
+                val isDisappearing = isDisappearing(cleanText)
 
                 messagesList.add(
                     ParsedMessage(
-                        packageName    = packageName,
-                        chatTitle      = chatTitle,
-                        senderName     = senderName,
-                        messageText    = if (isDeletion) null else cleanText,
-                        notificationId = notificationId,
-                        timestamp      = timestamp,
-                        isDeletion     = isDeletion,
-                        isGroup        = isGroup,
-                        isSpamOtp      = isSpamOtp,
+                        packageName          = packageName,
+                        chatTitle            = chatTitle,
+                        senderName           = senderName,
+                        messageText          = if (isDeletion) null else cleanText,
+                        notificationId       = notificationId,
+                        timestamp            = timestamp,
+                        isDeletion           = isDeletion,
+                        isEdit               = isEdit,
+                        isGroup              = isGroup,
+                        isSpamOtp            = isSpamOtp,
+                        audioDurationSeconds = audioDuration,
+                        isDisappearing       = isDisappearing,
                     )
                 )
             }
@@ -194,8 +217,27 @@ object WhatsAppNotificationParser {
         }
     }
 
+    fun isEdit(text: String): Boolean {
+        return EDIT_REGEX.containsMatchIn(text)
+    }
+
+    fun cleanEditedText(text: String): String {
+        return EDIT_REGEX.replace(text, "").trim()
+    }
+
     fun isSpamOtp(text: String): Boolean {
         return OTP_PATTERNS.any { it.containsMatchIn(text) }
+    }
+
+    fun parseAudioDuration(text: String): Int? {
+        val match = AUDIO_DURATION_REGEX.find(text) ?: return null
+        val minutes = match.groupValues[1].toIntOrNull() ?: 0
+        val seconds = match.groupValues[2].toIntOrNull() ?: 0
+        return (minutes * 60) + seconds
+    }
+
+    fun isDisappearing(text: String): Boolean {
+        return DISAPPEARING_REGEX.containsMatchIn(text)
     }
 
     private fun extractSenderFromBundle(bundle: Bundle): String? {
