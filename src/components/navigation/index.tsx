@@ -65,7 +65,7 @@ export function AppBrand({ className = '', subtitle, size = 'md' }: { readonly c
             NotiCatch
           </span>
           <span className="text-2xs font-semibold text-accent bg-accent-muted px-2 py-0.5 rounded-full border border-accent/20">
-            Vault
+            v1.6.2
           </span>
         </div>
       </div>

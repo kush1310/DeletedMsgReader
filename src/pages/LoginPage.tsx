@@ -21,6 +21,8 @@ import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDocument } from '@/data/leg
 import { authenticateWithBiometrics, executePanicWipe } from '@/services/NativeBridgeService';
 import { hasAcceptedPrivacyPolicy } from '@/services/SecurityService';
 
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
 type LoginStep = 'biometric' | 'failed' | 'success';
 
 export function LoginPage() {
@@ -86,6 +88,7 @@ export function LoginPage() {
 
   function handlePinDigit(digit: string): void {
     if (enteredPin.length >= 4) return;
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
     const newPin = enteredPin + digit;
     setEnteredPin(newPin);
     setPinError(null);
@@ -108,6 +111,7 @@ export function LoginPage() {
   }
 
   function handlePinBackspace(): void {
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
     setEnteredPin(prev => prev.slice(0, -1));
     setPinError(null);
   }

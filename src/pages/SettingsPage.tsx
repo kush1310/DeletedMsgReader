@@ -437,6 +437,13 @@ export function SettingsPage() {
             />
 
             <SettingsRow
+              icon={<Shield className="w-4 h-4 text-accent" />}
+              label="Application Version"
+              description="NotiCatch Private Notification Vault"
+              value="v1.6.2"
+            />
+
+            <SettingsRow
               icon={<Trash2 className="w-4 h-4 text-rose-700" />}
               label="Wipe All Data"
               description="Permanently erase all captured messages and reset vault"
