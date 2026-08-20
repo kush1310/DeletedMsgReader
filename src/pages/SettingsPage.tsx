@@ -1,633 +1,517 @@
 /**
- * SettingsPage
+ * SettingsPage.tsx
  *
- * Configuration and system permission manager for NotiCatch.
- * Styled in Anthropic Claude warm editorial aesthetic.
- * All technical and algorithmic jargon removed for a clean, premium consumer experience.
+ * System Settings Hub for NotiCatch.
+ * Styled to precisely match Anthropic Claude's mobile Settings screen (Screenshots 1 & 3).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Shield,
+  Menu,
+  Info,
+  User,
+  CreditCard,
+  Sliders,
+  Cable,
+  Smartphone,
+  Moon,
+  Type,
+  Mic,
+  Vibrate,
+  Bell,
   Clock,
-  Filter,
-  Trash2,
-  Download,
-  LogOut,
-  ChevronDown,
-  FileText,
+  Shield,
   Share2,
-  CheckCircle2,
-  AlertTriangle,
-  Lock,
-  X,
-  KeyRound,
-  FileCheck2,
+  LogOut,
+  ChevronRight,
+  Download,
 } from 'lucide-react';
-import { TopAppBar } from '@/components/navigation';
-import { SettingsRow, ToggleSwitch, LoadingSpinner, ConfirmationModal, LegalDocumentModal } from '@/components/common';
-import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDocument } from '@/data/legalContent';
+import {
+  ToggleSwitch,
+  ConfirmationModal,
+  ColorModeModal,
+  FontStyleModal,
+  LegalDocumentModal,
+  type ColorMode,
+  type FontStyle,
+} from '@/components/common';
+import { SideNavigationDrawer } from '@/components/navigation';
 import {
   loadAppSettings,
-  persistAppSettings,
-  wipeAllDataNative,
+  saveAppSettings,
   exportChatAsPDFNative,
   exportChatAsCSVNative,
-  getConversations,
-  setSpamFilterNative,
-  setScreenSecureNative,
-  setSessionTimeoutNative,
-  checkNotificationListenerEnabled,
-  requestNotificationListenerPermission,
-  openAutostartSettingsNative,
-  requestBatteryExemptionNative,
-  isNativeAndroid,
+  executePanicWipe,
 } from '@/services/NativeBridgeService';
-import type { AppSettings, Conversation } from '@/types';
-
-const DEFAULT_SETTINGS: AppSettings = {
-  biometricEnabled:      true,
-  isPinSet:              true,
-  isDuressPinSet:        false,
-  sessionTimeoutSeconds: 300,
-  screenSecureEnabled:   true,
-  airGapModeActive:      true,
-  spamFilterEnabled:     true,
-  theme:                 'light',
-  lastIntegrityCheck:    null,
-  databaseVersion:       1,
-};
-
-type ModalType = 'logout' | 'wipe' | 'export' | 'duress-pin' | null;
+import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDocument } from '@/data/legalContent';
+import type { AppSettings } from '@/types';
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const isNative = isNativeAndroid();
 
-  const [settings,          setSettings]          = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [isLoading,         setIsLoading]         = useState(true);
-  const [showTimeoutPicker, setShowTimeoutPicker] = useState(false);
-  const [activeModal,       setActiveModal]       = useState<ModalType>(null);
-  const [activeLegalDoc,    setActiveLegalDoc]    = useState<LegalDocument | null>(null);
-  const [conversations,     setConversations]     = useState<Conversation[]>([]);
-  const [exportingChatId,   setExportingChatId]   = useState<string | null>(null);
-  const [exportSuccessMsg,  setExportSuccessMsg]  = useState<string | null>(null);
-  const [isWiping,          setIsWiping]          = useState(false);
-  const [notifAccessGranted, setNotifAccessGranted] = useState<boolean | null>(null);
-  const [duressInput,       setDuressInput]       = useState('');
-  const [duressSuccess,     setDuressSuccess]     = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings>({
+    biometricEnabled:      true,
+    isPinSet:              true,
+    isDuressPinSet:        false,
+    sessionTimeoutSeconds: 300,
+    screenSecureEnabled:   true,
+    airGapModeActive:      true,
+    spamFilterEnabled:     true,
+    theme:                 'light',
+    lastIntegrityCheck:    null,
+    databaseVersion:       1,
+    hapticsEnabled:        true,
+    colorMode:             'system',
+    fontStyle:             'default',
+  });
 
-  const checkPermissions = useCallback(async (): Promise<void> => {
-    if (!isNative) {
-      setNotifAccessGranted(true);
-      return;
-    }
-    const granted = await checkNotificationListenerEnabled();
-    setNotifAccessGranted(granted);
-  }, [isNative]);
-
-  useEffect(() => {
-    async function loadInitialSettings(): Promise<void> {
-      const loaded = await loadAppSettings();
-      setSettings(loaded);
-      await checkPermissions();
-      setIsLoading(false);
-    }
-    loadInitialSettings();
-  }, [checkPermissions]);
+  const [isDrawerOpen,        setIsDrawerOpen]        = useState(false);
+  const [showColorModal,      setShowColorModal]      = useState(false);
+  const [showFontModal,       setShowFontModal]       = useState(false);
+  const [showTimeModal,       setShowTimeModal]       = useState(false);
+  const [showExportModal,     setShowExportModal]     = useState(false);
+  const [showLogoutModal,     setShowLogoutModal]     = useState(false);
+  const [showWipeModal,       setShowWipeModal]       = useState(false);
+  const [activeLegalDoc,      setActiveLegalDoc]      = useState<LegalDocument | null>(null);
+  const [isProcessing,        setIsProcessing]        = useState(false);
+  const [hapticsActive,       setHapticsActive]       = useState(
+    () => localStorage.getItem('noticatch_haptics') !== 'false'
+  );
 
   useEffect(() => {
-    function handleFocus(): void {
-      checkPermissions();
-    }
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [checkPermissions]);
+    loadAppSettings().then(setSettings);
+  }, []);
 
   async function updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void> {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
-    await persistAppSettings(updated);
-
-    if (key === 'screenSecureEnabled') {
-      await setScreenSecureNative(Boolean(value));
-    } else if (key === 'spamFilterEnabled') {
-      await setSpamFilterNative(Boolean(value));
-    } else if (key === 'sessionTimeoutSeconds') {
-      await setSessionTimeoutNative(Number(value));
-    }
+    await saveAppSettings(updated);
   }
 
-  async function handleLogoutConfirm(): Promise<void> {
-    setActiveModal(null);
+  function handleToggleHaptics(val: boolean): void {
+    setHapticsActive(val);
+    localStorage.setItem('noticatch_haptics', String(val));
+    updateSetting('hapticsEnabled', val);
+  }
+
+  function handleLogout(): void {
     sessionStorage.removeItem('session_start');
+    sessionStorage.removeItem('session_last_active');
     navigate('/login', { replace: true });
   }
 
-  async function handleWipeConfirm(): Promise<void> {
-    setIsWiping(true);
-    await wipeAllDataNative();
-    sessionStorage.clear();
-    setIsWiping(false);
-    setActiveModal(null);
-    navigate('/login', { replace: true });
+  async function handlePermanentWipe(): Promise<void> {
+    setIsProcessing(true);
+    await executePanicWipe();
+    setIsProcessing(false);
+    setShowWipeModal(false);
+    navigate('/setup', { replace: true });
   }
 
-  async function openExportModal(): Promise<void> {
-    const data = await getConversations();
-    setConversations(data);
-    setActiveModal('export');
-  }
-
-  async function handleExportPDF(conversationId: string, chatTitle: string): Promise<void> {
-    setExportingChatId(conversationId);
-    const result = await exportChatAsPDFNative(conversationId, chatTitle);
-    setExportingChatId(null);
-    if (result.filePath) {
-      setExportSuccessMsg(`Exported ${result.rowCount} messages to PDF`);
-      setTimeout(() => setExportSuccessMsg(null), 3000);
-    }
-  }
-
-  async function handleExportCSV(conversationId: string, chatTitle: string): Promise<void> {
-    setExportingChatId(conversationId);
-    const result = await exportChatAsCSVNative(conversationId, chatTitle);
-    setExportingChatId(null);
-    if (result.filePath) {
-      setExportSuccessMsg(`Exported ${result.rowCount} messages to CSV`);
-      setTimeout(() => setExportSuccessMsg(null), 3000);
-    }
-  }
-
-  async function handleSaveDuressPin(): Promise<void> {
-    if (duressInput.length === 4) {
-      localStorage.setItem('duress_pin_noticatch', duressInput);
-      setDuressSuccess('Decoy Emergency PIN activated.');
-      setTimeout(() => {
-        setDuressSuccess(null);
-        setActiveModal(null);
-        setDuressInput('');
-      }, 1500);
-    }
-  }
-
-  const timeoutOptions = [
-    { label: '30 seconds', value: 30 },
-    { label: '1 minute',   value: 60 },
-    { label: '5 minutes',  value: 300 },
-    { label: '15 minutes', value: 900 },
-    { label: 'Never',      value: 0 },
-  ];
-
-  const currentTimeoutLabel = timeoutOptions.find(
-    o => o.value === settings.sessionTimeoutSeconds
-  )?.label ?? '5 minutes';
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-full bg-canvas">
-        <TopAppBar title="Settings" />
-        <div className="flex-1 flex items-center justify-center">
-          <LoadingSpinner size="lg" />
-        </div>
-      </div>
-    );
-  }
+  const timeoutLabels: Record<number, string> = {
+    60:   '1 minute',
+    300:  '5 minutes',
+    900:  '15 minutes',
+    1800: '30 minutes',
+    0:    'Never',
+  };
 
   return (
-    <div className="flex flex-col h-full bg-canvas pb-20">
-      <TopAppBar title="Settings" />
+    <div className="flex flex-col min-h-screen bg-[#FAF9F5] text-content-primary">
+      {/* Top App Bar matching Screenshot 1 & 3 */}
+      <header className="fixed top-0 left-0 right-0 z-30 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-[#E8E4D8] pt-safe">
+        <div className="flex items-center justify-between px-4 h-14">
+          <button
+            type="button"
+            id="settings-hamburger-button"
+            onClick={() => setIsDrawerOpen(true)}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-content-primary hover:bg-surface-850 transition-colors"
+          >
+            <Menu className="w-5 h-5" strokeWidth={2} />
+          </button>
+          <h1 className="font-serif text-lg font-bold text-content-primary tracking-tight">
+            Settings
+          </h1>
+          <button
+            type="button"
+            id="settings-info-button"
+            onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-content-primary hover:bg-surface-850 transition-colors"
+          >
+            <Info className="w-5 h-5" strokeWidth={2} />
+          </button>
+        </div>
+      </header>
 
-      <div className="flex-1 overflow-y-auto pt-14 divide-y divide-surface-700">
+      {/* Main Settings List */}
+      <main className="flex-1 pt-18 pb-24 px-4 max-w-lg mx-auto w-full space-y-3.5 animate-slide-up">
 
-        {/* Essential Setup Guide */}
-        <section className="px-4 pt-4 pb-3">
-          <div className="flex items-center justify-between mb-2.5 px-1">
-            <h2 className="text-2xs font-bold text-content-secondary uppercase tracking-widest">
-              Required Setup for Background Capture
-            </h2>
-            <span
-              className={`inline-flex items-center gap-1 text-2xs font-bold px-2 py-0.5 rounded-full ${
-                notifAccessGranted
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                  : 'bg-amber-50 text-amber-900 border border-amber-200'
-              }`}
-            >
-              {notifAccessGranted ? (
-                <>
-                  <CheckCircle2 className="w-2.5 h-2.5" />
-                  Active
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="w-2.5 h-2.5" />
-                  Setup Needed
-                </>
-              )}
-            </span>
-          </div>
+        {/* Card 1: Account Header Card */}
+        <div className="card bg-white rounded-3xl p-4 shadow-card border border-[#E8E4D8] flex items-center justify-between">
+          <span className="text-sm font-bold text-content-primary truncate">
+            kushshah900@gmail.com
+          </span>
+          <span className="px-2.5 py-0.5 rounded-full bg-black text-white text-xs font-bold shrink-0">
+            Free
+          </span>
+        </div>
 
-          <div className="card overflow-hidden divide-y divide-surface-700 shadow-card">
-            {/* Step 1 */}
-            <div className="p-3.5 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-accent-muted flex items-center justify-center text-accent shrink-0 font-bold text-xs">
-                1
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-content-primary">Notification Access</h3>
-                  <button
-                    type="button"
-                    onClick={requestNotificationListenerPermission}
-                    className="text-2xs font-bold text-accent hover:underline"
-                  >
-                    Open Settings →
-                  </button>
-                </div>
-                <p className="text-2xs text-content-muted mt-0.5 leading-relaxed">
-                  Allow NotiCatch to read incoming message notifications in Android Settings.
-                </p>
-              </div>
-            </div>
-
-            {/* Step 2 */}
-            <div className="p-3.5 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-surface-850 flex items-center justify-center text-accent shrink-0 font-bold text-xs border border-surface-700">
-                2
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-content-primary">Battery Saver Exemption</h3>
-                  <button
-                    type="button"
-                    onClick={requestBatteryExemptionNative}
-                    className="text-2xs font-bold text-accent hover:underline"
-                  >
-                    Set Unrestricted →
-                  </button>
-                </div>
-                <p className="text-2xs text-content-muted mt-0.5 leading-relaxed">
-                  Set battery optimization to &quot;No Restrictions&quot; so Android doesn&apos;t sleep the listener.
-                </p>
-              </div>
-            </div>
-
-            {/* Step 3 */}
-            {isNative && (
-              <div className="p-3.5 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-surface-850 flex items-center justify-center text-accent shrink-0 font-bold text-xs border border-surface-700">
-                  3
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-content-primary">Background Autostart</h3>
-                    <button
-                      type="button"
-                      onClick={openAutostartSettingsNative}
-                      className="text-2xs font-bold text-accent hover:underline"
-                    >
-                      Enable Autostart →
-                    </button>
-                  </div>
-                  <p className="text-2xs text-content-muted mt-0.5 leading-relaxed">
-                    Required on Xiaomi, Oppo, Vivo, OnePlus, and Huawei devices to capture messages after restarts.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Step 4 */}
-            <div className="p-3.5 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-surface-850 flex items-center justify-center text-accent shrink-0 font-bold text-xs border border-surface-700">
-                4
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-xs font-bold text-content-primary">Lock App in Recent Tasks</h3>
-                <p className="text-2xs text-content-muted mt-0.5 leading-relaxed">
-                  Open Android&apos;s Recent Apps switcher, swipe down on NotiCatch (or tap the padlock icon) so system task cleaners don&apos;t close it.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Security & Access */}
-        <section className="px-4 pt-4 pb-3">
-          <h2 className="text-2xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Security & Authentication
+        {/* Card 2: Upgrade Promo Banner Card */}
+        <div className="card bg-white rounded-3xl p-5 shadow-card border border-[#E8E4D8] space-y-2">
+          <h2 className="text-base font-bold text-content-primary">
+            Want more Claude?
           </h2>
-          <div className="card overflow-hidden shadow-card">
-            <SettingsRow
-              icon={<Shield className="w-4 h-4 text-accent" />}
-              label="Biometric / PIN Gate"
-              description="Requires device fingerprint or PIN to unlock your vault"
-              control={
-                <ToggleSwitch
-                  id="biometric-toggle"
-                  checked={settings.biometricEnabled}
-                  onChange={val => updateSetting('biometricEnabled', val)}
-                />
-              }
-            />
+          <p className="text-xs text-content-muted leading-relaxed font-medium pb-1">
+            Upgrade for more usage and capabilities.
+          </p>
+          <button
+            type="button"
+            id="upgrade-button"
+            onClick={() => setActiveLegalDoc(TERMS_OF_SERVICE)}
+            className="px-5 py-2 rounded-full bg-black text-white text-xs font-bold hover:bg-neutral-800 transition-colors shadow-xs"
+          >
+            Upgrade
+          </button>
+        </div>
 
-            <SettingsRow
-              icon={<KeyRound className="w-4 h-4 text-rose-700" />}
-              label="Decoy Emergency PIN"
-              description="Entering this decoy code silently wipes your data if coerced"
-              onClick={() => setActiveModal('duress-pin')}
-            />
+        {/* Card 3: Profile & Billing */}
+        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
+          <button
+            type="button"
+            id="settings-profile-row"
+            onClick={() => navigate('/settings/profile')}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <User className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Profile</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
 
-            <SettingsRow
-              icon={<Lock className="w-4 h-4 text-accent" />}
-              label="Screen Privacy Shield"
-              description="Hides content in the recent apps switcher and blocks screenshots"
-              control={
-                <ToggleSwitch
-                  id="screen-secure-toggle"
-                  checked={settings.screenSecureEnabled}
-                  onChange={val => updateSetting('screenSecureEnabled', val)}
-                />
-              }
-            />
+          <button
+            type="button"
+            id="settings-billing-row"
+            onClick={() => navigate('/settings/profile')}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <CreditCard className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Billing</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
+        </div>
 
-            <SettingsRow
-              icon={<Clock className="w-4 h-4 text-accent" />}
-              label="Auto-Lock Timeout"
-              description={`Locks the vault after ${currentTimeoutLabel} of inactivity`}
-              onClick={() => setShowTimeoutPicker(v => !v)}
-              control={
-                <span className="text-xs font-bold text-accent flex items-center gap-1">
-                  {currentTimeoutLabel}
-                  <ChevronDown className="w-3.5 h-3.5" />
+        {/* Card 4: Capabilities, Connectors, Permissions */}
+        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3.5">
+              <Sliders className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <div>
+                <span className="text-sm font-semibold text-content-primary block">Capabilities</span>
+                <span className="text-xs text-content-muted font-medium">4 enabled</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3.5">
+              <Cable className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Connectors</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="settings-permissions-row"
+            onClick={() => navigate('/settings/permissions')}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Smartphone className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Permissions</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
+        </div>
+
+        {/* Card 5: Color mode, Font style, Voice */}
+        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
+          <button
+            type="button"
+            id="settings-color-mode-row"
+            onClick={() => setShowColorModal(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Moon className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <div>
+                <span className="text-sm font-semibold text-content-primary block">Color mode</span>
+                <span className="text-xs text-content-muted capitalize font-medium">{settings.colorMode || 'System'}</span>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
+
+          <button
+            type="button"
+            id="settings-font-style-row"
+            onClick={() => setShowFontModal(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Type className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <div>
+                <span className="text-sm font-semibold text-content-primary block">Font style</span>
+                <span className="text-xs text-content-muted capitalize font-medium">{settings.fontStyle || 'Default'}</span>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
+
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3.5">
+              <Mic className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Voice</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 6: Haptic feedback, Notifications, Time & focus, Privacy, Sharing */}
+        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
+          {/* Haptic feedback */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3.5">
+              <Vibrate className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Haptic feedback</span>
+            </div>
+            <ToggleSwitch
+              id="toggle-haptics"
+              checked={hapticsActive}
+              onChange={handleToggleHaptics}
+            />
+          </div>
+
+          {/* Notifications */}
+          <button
+            type="button"
+            id="settings-notifications-row"
+            onClick={() => navigate('/settings/notifications')}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Bell className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Notifications</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
+
+          {/* Time & focus (Inactivity Auto-Lock) */}
+          <button
+            type="button"
+            id="settings-time-focus-row"
+            onClick={() => setShowTimeModal(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Clock className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <div>
+                <span className="text-sm font-semibold text-content-primary block">Time & focus</span>
+                <span className="text-xs text-content-muted font-medium">
+                  Auto-lock after {timeoutLabels[settings.sessionTimeoutSeconds] || '5 minutes'}
                 </span>
-              }
-            />
-
-            {showTimeoutPicker && (
-              <div className="bg-surface-850 p-2.5 border-t border-surface-700 flex flex-wrap gap-1.5 animate-slide-up">
-                {timeoutOptions.map(option => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      updateSetting('sessionTimeoutSeconds', option.value);
-                      setShowTimeoutPicker(false);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      settings.sessionTimeoutSeconds === option.value
-                        ? 'bg-accent text-white shadow-warm-sm'
-                        : 'bg-surface-900 text-content-primary hover:bg-surface-750 border border-surface-700'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
               </div>
-            )}
-          </div>
-        </section>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
 
-        {/* Message Preferences */}
-        <section className="px-4 pt-4 pb-3">
-          <h2 className="text-2xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Message Preferences
-          </h2>
-          <div className="card overflow-hidden shadow-card">
-            <SettingsRow
-              icon={<Filter className="w-4 h-4 text-accent" />}
-              label="Spam & OTP Suppression"
-              description="Automatically ignores verification codes & automated broadcasts"
-              control={
-                <ToggleSwitch
-                  id="spam-filter-toggle"
-                  checked={settings.spamFilterEnabled}
-                  onChange={val => updateSetting('spamFilterEnabled', val)}
-                />
-              }
-            />
-          </div>
-        </section>
+          {/* Privacy */}
+          <button
+            type="button"
+            id="settings-privacy-row"
+            onClick={() => navigate('/settings/privacy')}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Shield className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Privacy</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
 
-        {/* Data & Privacy Documents */}
-        <section className="px-4 pt-4 pb-3">
-          <h2 className="text-2xs font-bold text-content-secondary uppercase tracking-widest mb-2.5 px-1">
-            Data & Privacy Documents
-          </h2>
-          <div className="card overflow-hidden shadow-card">
-            <SettingsRow
-              icon={<Download className="w-4 h-4 text-accent" />}
-              label="Export Chat History"
-              description="Save chats to a printable PDF dossier or CSV spreadsheet"
-              onClick={openExportModal}
-            />
+          {/* Sharing / Export */}
+          <button
+            type="button"
+            id="settings-sharing-row"
+            onClick={() => setShowExportModal(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3.5">
+              <Share2 className="w-5 h-5 text-content-secondary" strokeWidth={2} />
+              <span className="text-sm font-semibold text-content-primary">Sharing & Export</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-content-muted" />
+          </button>
+        </div>
 
-            <SettingsRow
-              icon={<FileCheck2 className="w-4 h-4 text-accent" />}
-              label="Privacy Policy"
-              description="Review our 100% offline, zero-network privacy architecture"
-              onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
-            />
+        {/* Log Out Action */}
+        <div className="pt-2">
+          <button
+            type="button"
+            id="settings-logout-button"
+            onClick={() => setShowLogoutModal(true)}
+            className="w-full flex items-center gap-3.5 px-4 py-3 text-left text-rose-700 hover:text-rose-800 transition-colors"
+          >
+            <LogOut className="w-5 h-5 text-rose-700" strokeWidth={2} />
+            <span className="text-sm font-semibold">Log out</span>
+          </button>
+        </div>
+      </main>
 
-            <SettingsRow
-              icon={<FileText className="w-4 h-4 text-accent" />}
-              label="Terms of Service"
-              description="Terms of personal usage and device notification permissions"
-              onClick={() => setActiveLegalDoc(TERMS_OF_SERVICE)}
-            />
+      {/* Side Navigation Drawer */}
+      <SideNavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+      />
 
-            <SettingsRow
-              icon={<Shield className="w-4 h-4 text-accent" />}
-              label="Application Version"
-              description="NotiCatch Private Notification Vault"
-              value="v1.6.2"
-            />
+      {/* Color Mode Modal */}
+      <ColorModeModal
+        isOpen={showColorModal}
+        currentMode={(settings.colorMode as ColorMode) || 'system'}
+        onSelect={mode => updateSetting('colorMode', mode)}
+        onClose={() => setShowColorModal(false)}
+      />
 
-            <SettingsRow
-              icon={<Trash2 className="w-4 h-4 text-rose-700" />}
-              label="Wipe All Data"
-              description="Permanently erase all captured messages and reset vault"
-              danger
-              onClick={() => setActiveModal('wipe')}
-            />
-          </div>
-        </section>
+      {/* Font Style Modal */}
+      <FontStyleModal
+        isOpen={showFontModal}
+        currentStyle={(settings.fontStyle as FontStyle) || 'default'}
+        onSelect={style => updateSetting('fontStyle', style)}
+        onClose={() => setShowFontModal(false)}
+      />
 
-        {/* Session Actions */}
-        <section className="px-4 pt-4 pb-6">
-          <div className="card overflow-hidden shadow-card">
-            <SettingsRow
-              icon={<LogOut className="w-4 h-4 text-content-secondary" />}
-              label="Lock Vault"
-              description="Instantly locks the vault until next biometric or PIN authentication"
-              onClick={() => setActiveModal('logout')}
-            />
-          </div>
-        </section>
-
-      </div>
-
-      {/* Duress Emergency PIN Modal */}
-      {activeModal === 'duress-pin' && (
+      {/* Time & Focus (Auto-Lock Timeout) Dialog Modal */}
+      {showTimeModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
-          onClick={() => setActiveModal(null)}
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in"
+          onClick={() => setShowTimeModal(false)}
         >
           <div
-            className="w-full max-w-sm bg-surface-900 rounded-3xl p-6 shadow-card-lg border border-surface-700 animate-slide-up flex flex-col items-center"
+            className="w-full max-w-xs bg-white rounded-3xl p-5 shadow-card-lg border border-surface-700 animate-scale-in"
             onClick={e => e.stopPropagation()}
           >
-            <div className="w-full flex items-center justify-between mb-4 pb-2 border-b border-surface-700">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center text-rose-700">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <span className="font-serif text-base font-bold text-content-primary">Decoy Emergency PIN</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  setDuressInput('');
-                }}
-                className="w-7 h-7 rounded-full bg-surface-850 flex items-center justify-center text-content-muted hover:text-content-primary"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+            <h3 className="text-base font-bold text-content-primary mb-4 px-1">
+              Time & focus (Auto-lock)
+            </h3>
+            <div className="space-y-1">
+              {[
+                { seconds: 60,   label: '1 minute' },
+                { seconds: 300,  label: '5 minutes' },
+                { seconds: 900,  label: '15 minutes' },
+                { seconds: 1800, label: '30 minutes' },
+                { seconds: 0,    label: 'Never' },
+              ].map(opt => (
+                <button
+                  key={opt.seconds}
+                  type="button"
+                  onClick={() => {
+                    updateSetting('sessionTimeoutSeconds', opt.seconds);
+                    setShowTimeModal(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-left text-sm font-semibold transition-colors ${
+                    settings.sessionTimeoutSeconds === opt.seconds
+                      ? 'bg-surface-850 text-accent font-bold'
+                      : 'text-content-primary hover:bg-surface-850'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  {settings.sessionTimeoutSeconds === opt.seconds && <span>✓</span>}
+                </button>
+              ))}
             </div>
+          </div>
+        </div>
+      )}
 
-            <p className="text-xs text-content-muted text-center mb-4 leading-relaxed font-medium">
-              If forced to unlock under physical coercion, entering this 4-digit decoy code will silently and instantly wipe the entire database.
+      {/* Export Selection Modal */}
+      {showExportModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in"
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            className="w-full max-w-xs bg-white rounded-3xl p-5 shadow-card-lg border border-surface-700 animate-scale-in space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-content-primary px-1">
+              Export Chat History
+            </h3>
+            <p className="text-xs text-content-muted px-1 font-medium">
+              Save all captured conversations to your device storage.
             </p>
-
-            <input
-              type="password"
-              maxLength={4}
-              value={duressInput}
-              onChange={e => setDuressInput(e.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="Enter 4-digit Decoy PIN"
-              className="w-full text-center text-xl font-bold tracking-widest py-3 px-4 rounded-xl border border-surface-700 bg-surface-850 mb-4 focus:border-accent"
-            />
-
-            {duressSuccess && (
-              <span className="text-xs text-accent font-bold mb-3">{duressSuccess}</span>
-            )}
-
-            <button
-              type="button"
-              onClick={handleSaveDuressPin}
-              disabled={duressInput.length !== 4}
-              className="btn-neu-primary w-full py-3 text-sm font-bold disabled:opacity-50"
-            >
-              Save Decoy PIN
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Export Modal */}
-      {activeModal === 'export' && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 animate-fade-in"
-          onClick={() => setActiveModal(null)}
-        >
-          <div
-            className="w-full max-w-sm bg-surface-900 rounded-3xl p-5 shadow-card-lg border border-surface-700 animate-slide-up flex flex-col max-h-[80vh]"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-surface-700 mb-3">
-              <span className="font-serif text-base font-bold text-content-primary">Export Chat History</span>
+            <div className="space-y-2 pt-1">
               <button
                 type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-7 h-7 rounded-full bg-surface-850 flex items-center justify-center text-content-muted hover:text-content-primary"
+                onClick={async () => {
+                  setShowExportModal(false);
+                  await exportChatAsPDFNative('all');
+                }}
+                className="w-full py-3 px-4 rounded-2xl bg-surface-850 hover:bg-surface-700 text-content-primary font-semibold text-xs flex items-center justify-center gap-2"
               >
-                <X className="w-3.5 h-3.5" />
+                <Download className="w-4 h-4 text-accent" />
+                <span>Export as PDF Dossier</span>
               </button>
-            </div>
-
-            {exportSuccessMsg && (
-              <div className="mb-3 p-2 rounded-xl bg-accent-muted text-accent text-xs font-bold text-center animate-fade-in">
-                {exportSuccessMsg}
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto space-y-2 py-1">
-              {conversations.length === 0 ? (
-                <span className="text-xs text-content-muted text-center block py-4">
-                  No conversations available to export.
-                </span>
-              ) : (
-                conversations.map(c => (
-                  <div
-                    key={c.id}
-                    className="p-3 rounded-xl bg-surface-850 border border-surface-700 flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-bold text-content-primary truncate block">
-                        {c.chatTitle}
-                      </span>
-                      <span className="text-2xs text-content-muted block">
-                        {c.deletedCount} deleted
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button
-                        type="button"
-                        disabled={exportingChatId === c.id}
-                        onClick={() => handleExportPDF(c.id, c.chatTitle)}
-                        className="p-2 rounded-lg bg-surface-900 border border-surface-700 text-accent hover:bg-accent hover:text-white transition-colors text-2xs font-bold flex items-center gap-1 shadow-xs"
-                      >
-                        <FileText className="w-3 h-3" />
-                        <span>PDF</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={exportingChatId === c.id}
-                        onClick={() => handleExportCSV(c.id, c.chatTitle)}
-                        className="p-2 rounded-lg bg-surface-900 border border-surface-700 text-accent hover:bg-accent hover:text-white transition-colors text-2xs font-bold flex items-center gap-1 shadow-xs"
-                      >
-                        <Share2 className="w-3 h-3" />
-                        <span>CSV</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowExportModal(false);
+                  await exportChatAsCSVNative('all');
+                }}
+                className="w-full py-3 px-4 rounded-2xl bg-surface-850 hover:bg-surface-700 text-content-primary font-semibold text-xs flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4 text-accent" />
+                <span>Export as CSV Spreadsheet</span>
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showLogoutModal}
+        title="Lock Vault"
+        description="Are you sure you want to lock the vault? Biometric or PIN authentication will be required upon return."
+        confirmLabel="Lock Vault"
+        cancelLabel="Cancel"
+        confirmVariant="primary"
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutModal(false)}
+      />
+
+      {/* Permanent Wipe Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showWipeModal}
+        title="Permanent Wipe"
+        description="This will permanently delete all stored messages and encryption keys. This action cannot be reversed."
+        confirmLabel="Wipe Everything"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        isLoading={isProcessing}
+        onConfirm={handlePermanentWipe}
+        onCancel={() => setShowWipeModal(false)}
+      />
 
       {/* Legal Document Viewer Modal */}
-      <LegalDocumentModal
-        isOpen={activeLegalDoc !== null}
-        document={activeLegalDoc}
-        onClose={() => setActiveLegalDoc(null)}
-      />
-
-      {/* Confirmation Modals */}
-      <ConfirmationModal
-        isOpen={activeModal === 'logout'}
-        title="Lock Vault?"
-        description="Your messages will remain safe on your device. You will need your biometric fingerprint or PIN to unlock."
-        confirmLabel="Lock Vault"
-        confirmVariant="primary"
-        onConfirm={handleLogoutConfirm}
-        onCancel={() => setActiveModal(null)}
-      />
-
-      <ConfirmationModal
-        isOpen={activeModal === 'wipe'}
-        title="Permanently Wipe All Data?"
-        description="This will permanently delete all captured messages and conversations from local device storage. This action cannot be undone."
-        confirmLabel="Wipe Database"
-        confirmVariant="danger"
-        isLoading={isWiping}
-        onConfirm={handleWipeConfirm}
-        onCancel={() => setActiveModal(null)}
-      />
+      {activeLegalDoc && (
+        <LegalDocumentModal
+          isOpen={true}
+          document={activeLegalDoc}
+          onClose={() => setActiveLegalDoc(null)}
+        />
+      )}
     </div>
   );
 }

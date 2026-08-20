@@ -317,7 +317,7 @@ export async function wipeAllDataNative(): Promise<void> {
 
 export async function exportChatAsPDFNative(
   conversationId: string,
-  chatTitle:      string,
+  chatTitle:      string = 'Chat',
 ): Promise<{ filePath: string; rowCount: number }> {
   const bridge = getBridge();
   if (!bridge) throw new Error('PDF export is available on Android devices only.');
@@ -326,7 +326,7 @@ export async function exportChatAsPDFNative(
 
 export async function exportChatAsCSVNative(
   conversationId: string,
-  chatTitle:      string,
+  chatTitle:      string = 'Chat',
 ): Promise<{ filePath: string; rowCount: number }> {
   const bridge = getBridge();
   if (!bridge) throw new Error('CSV export is available on Android devices only.');
@@ -379,4 +379,5 @@ export const exportChatAsCSV = exportChatAsCSVNative;
 export const openAutostartSettings = openAutostartSettingsNative;
 export const requestBatteryOptimizationExemption = requestBatteryExemptionNative;
 export const simulateNotification = simulateNotificationNative;
+export const saveAppSettings = persistAppSettings;
 

@@ -9,6 +9,8 @@ import React from 'react';
 import { MessageCircle, Trash2, Settings, ShieldCheck } from 'lucide-react';
 import type { NavTab } from '@/types';
 
+export { SideNavigationDrawer } from './SideNavigationDrawer';
+
 /* =============================================================
    Top App Bar
    ============================================================= */

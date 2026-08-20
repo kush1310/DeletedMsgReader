@@ -14,6 +14,7 @@ export interface ConfirmationModalProps {
   readonly body?:                     string;
   readonly description?:              string;
   readonly confirmLabel:              string;
+  readonly cancelLabel?:               string;
   readonly isDangerous?:              boolean;
   readonly confirmVariant?:           'danger' | 'primary' | 'secondary';
   readonly isLoading?:                boolean;

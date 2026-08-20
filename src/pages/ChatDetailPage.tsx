@@ -2,7 +2,7 @@
  * ChatDetailPage
  *
  * Full message timeline for a single WhatsApp conversation.
- * Styled in Anthropic Claude warm editorial aesthetic.
+ * Styled to precisely match Anthropic Claude's mobile conversation view (Screenshot 10).
  * Connects directly to NativeBridgeService to query Room SQLite DB on Android.
  */
 
@@ -13,22 +13,23 @@ import {
   Search,
   X,
   AlertTriangle,
-  ShieldCheck,
   Info,
   Lock,
-  Trash2 as JumpIcon,
-  Filter,
-  FileDown,
-  CheckCircle2,
+  ArrowDown,
+  Plus,
+  Mic,
+  AudioLines,
+  MoreVertical,
+  Shapes,
 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';
-import { Avatar, EmptyState, SectionDivider, SearchInput, LoadingSpinner, FloatingPill } from '@/components/common';
+import { EmptyState, SectionDivider, SearchInput, LoadingSpinner } from '@/components/common';
 import { MessageBubble } from '@/components/chat';
 import {
   getMessages,
   getConversations,
-  exportChatAsPDF,
-  exportChatAsCSV,
+  exportChatAsPDFNative,
+  exportChatAsCSVNative,
   markConversationAsReadNative,
 } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
@@ -47,8 +48,7 @@ export function ChatDetailPage() {
   const [conversation,     setConversation]     = useState<Conversation | null>(null);
   const [allMessages,      setAllMessages]      = useState<Message[]>([]);
   const [showDeletedOnly,  setShowDeletedOnly]  = useState(false);
-  const [deletedIdxCursor, setDeletedIdxCursor] = useState(0);
-  const [isExporting,      setIsExporting]      = useState(false);
+  const [showScrollDown,   setShowScrollDown]   = useState(false);
 
   const loadThreadData = useCallback(async (): Promise<void> => {
     if (!conversationId) {
@@ -128,48 +128,26 @@ export function ChatDetailPage() {
     return groups;
   }, [displayedMessages]);
 
-  function handleJumpToDeleted(): void {
-    if (deletedMessages.length === 0) return;
-    const target = deletedMessages[deletedIdxCursor % deletedMessages.length];
-    const elem = document.getElementById(`msg-deleted-${target.id}`);
-    if (elem) {
-      elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      elem.classList.add('ring-2', 'ring-accent');
-      setTimeout(() => elem.classList.remove('ring-2', 'ring-accent'), 2000);
-    }
-    setDeletedIdxCursor(prev => prev + 1);
+  function handleScroll(e: React.UIEvent<HTMLDivElement>): void {
+    const target = e.currentTarget;
+    const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 120;
+    setShowScrollDown(!isAtBottom);
   }
 
-  async function handleExportPDF() {
-    if (!conversationId || !conversation) return;
-    setIsExporting(true);
-    try {
-      await exportChatAsPDF(conversationId, conversation.chatTitle);
-    } finally {
-      setIsExporting(false);
-    }
-  }
-
-  async function handleExportCSV() {
-    if (!conversationId || !conversation) return;
-    setIsExporting(true);
-    try {
-      await exportChatAsCSV(conversationId, conversation.chatTitle);
-    } finally {
-      setIsExporting(false);
-    }
+  function scrollToBottom(): void {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full bg-canvas">
+      <div className="flex flex-col h-screen bg-canvas">
         <TopAppBar
-          title="Loading..."
+          title="Conversation"
           leading={
             <IconButton
-              id="back-button-loading"
+              id="chat-detail-back-button"
               icon={<ArrowLeft className="w-5 h-5 text-content-primary" />}
-              label="Back to conversations"
+              label="Back"
               onClick={() => navigate('/chats')}
             />
           }
@@ -183,14 +161,14 @@ export function ChatDetailPage() {
 
   if (!conversation) {
     return (
-      <div className="flex flex-col h-full bg-canvas">
+      <div className="flex flex-col h-screen bg-canvas">
         <TopAppBar
-          title="Conversation Not Found"
+          title="Chat Not Found"
           leading={
             <IconButton
-              id="back-button-not-found"
+              id="chat-detail-back-button"
               icon={<ArrowLeft className="w-5 h-5 text-content-primary" />}
-              label="Back to conversations"
+              label="Back"
               onClick={() => navigate('/chats')}
             />
           }
@@ -216,23 +194,35 @@ export function ChatDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-canvas relative">
-      <TopAppBar
-        title={conversation.chatTitle}
-        subtitle={
-          showDeletedOnly
-            ? `Showing ${deletedMessages.length} deleted only`
-            : `${allMessages.length} messages${deletedMessages.length > 0 ? ` · ${deletedMessages.length} deleted` : ''}`
-        }
-        leading={
-          <IconButton
-            id="chat-detail-back-button"
-            icon={<ArrowLeft className="w-5 h-5 text-content-primary" />}
-            label="Back to conversations"
-            onClick={() => navigate('/chats')}
-          />
-        }
-        trailing={
+    <div className="flex flex-col h-full bg-[#FAF9F5] text-content-primary relative">
+      {/* Top App Bar matching Screenshot 10 */}
+      <header className="fixed top-0 left-0 right-0 z-30 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-[#E8E4D8] pt-safe">
+        <div className="flex items-center justify-between px-3 h-14">
+          <div className="flex items-center gap-2">
+            <IconButton
+              id="chat-detail-back-button"
+              icon={<ArrowLeft className="w-5 h-5 text-content-primary" />}
+              label="Back to conversations"
+              onClick={() => navigate('/chats')}
+            />
+            <h1 className="font-serif text-base font-bold text-content-primary truncate max-w-[160px] sm:max-w-xs">
+              {conversation.chatTitle}
+            </h1>
+          </div>
+
+          {/* Floating Artifact / Deleted Counter Pill */}
+          {deletedMessages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowDeletedOnly(prev => !prev)}
+              className="px-3 py-1 rounded-full bg-surface-750 border border-surface-700 text-content-primary text-xs font-semibold shadow-xs flex items-center gap-1.5"
+            >
+              <Shapes className="w-3.5 h-3.5 text-accent" />
+              <span>{deletedMessages.length} Artifact{deletedMessages.length > 1 ? 's' : ''}</span>
+            </button>
+          )}
+
+          {/* Actions on right */}
           <div className="flex items-center gap-1">
             <IconButton
               id="chat-search-toggle-button"
@@ -249,29 +239,15 @@ export function ChatDetailPage() {
                 if (searchOpen) setSearchQuery('');
               }}
             />
-            {deletedMessages.length > 0 && (
-              <IconButton
-                id="chat-deleted-filter-button"
-                icon={
-                  <Filter
-                    className={`w-5 h-5 ${showDeletedOnly ? 'text-accent' : 'text-content-primary'}`}
-                    strokeWidth={2.2}
-                  />
-                }
-                label={showDeletedOnly ? 'Show all messages' : 'Show deleted messages only'}
-                onClick={() => setShowDeletedOnly(prev => !prev)}
-              />
-            )}
             <IconButton
               id="chat-info-toggle-button"
-              icon={<Info className="w-5 h-5 text-accent" strokeWidth={2.2} />}
-              label="Thread Info"
+              icon={<MoreVertical className="w-5 h-5 text-content-primary" strokeWidth={2.2} />}
+              label="Thread Options"
               onClick={() => setShowThreadInfo(!showThreadInfo)}
             />
-            <Avatar name={conversation.chatTitle} size="sm" isGroup={conversation.isGroup} />
           </div>
-        }
-      />
+        </div>
+      </header>
 
       {/* Floating In-Thread Search Bar */}
       {searchOpen && (
@@ -286,110 +262,81 @@ export function ChatDetailPage() {
         </div>
       )}
 
-      {/* User-Friendly Thread Security & Info Modal */}
+      {/* Thread Info Action Sheet */}
       {showThreadInfo && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
           onClick={() => setShowThreadInfo(false)}
         >
           <div
-            className="card max-w-md w-full p-6 space-y-4 shadow-card-lg animate-scale-in"
+            className="card max-w-md w-full p-6 space-y-4 shadow-card-lg bg-white rounded-3xl animate-scale-in"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-surface-700">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-accent-muted flex items-center justify-center text-accent">
-                  <ShieldCheck className="w-5 h-5" strokeWidth={2.2} />
-                </div>
-                <div>
-                  <h3 className="font-serif text-base font-bold text-content-primary">Chat Details</h3>
-                  <p className="text-2xs text-accent font-semibold">Private On-Device Vault</p>
-                </div>
-              </div>
+              <h3 className="font-serif text-base font-bold text-content-primary">
+                Thread Details
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowThreadInfo(false)}
                 className="w-7 h-7 rounded-full bg-surface-850 flex items-center justify-center text-content-muted hover:text-content-primary"
-                aria-label="Close modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-2 border-b border-surface-700">
-                <span className="text-content-muted font-medium">Participant</span>
-                <span className="font-bold text-content-primary">{conversation.chatTitle}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-surface-700">
-                <span className="text-content-muted font-medium">Chat Type</span>
-                <span className="font-bold text-content-primary">{conversation.isGroup ? 'Group Chat' : 'Direct Contact'}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-surface-700">
-                <span className="text-content-muted font-medium">Messages Captured</span>
-                <span className="font-bold text-content-primary">{allMessages.length}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-surface-700">
-                <span className="text-content-muted font-medium">Deleted Messages Recovered</span>
-                <span className="font-bold text-accent">{deletedMessages.length}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-surface-700">
-                <span className="text-content-muted font-medium">Storage Status</span>
-                <span className="font-bold text-emerald-700 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Stored Locally on Device
-                </span>
-              </div>
+            <div className="space-y-2.5 text-xs text-content-secondary font-medium">
+              <p>Total Captured: <strong>{allMessages.length}</strong></p>
+              <p>Deleted Messages: <strong>{deletedMessages.length}</strong></p>
+              <p>Storage Mode: <strong>On-device SQLite Room WAL</strong></p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-2">
+            <div className="flex gap-2 pt-2 border-t border-surface-700">
               <button
                 type="button"
-                onClick={handleExportPDF}
-                disabled={isExporting}
-                className="btn-neu-secondary text-xs py-2.5 flex items-center justify-center gap-1.5 font-bold"
+                onClick={async () => {
+                  setShowThreadInfo(false);
+                  await exportChatAsPDFNative(conversation.id);
+                }}
+                className="btn-neu-primary flex-1 text-xs py-2.5"
               >
-                <FileDown className="w-3.5 h-3.5 text-accent" />
-                <span>Export PDF</span>
+                Export PDF
               </button>
               <button
                 type="button"
-                onClick={handleExportCSV}
-                disabled={isExporting}
-                className="btn-neu-secondary text-xs py-2.5 flex items-center justify-center gap-1.5 font-bold"
+                onClick={async () => {
+                  setShowThreadInfo(false);
+                  await exportChatAsCSVNative(conversation.id);
+                }}
+                className="btn-neu-secondary flex-1 text-xs py-2.5"
               >
-                <FileDown className="w-3.5 h-3.5 text-accent" />
-                <span>Export CSV</span>
+                Export CSV
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setShowThreadInfo(false)}
-              className="btn-neu-primary w-full text-xs py-2.5 mt-2 font-bold"
-            >
-              Done
-            </button>
           </div>
         </div>
       )}
 
-      {deletedMessages.length > 0 && !showDeletedOnly && (
-        <FloatingPill
-          id="jump-to-deleted-pill"
-          icon={<JumpIcon className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />}
-          label={`${deletedMessages.length} Deleted · Jump`}
-          onClick={handleJumpToDeleted}
-          bottom={24}
-        />
+      {/* Floating Jump to Bottom Button */}
+      {showScrollDown && (
+        <button
+          type="button"
+          id="scroll-to-bottom-button"
+          onClick={scrollToBottom}
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 w-9 h-9 rounded-full bg-white border border-[#E8E4D8] shadow-card-lg flex items-center justify-center text-content-secondary hover:text-content-primary animate-scale-in"
+        >
+          <ArrowDown className="w-4 h-4" strokeWidth={2.2} />
+        </button>
       )}
 
+      {/* Scrollable Timeline */}
       <div
         ref={scrollContainerRef}
-        className={`flex-1 overflow-y-auto pb-4 px-4 space-y-4 ${searchOpen ? 'pt-28' : 'pt-16'}`}
+        onScroll={handleScroll}
+        className={`flex-1 overflow-y-auto pb-28 px-4 space-y-4 ${searchOpen ? 'pt-28' : 'pt-16'}`}
       >
         <div className="flex items-center justify-center my-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-850 border border-surface-700 rounded-full shadow-xs">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-white border border-[#E8E4D8] rounded-full shadow-xs">
             <Lock className="w-3 h-3 text-content-muted" strokeWidth={2} />
             <span className="text-2xs text-content-muted font-semibold text-center">
               100% Offline Vault · Zero Network Transfer
@@ -407,17 +354,6 @@ export function ChatDetailPage() {
                   ? 'None of the captured messages in this conversation have been deleted by the sender.'
                   : 'No notification messages have been recorded for this contact yet.'
               }
-              action={
-                showDeletedOnly ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowDeletedOnly(false)}
-                    className="btn-neu-secondary text-xs py-2 px-4"
-                  >
-                    Show All Messages
-                  </button>
-                ) : undefined
-              }
             />
           </div>
         ) : (
@@ -432,6 +368,49 @@ export function ChatDetailPage() {
         )}
 
         <div ref={bottomRef} />
+      </div>
+
+      {/* Floating Bottom Input Bar matching Screenshot 10 */}
+      <div className="fixed bottom-3 left-4 right-4 z-30 max-w-lg mx-auto">
+        <div className="bg-white rounded-3xl p-3 shadow-card-lg border border-[#E8E4D8] flex flex-col gap-2">
+          <input
+            type="text"
+            placeholder="Reply to Claude..."
+            readOnly
+            className="w-full bg-transparent text-sm text-content-primary placeholder:text-content-muted px-2 py-1 focus:outline-none cursor-default font-medium"
+          />
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="w-8 h-8 rounded-full bg-surface-850 flex items-center justify-center text-content-secondary hover:text-content-primary transition-colors"
+              >
+                <Plus className="w-4 h-4" strokeWidth={2.2} />
+              </button>
+
+              <div className="px-3 py-1 rounded-full bg-surface-850 text-content-primary text-xs font-semibold">
+                Sonnet 4.6 Medium
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-content-secondary hover:text-content-primary transition-colors"
+              >
+                <Mic className="w-4 h-4" strokeWidth={2} />
+              </button>
+
+              <button
+                type="button"
+                className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-xs"
+              >
+                <AudioLines className="w-4 h-4" strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

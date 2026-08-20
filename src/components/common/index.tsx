@@ -22,6 +22,8 @@ import type { ToastMessage, ToastSeverity } from '@/types';
 export { ThreeSecurityCanvas } from './ThreeSecurityCanvas';
 export { ConfirmationModal } from './ConfirmationModal';
 export { LegalDocumentModal } from './LegalDocumentModal';
+export { ColorModeModal, type ColorMode } from './ColorModeModal';
+export { FontStyleModal, type FontStyle } from './FontStyleModal';
 
 /* =============================================================
    Loading Spinner

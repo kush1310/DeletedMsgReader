@@ -27,6 +27,8 @@ export interface Conversation {
   readonly unreadCount:          number;
   readonly lastMessageTimestamp: number;
   readonly deletedCount:         number;
+  readonly lastMessageSnippet?:  string;
+  readonly hasDeletedMessages?:  boolean;
 }
 
 export interface Message {
@@ -183,6 +185,9 @@ export interface AppSettings {
   readonly theme:                 'light' | 'dark' | 'system';
   readonly lastIntegrityCheck:    number | null;
   readonly databaseVersion:       number;
+  readonly colorMode?:            'light' | 'dark' | 'system';
+  readonly fontStyle?:            'default' | 'system';
+  readonly hapticsEnabled?:       boolean;
 }
 
 export interface RawNotificationPayload {

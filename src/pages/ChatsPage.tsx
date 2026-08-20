@@ -3,6 +3,7 @@
  *
  * Lists all captured WhatsApp conversations sorted by most recent activity.
  * Styled in Anthropic Claude warm editorial aesthetic.
+ * All dummy and simulated test message triggers have been removed.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -16,16 +17,15 @@ import {
   Share2,
   Trash2,
   X,
-  Zap,
+  Menu,
 } from 'lucide-react';
-import { TopAppBar, IconButton } from '@/components/navigation';
+import { TopAppBar, IconButton, SideNavigationDrawer } from '@/components/navigation';
 import { SearchInput, EmptyState, LoadingSpinner, ConfirmationModal } from '@/components/common';
 import { ConversationRow } from '@/components/chat';
 import {
   getConversations,
   checkNotificationListenerEnabled,
   requestNotificationListenerPermission,
-  simulateNotification,
   markConversationAsReadNative,
   deleteConversationNative,
   exportChatAsPDFNative,
@@ -55,7 +55,7 @@ export function ChatsPage() {
   const [activeFilter,          setActiveFilter]          = useState<ChatFilter>('all');
   const [lastSynced,            setLastSynced]            = useState<Date | null>(null);
   const [hasNotifAccess,        setHasNotifAccess]        = useState<boolean | null>(null);
-  const [isSimulating,          setIsSimulating]          = useState(false);
+  const [isDrawerOpen,          setIsDrawerOpen]          = useState(false);
 
   const [selectedChat,          setSelectedChat]          = useState<Conversation | null>(null);
   const [showDeleteConfirm,     setShowDeleteConfirm]     = useState(false);
@@ -116,19 +116,6 @@ export function ChatsPage() {
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
 
-  async function handleTriggerTest(): Promise<void> {
-    setIsSimulating(true);
-    await simulateNotification({
-      chatTitle:   'Mumma',
-      senderName:  'Mumma',
-      messageText: 'Hi! Are you coming home today?',
-      isDeleted:   false,
-      isGroup:     false,
-    });
-    await loadData();
-    setIsSimulating(false);
-  }
-
   async function handleMarkAsRead(chat: Conversation) {
     await markConversationAsReadNative(chat.id);
     setSelectedChat(null);
@@ -138,82 +125,103 @@ export function ChatsPage() {
   }
 
   async function handleExportPDF(chat: Conversation) {
-    const res = await exportChatAsPDFNative(chat.id, chat.chatTitle);
     setSelectedChat(null);
-    if (res.filePath) {
-      setActionFeedback(`Exported ${res.rowCount} messages to PDF`);
-      setTimeout(() => setActionFeedback(null), 2500);
-    }
+    setActionFeedback('Generating PDF...');
+    await exportChatAsPDFNative(chat.id);
+    setActionFeedback('PDF exported successfully');
+    setTimeout(() => setActionFeedback(null), 2500);
   }
 
   async function handleExportCSV(chat: Conversation) {
-    const res = await exportChatAsCSVNative(chat.id, chat.chatTitle);
     setSelectedChat(null);
-    if (res.filePath) {
-      setActionFeedback(`Exported ${res.rowCount} messages to CSV`);
-      setTimeout(() => setActionFeedback(null), 2500);
-    }
+    setActionFeedback('Generating CSV...');
+    await exportChatAsCSVNative(chat.id);
+    setActionFeedback('CSV exported successfully');
+    setTimeout(() => setActionFeedback(null), 2500);
   }
 
-  async function handleDeleteConfirm() {
-    if (!selectedChat) return;
-    await deleteConversationNative(selectedChat.id);
+  async function handleDeleteChat(chat: Conversation) {
+    await deleteConversationNative(chat.id);
     setShowDeleteConfirm(false);
     setSelectedChat(null);
     await loadData();
-    setActionFeedback('Chat deleted');
+    setActionFeedback('Conversation deleted');
     setTimeout(() => setActionFeedback(null), 2000);
   }
 
-  const searchResults = useMemo(() => {
-    return searchAndRank(conversations, conversation => conversation.chatTitle, searchQuery);
-  }, [conversations, searchQuery]);
-
   const filteredResults = useMemo(() => {
-    return searchResults.filter(result => {
-      const conv = result.item;
-      switch (activeFilter) {
-        case 'deleted': return conv.deletedCount > 0;
-        case 'groups':  return conv.isGroup;
-        case 'direct':  return !conv.isGroup;
-        default:        return true;
-      }
-    });
-  }, [searchResults, activeFilter]);
+    let list = conversations;
+
+    if (activeFilter === 'deleted') {
+      list = list.filter(chat => chat.hasDeletedMessages || chat.deletedCount > 0);
+    } else if (activeFilter === 'groups') {
+      list = list.filter(chat => chat.isGroup);
+    } else if (activeFilter === 'direct') {
+      list = list.filter(chat => !chat.isGroup);
+    }
+
+    if (!searchQuery.trim()) {
+      return list.map(item => ({ item, score: 1, matchedPositions: [] }));
+    }
+
+    return searchAndRank(
+      list,
+      (chat: Conversation) => `${chat.chatTitle} ${chat.lastMessageSnippet ?? ''}`,
+      searchQuery
+    );
+  }, [conversations, activeFilter, searchQuery]);
 
   function handleConversationSelect(conversationId: string): void {
     navigate(`/chats/${conversationId}`);
   }
 
-  const subtitleText = lastSynced
-    ? `Last synced ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    : conversations.length > 0
-      ? `${conversations.length} conversation${conversations.length !== 1 ? 's' : ''} captured`
-      : 'Waiting for notifications...';
-
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
-        <TopAppBar title="Chats" />
-        <div className="pt-14 flex-1 flex items-center justify-center">
+      <main className="flex flex-col h-screen overflow-hidden bg-canvas">
+        <TopAppBar
+          title="Chats"
+          subtitle="Loading conversations..."
+          leading={
+            <IconButton
+              id="chats-hamburger-btn"
+              icon={<Menu className="w-5 h-5 text-content-primary" strokeWidth={2} />}
+              label="Menu"
+              onClick={() => setIsDrawerOpen(true)}
+            />
+          }
+        />
+        <div className="flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-canvas">
+      {/* Top Application Bar */}
       <TopAppBar
         title="Chats"
-        subtitle={subtitleText}
+        subtitle={
+          lastSynced
+            ? `Synced ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : undefined
+        }
+        leading={
+          <IconButton
+            id="chats-hamburger-btn"
+            icon={<Menu className="w-5 h-5 text-content-primary" strokeWidth={2} />}
+            label="Open Navigation Drawer"
+            onClick={() => setIsDrawerOpen(true)}
+          />
+        }
         trailing={
           <IconButton
             id="chats-refresh-button"
             icon={
               <RefreshCw
-                className={`w-4 h-4 text-content-primary ${isRefreshing ? 'animate-spin' : ''}`}
-                strokeWidth={2}
+                className={`w-4 h-4 text-content-secondary ${isRefreshing ? 'animate-spin' : ''}`}
+                strokeWidth={2.2}
               />
             }
             label="Refresh conversation list"
@@ -224,18 +232,14 @@ export function ChatsPage() {
 
       {/* Permission Warning Banner */}
       {hasNotifAccess === false && (
-        <div className="pt-14 px-4 pt-3 pb-1 z-30 animate-slide-down">
-          <div className="card p-3.5 bg-[#FDF4E7] border border-[#F3D3A6] shadow-card space-y-2.5">
-            <div className="flex items-start gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
-                <BellOff className="w-4 h-4 text-[#9C5418]" strokeWidth={2.2} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-bold text-[#9C5418] leading-tight">
-                  Notification Access Required
-                </h4>
-                <p className="text-2xs text-[#9C5418] mt-0.5 leading-snug">
-                  Android is blocking NotiCatch from reading incoming notifications. Enable Notification Access in Android Settings to capture messages.
+        <div className="pt-14 px-4 pb-2 z-20">
+          <div className="card p-3.5 border-amber-300 bg-[#FDF4E7] shadow-card space-y-2 animate-slide-down">
+            <div className="flex items-center gap-2.5 text-accent">
+              <BellOff className="w-4 h-4 text-accent shrink-0" strokeWidth={2.2} />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-accent">Notification Access Disabled</p>
+                <p className="text-2xs text-[#9C5418] font-medium leading-relaxed">
+                  WhatsApp notifications cannot be captured until listener access is enabled.
                 </p>
               </div>
             </div>
@@ -322,25 +326,18 @@ export function ChatsPage() {
                   ? `No conversations match "${searchQuery}".`
                   : activeFilter !== 'all'
                     ? 'Try the All tab to see every captured conversation.'
-                    : 'Send or receive a message — it will appear here automatically.'
+                    : 'Send or receive a WhatsApp message — it will appear here automatically.'
               }
             />
-
-            <div className="w-full max-w-xs pt-2">
-              <button
-                type="button"
-                id="simulate-test-notif-btn"
-                onClick={handleTriggerTest}
-                disabled={isSimulating}
-                className="w-full py-2.5 px-4 rounded-xl bg-surface-900 border border-surface-700 text-content-primary text-xs font-bold shadow-card flex items-center justify-center gap-2 hover:bg-surface-850 active:scale-95 transition-all"
-              >
-                <Zap className="w-4 h-4 text-accent" strokeWidth={2.2} />
-                {isSimulating ? 'Sending test message...' : 'Simulate Test Message'}
-              </button>
-            </div>
           </div>
         )}
       </div>
+
+      {/* Side Navigation Drawer */}
+      <SideNavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+      />
 
       {/* Long-Press Action Sheet Modal */}
       {selectedChat && !showDeleteConfirm && (
@@ -386,7 +383,7 @@ export function ChatsPage() {
                 className="w-full flex items-center gap-3 p-3 rounded-xl bg-surface-850 hover:bg-surface-700 text-left transition-colors text-xs font-bold text-content-primary"
               >
                 <FileText className="w-4 h-4 text-accent" />
-                <span>Export Chat to PDF</span>
+                <span>Export as PDF Dossier</span>
               </button>
 
               <button
@@ -395,16 +392,16 @@ export function ChatsPage() {
                 className="w-full flex items-center gap-3 p-3 rounded-xl bg-surface-850 hover:bg-surface-700 text-left transition-colors text-xs font-bold text-content-primary"
               >
                 <Share2 className="w-4 h-4 text-accent" />
-                <span>Export Chat to CSV</span>
+                <span>Export as CSV Spreadsheet</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-left transition-colors text-xs font-bold text-rose-700 border border-rose-200"
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-left transition-colors text-xs font-bold text-rose-700"
               >
-                <Trash2 className="w-4 h-4 text-rose-700" />
-                <span>Delete Entire Chat</span>
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Delete Conversation</span>
               </button>
             </div>
           </div>
@@ -412,20 +409,16 @@ export function ChatsPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {selectedChat && (
-        <ConfirmationModal
-          isOpen={showDeleteConfirm}
-          title={`Delete "${selectedChat.chatTitle}"?`}
-          description="All captured messages and deletion history for this conversation will be permanently removed from local storage."
-          confirmLabel="Delete Chat"
-          confirmVariant="danger"
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => {
-            setShowDeleteConfirm(false);
-            setSelectedChat(null);
-          }}
-        />
-      )}
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        title="Delete Conversation"
+        description={`Permanently delete all captured messages for "${selectedChat?.chatTitle}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        onConfirm={() => selectedChat && handleDeleteChat(selectedChat)}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

@@ -1,20 +1,9 @@
 /**
  * App.tsx — Root Application Router and Session Coordinator
  *
- * Defines the client-side routing tree and enforces session timeout.
- * On each route change, checks elapsed time since last unlock against
- * sessionTimeoutSeconds setting and forces re-authentication if expired.
- *
- * Route tree:
- *   /login         → LoginPage (no nav)
- *   /setup         → SetupPage (no nav, permission wizard)
- *   /chats         → ChatsPage       (bottom nav)
- *   /chats/:id     → ChatDetailPage  (back nav)
- *   /deleted       → DeletedOnlyPage (bottom nav)
- *   /settings      → SettingsPage    (bottom nav)
- *   /contact       → ContactUsPage   (back nav)
- *   /feedback      → FeedbackPage    (back nav)
- *   /              → Redirects to /login
+ * Defines the client-side routing tree and enforces real-time inactivity session locking.
+ * Integrates InactivityLockService for 1000ms heartbeat checks, user input listeners,
+ * and background-to-foreground lifecycle evaluation.
  */
 
 import { type ReactNode, useCallback, useEffect } from 'react';
@@ -28,10 +17,14 @@ import { ChatsPage             } from '@/pages/ChatsPage';
 import { ChatDetailPage        } from '@/pages/ChatDetailPage';
 import { DeletedOnlyPage       } from '@/pages/DeletedOnlyPage';
 import { SettingsPage          } from '@/pages/SettingsPage';
+import { ProfilePage           } from '@/pages/ProfilePage';
+import { NotificationsSettingsPage } from '@/pages/NotificationsSettingsPage';
+import { PermissionsSettingsPage   } from '@/pages/PermissionsSettingsPage';
+import { PrivacySettingsPage       } from '@/pages/PrivacySettingsPage';
 import { ContactUsPage         } from '@/pages/ContactUsPage';
 import { FeedbackPage          } from '@/pages/FeedbackPage';
-import { loadAppSettings       } from '@/services/NativeBridgeService';
 import { hasAcceptedPrivacyPolicy } from '@/services/SecurityService';
+import { inactivityLockService } from '@/services/InactivityLockService';
 import type { NavTab } from '@/types';
 
 /** Routes that show the bottom navigation bar */
@@ -50,18 +43,14 @@ const AUTH_EXEMPT_ROUTES = new Set(['/login', '/setup', '/onboarding/privacy']);
 /**
  * SessionGuard
  *
- * Enforces session timeout on each route transition.
- * Reads session_start from sessionStorage and compares elapsed time
- * against the persisted sessionTimeoutSeconds setting.
- * Navigates to /login if the session has expired.
- *
- * Resets the activity timer on user interaction (touch/click).
+ * Enforces session timeout and real-time inactivity locking.
+ * Reads session_start from sessionStorage and actively monitors inactivity.
  */
 function SessionGuard() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const checkSession = useCallback(async (): Promise<void> => {
+  const checkSession = useCallback((): void => {
     if (!hasAcceptedPrivacyPolicy()) {
       if (location.pathname !== '/onboarding/privacy') {
         navigate('/onboarding/privacy', { replace: true });
@@ -74,44 +63,28 @@ function SessionGuard() {
     const sessionStart = sessionStorage.getItem('session_start');
     if (!sessionStart) {
       navigate('/login', { replace: true });
-      return;
-    }
-
-    const settings = await loadAppSettings();
-    if (settings.sessionTimeoutSeconds === 0) return; /* "Never" option */
-
-    const elapsed = Date.now() - Number(sessionStart);
-    const timeoutMs = settings.sessionTimeoutSeconds * 1000;
-
-    if (elapsed > timeoutMs) {
-      sessionStorage.removeItem('session_start');
-      navigate('/login', { replace: true });
     }
   }, [location.pathname, navigate]);
 
-  /* Check session on every route change */
+  /* Route change check */
   useEffect(() => {
     checkSession();
   }, [checkSession]);
 
-  /* Reset session timer on any user interaction */
+  /* Inactivity engine initialization */
   useEffect(() => {
-    function resetTimer(): void {
-      if (AUTH_EXEMPT_ROUTES.has(location.pathname)) return;
-      const current = sessionStorage.getItem('session_start');
-      if (current) {
-        sessionStorage.setItem('session_start', String(Date.now()));
-      }
-    }
+    inactivityLockService.initialize();
 
-    window.addEventListener('touchstart', resetTimer, { passive: true });
-    window.addEventListener('click',      resetTimer, { passive: true });
+    const unsubscribe = inactivityLockService.onLockRequired(() => {
+      if (!AUTH_EXEMPT_ROUTES.has(location.pathname)) {
+        navigate('/login', { replace: true });
+      }
+    });
 
     return () => {
-      window.removeEventListener('touchstart', resetTimer);
-      window.removeEventListener('click',      resetTimer);
+      unsubscribe();
     };
-  }, [location.pathname]);
+  }, [location.pathname, navigate]);
 
   return null;
 }
@@ -156,7 +129,6 @@ function AppShell({ children }: { readonly children: ReactNode }) {
  * App
  *
  * Root component rendering the full React Router v6 route tree.
- * No dummy data is seeded — all data comes from real captured notifications.
  */
 export function App() {
   return (
@@ -171,7 +143,11 @@ export function App() {
         <Route path="/chats"          element={<ChatsPage />} />
         <Route path="/deleted"        element={<DeletedOnlyPage />} />
         <Route path="/settings"       element={<SettingsPage />} />
-        <Route path="/chats/:conversationId" element={<ChatDetailPage />} />
+        <Route path="/settings/profile"       element={<ProfilePage />} />
+        <Route path="/settings/notifications" element={<NotificationsSettingsPage />} />
+        <Route path="/settings/permissions"   element={<PermissionsSettingsPage />} />
+        <Route path="/settings/privacy"       element={<PrivacySettingsPage />} />
+        <Route path="/chats/:conversationId"  element={<ChatDetailPage />} />
         <Route path="/contact"  element={<ContactUsPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="*"         element={<Navigate to="/login" replace />} />
