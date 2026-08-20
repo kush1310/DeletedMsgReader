@@ -14,6 +14,8 @@ import android.util.Log
  * Isolates parsing logic from Android service bindings to enable deterministic unit testing.
  *
  * Features:
+ *   - Automatic message-count suffix stripping (" (6 messages)" -> single unified thread)
+ *   - Embedded group sender extraction ("~Naitri Jasani: So what !!" -> author attribution)
  *   - Android 10-15 MessagingStyle multi-message bundle array extraction
  *   - Multilingual deletion detection across 25+ language variants
  *   - WhatsApp Edit notification detection & original text extraction
@@ -83,6 +85,9 @@ object WhatsAppNotificationParser {
         Regex("\\bdo not share\\b.*\\b(code|otp)\\b",          RegexOption.IGNORE_CASE),
     )
 
+    /** Suffix pattern attached by WhatsApp for batched notifications (e.g., "(6 messages)", "(12 new messages)") */
+    private val TITLE_MESSAGE_COUNT_REGEX = Regex("\\s*\\(\\d+\\s+(?:new\\s+)?messages?\\)$", RegexOption.IGNORE_CASE)
+
     /** Audio voice message duration regex: "0:42", "1:15", "Voice message (0:30)" */
     private val AUDIO_DURATION_REGEX = Regex("(?:voice message|audio)?\\s*\\(?(\\d{1,2}):(\\d{2})\\)?", RegexOption.IGNORE_CASE)
 
@@ -94,6 +99,18 @@ object WhatsAppNotificationParser {
 
     fun isWhatsAppNotification(packageName: String?): Boolean {
         return packageName == WHATSAPP_PKG || packageName == WHATSAPP_BUSINESS_PKG
+    }
+
+    /**
+     * cleanChatTitle
+     *
+     * Strips ephemeral WhatsApp message count suffixes such as "(6 messages)" or "(12 new messages)"
+     * so that all notifications for a single conversation resolve to one canonical title.
+     */
+    fun cleanChatTitle(rawTitle: String): String {
+        var clean = rawTitle.trim()
+        clean = TITLE_MESSAGE_COUNT_REGEX.replace(clean, "").trim()
+        return clean.ifBlank { "WhatsApp Chat" }
     }
 
     /**
@@ -114,13 +131,14 @@ object WhatsAppNotificationParser {
         val isGroup = isGroupExplicit || (!conversationTitle.isNullOrBlank())
 
         val rawTitle = extractTitle(extras)
-        val chatTitle = if (!conversationTitle.isNullOrBlank()) {
+        val candidateTitle = if (!conversationTitle.isNullOrBlank()) {
             conversationTitle
         } else if (rawTitle.isNotBlank()) {
             rawTitle
         } else {
             "WhatsApp Contact"
         }
+        val chatTitle = cleanChatTitle(candidateTitle)
 
         val timestamp = sbn.postTime
         val notificationId = sbn.id
@@ -135,10 +153,25 @@ object WhatsAppNotificationParser {
                     if (rawMsgText.isBlank() || isSummaryCount(rawMsgText)) continue
 
                     val msgTime = item.getLong("time", timestamp)
-                    val sender = extractSenderFromBundle(item) ?: if (isGroup) chatTitle else chatTitle
-                    val isDeletion = isDeletion(rawMsgText, sender)
+                    var sender = extractSenderFromBundle(item) ?: if (isGroup) chatTitle else chatTitle
+                    var cleanText = cleanEditedText(rawMsgText)
+
+                    /* Extract embedded sender from group message text (e.g. "~Naitri Jasani: So what !!") */
+                    if (cleanText.contains(": ")) {
+                        val colonIdx = cleanText.indexOf(": ")
+                        if (colonIdx in 1..40) {
+                            val potentialSender = cleanText.substring(0, colonIdx).trim().removePrefix("~").trim()
+                            val body = cleanText.substring(colonIdx + 2).trim()
+                            if (potentialSender.isNotBlank() && body.isNotBlank()) {
+                                sender = potentialSender
+                                cleanText = body
+                            }
+                        }
+                    }
+                    sender = sender.removePrefix("~").trim()
+
+                    val isDeletion = isDeletion(cleanText, sender)
                     val isEdit = isEdit(rawMsgText)
-                    val cleanText = cleanEditedText(rawMsgText)
                     val isSpamOtp = isSpamOtp(cleanText)
                     val audioDuration = parseAudioDuration(cleanText)
                     val isDisappearing = isDisappearing(cleanText)
@@ -147,7 +180,7 @@ object WhatsAppNotificationParser {
                         ParsedMessage(
                             packageName          = packageName,
                             chatTitle            = chatTitle,
-                            senderName           = sender,
+                            senderName           = sender.ifBlank { chatTitle },
                             messageText          = if (isDeletion) null else cleanText,
                             notificationId       = notificationId,
                             timestamp            = if (msgTime > 0) msgTime else timestamp,
@@ -170,13 +203,14 @@ object WhatsAppNotificationParser {
                 var senderName = chatTitle
                 var cleanBody = bodyText
 
-                if (isGroup && bodyText.contains(": ")) {
-                    val parts = bodyText.split(": ", limit = 2)
-                    if (parts.size == 2 && parts[0].length < 40) {
-                        senderName = parts[0].trim()
+                if (cleanBody.contains(": ")) {
+                    val parts = cleanBody.split(": ", limit = 2)
+                    if (parts.size == 2 && parts[0].length in 1..40) {
+                        senderName = parts[0].trim().removePrefix("~").trim()
                         cleanBody = parts[1].trim()
                     }
                 }
+                senderName = senderName.removePrefix("~").trim()
 
                 val isDeletion = isDeletion(cleanBody, chatTitle)
                 val isEdit = isEdit(cleanBody)
@@ -189,7 +223,7 @@ object WhatsAppNotificationParser {
                     ParsedMessage(
                         packageName          = packageName,
                         chatTitle            = chatTitle,
-                        senderName           = senderName,
+                        senderName           = senderName.ifBlank { chatTitle },
                         messageText          = if (isDeletion) null else cleanText,
                         notificationId       = notificationId,
                         timestamp            = timestamp,
@@ -208,7 +242,8 @@ object WhatsAppNotificationParser {
     }
 
     private fun isSummaryCount(text: String): Boolean {
-        return text.matches(Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE))
+        return text.matches(Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE)) ||
+               text.matches(Regex("^\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?$", RegexOption.IGNORE_CASE))
     }
 
     fun isDeletion(text: String, title: String): Boolean {
@@ -242,12 +277,12 @@ object WhatsAppNotificationParser {
 
     private fun extractSenderFromBundle(bundle: Bundle): String? {
         bundle.getCharSequence("sender")?.toString()?.trim()?.let {
-            if (it.isNotBlank()) return it
+            if (it.isNotBlank()) return it.removePrefix("~").trim()
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val person = bundle.getParcelable<Person>("sender_person")
             person?.name?.toString()?.trim()?.let {
-                if (it.isNotBlank()) return it
+                if (it.isNotBlank()) return it.removePrefix("~").trim()
             }
         }
         return null
@@ -275,7 +310,7 @@ object WhatsAppNotificationParser {
         if (textLines != null && textLines.isNotEmpty()) {
             for (i in textLines.indices.reversed()) {
                 val line = textLines[i]?.toString()?.trim()
-                if (!line.isNullOrBlank()) {
+                if (!line.isNullOrBlank() && !isSummaryCount(line)) {
                     return line
                 }
             }

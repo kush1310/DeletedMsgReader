@@ -54,7 +54,6 @@ import {
   requestNotificationListenerPermission,
   openAutostartSettingsNative,
   requestBatteryExemptionNative,
-  simulateNotificationNative,
   checkDeviceSecurity,
   getKernelSocketStats,
   isNativeAndroid,
@@ -89,7 +88,6 @@ export function SettingsPage() {
   const [exportSuccessMsg,  setExportSuccessMsg]  = useState<string | null>(null);
   const [isWiping,          setIsWiping]          = useState(false);
   const [notifAccessGranted, setNotifAccessGranted] = useState<boolean | null>(null);
-  const [simulatingMsg,     setSimulatingMsg]     = useState<string | null>(null);
   const [duressInput,       setDuressInput]       = useState('');
   const [duressSuccess,     setDuressSuccess]     = useState<string | null>(null);
   const [socketStats,       setSocketStats]       = useState<KernelSocketStats | null>(null);
@@ -199,36 +197,6 @@ export function SettingsPage() {
         setDuressInput('');
       }, 1500);
     }
-  }
-
-  async function handleSimulateMessage(): Promise<void> {
-    setSimulatingMsg('Sending normal message from Mumma...');
-    await simulateNotificationNative({
-      chatTitle:   'Mumma',
-      senderName:  'Mumma',
-      messageText: 'Hi! I will call you in 5 minutes.',
-      isDeleted:   false,
-      isGroup:     false,
-    });
-    setTimeout(() => {
-      setSimulatingMsg('Message sent! Check the Chats tab.');
-      setTimeout(() => setSimulatingMsg(null), 2500);
-    }, 400);
-  }
-
-  async function handleSimulateDeletion(): Promise<void> {
-    setSimulatingMsg('Sending deletion signal from Mumma...');
-    await simulateNotificationNative({
-      chatTitle:   'Mumma',
-      senderName:  'Mumma',
-      messageText: 'This message was deleted',
-      isDeleted:   true,
-      isGroup:     false,
-    });
-    setTimeout(() => {
-      setSimulatingMsg('Deletion captured! Check the Deleted tab.');
-      setTimeout(() => setSimulatingMsg(null), 2500);
-    }, 400);
   }
 
   const timeoutOptions = [
@@ -460,43 +428,6 @@ export function SettingsPage() {
                 />
               }
             />
-          </div>
-        </section>
-
-        {/* Diagnostic Simulator */}
-        <section className="px-4 pt-4 pb-3">
-          <h2 className="text-xs font-bold text-content-secondary uppercase tracking-widest mb-2 px-1">
-            On-Device Test Simulator
-          </h2>
-          <div className="card p-3.5">
-            <p className="text-xs text-content-muted mb-3 font-medium">
-              Simulate live WhatsApp messages and deletion events directly into SQLite:
-            </p>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                id="simulate-msg-btn"
-                onClick={handleSimulateMessage}
-                className="flex-1 py-2 px-3 rounded-lg bg-surface-850 hover:bg-surface-700 text-accent text-xs font-extrabold border border-surface-700 transition-colors shadow-xs"
-              >
-                1. Test Message
-              </button>
-              <button
-                type="button"
-                id="simulate-del-btn"
-                onClick={handleSimulateDeletion}
-                className="flex-1 py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-extrabold border border-amber-300 transition-colors shadow-xs"
-              >
-                2. Test Deletion
-              </button>
-            </div>
-
-            {simulatingMsg && (
-              <div className="mt-2 p-2 rounded bg-surface-850 text-xs text-accent font-bold text-center animate-fade-in border border-surface-700">
-                {simulatingMsg}
-              </div>
-            )}
           </div>
         </section>
 

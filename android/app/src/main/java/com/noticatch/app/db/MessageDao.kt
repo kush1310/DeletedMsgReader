@@ -14,7 +14,7 @@ import androidx.room.Update
  *
  * Performance:
  *   - Utilizes composite B-tree indexes for sub-millisecond retrieval
- *   - Cursor streaming with LIMIT and OFFSET for OOM-safe export
+ *   - Sliding-window deduplication filter
  */
 @Dao
 interface MessageDao {
@@ -36,6 +36,24 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE isEdited = 1 AND isPurged = 0 ORDER BY editedAt DESC")
     suspend fun getAllEdited(): List<MessageEntity>
+
+    @Query("""
+        SELECT * FROM messages
+        WHERE conversationId = :conversationId
+          AND senderName = :senderName
+          AND messageText = :text
+          AND timestamp >= :minTimestamp
+          AND timestamp <= :maxTimestamp
+          AND isPurged = 0
+        LIMIT 1
+    """)
+    suspend fun findDuplicate(
+        conversationId: String,
+        senderName:     String,
+        text:           String,
+        minTimestamp:   Long,
+        maxTimestamp:   Long,
+    ): MessageEntity?
 
     @Query("""
         SELECT * FROM messages
@@ -94,6 +112,9 @@ interface MessageDao {
 
     @Query("UPDATE messages SET isPurged = 1, purgedAt = :now WHERE timestamp < :cutoffTimestamp")
     suspend fun purgeOldMessages(cutoffTimestamp: Long, now: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
+    suspend fun deleteByConversation(conversationId: String)
 
     @Query("DELETE FROM messages")
     suspend fun deleteAll()

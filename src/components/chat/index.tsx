@@ -42,17 +42,46 @@ import { computeWordDiff } from '@/services/DiffEngine';
 interface ConversationRowProps {
   readonly conversation: Conversation;
   readonly onClick: (conversationId: string) => void;
+  readonly onLongPress?: (conversation: Conversation) => void;
 }
 
-export function ConversationRow({ conversation, onClick }: ConversationRowProps) {
+export function ConversationRow({ conversation, onClick, onLongPress }: ConversationRowProps) {
   const formattedTime = formatTimestamp(conversation.lastMessageTimestamp);
   const hasDeleted    = conversation.deletedCount > 0;
+  const [pressTimer, setPressTimer] = useState<number | null>(null);
+
+  function handleTouchStart() {
+    if (!onLongPress) return;
+    const timer = window.setTimeout(() => {
+      onLongPress(conversation);
+    }, 550);
+    setPressTimer(timer);
+  }
+
+  function handleTouchEnd() {
+    if (pressTimer) {
+      window.clearTimeout(pressTimer);
+      setPressTimer(null);
+    }
+  }
 
   return (
     <button
       type="button"
       id={`conversation-row-${conversation.id}`}
       onClick={() => onClick(conversation.id)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      onMouseDown={handleTouchStart}
+      onMouseUp={handleTouchEnd}
+      onMouseLeave={handleTouchEnd}
+      onContextMenu={(e) => {
+        if (onLongPress) {
+          e.preventDefault();
+          onLongPress(conversation);
+        }
+      }}
       className="w-full flex items-center gap-3 px-4 py-3.5 bg-surface-900 hover:bg-surface-850 active:bg-surface-700 transition-all duration-150 cursor-pointer text-left border-b border-surface-700/60 last:border-b-0"
       style={hasDeleted ? { borderLeft: '3px solid #F59E0B' } : { borderLeft: '3px solid transparent' }}
     >
@@ -78,7 +107,7 @@ export function ConversationRow({ conversation, onClick }: ConversationRowProps)
             <span className={`text-xs truncate ${hasDeleted ? 'text-amber-800 font-semibold' : 'text-content-secondary'}`}>
               {hasDeleted
                 ? `${conversation.deletedCount} deleted message${conversation.deletedCount > 1 ? 's' : ''} recovered`
-                : 'Tap to view timeline'}
+                : 'Tap to view chat'}
             </span>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">

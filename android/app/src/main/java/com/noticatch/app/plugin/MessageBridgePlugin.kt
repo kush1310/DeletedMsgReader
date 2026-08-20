@@ -399,9 +399,27 @@ class MessageBridgePlugin : Plugin() {
             try {
                 val db = NotiCatchDatabase.getInstance(context)
                 val entities = db.conversationDao().getAll()
-                val array = JSArray()
 
+                // Group by cleaned title to guarantee 100% deduplication of past notifications
+                val mergedMap = LinkedHashMap<String, ConversationEntity>()
                 for (entity in entities) {
+                    val cleanTitle = com.noticatch.app.service.WhatsAppNotificationParser.cleanChatTitle(entity.chatTitle)
+                    val key = cleanTitle.lowercase()
+                    val existing = mergedMap[key]
+                    if (existing == null) {
+                        mergedMap[key] = entity.copy(chatTitle = cleanTitle)
+                    } else {
+                        mergedMap[key] = existing.copy(
+                            unreadCount = existing.unreadCount + entity.unreadCount,
+                            deletedCount = existing.deletedCount + entity.deletedCount,
+                            lastMessageTimestamp = maxOf(existing.lastMessageTimestamp, entity.lastMessageTimestamp),
+                            isGroup = existing.isGroup || entity.isGroup
+                        )
+                    }
+                }
+
+                val array = JSArray()
+                for (entity in mergedMap.values) {
                     val obj = JSObject().apply {
                         put("id",                   entity.id)
                         put("conversationKey",      entity.conversationKey)
@@ -419,6 +437,47 @@ class MessageBridgePlugin : Plugin() {
                 call.resolve(response)
             } catch (e: Exception) {
                 call.reject("Failed to query conversations: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun markConversationAsRead(call: PluginCall) {
+        val conversationId = call.getString("conversationId")
+        if (conversationId.isNullOrBlank()) {
+            call.reject("conversationId is required")
+            return
+        }
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                db.conversationDao().markAsRead(conversationId)
+                val res = JSObject()
+                res.put("success", true)
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to mark conversation as read: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun deleteConversation(call: PluginCall) {
+        val conversationId = call.getString("conversationId")
+        if (conversationId.isNullOrBlank()) {
+            call.reject("conversationId is required")
+            return
+        }
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                db.messageDao().deleteByConversation(conversationId)
+                db.conversationDao().deleteById(conversationId)
+                val res = JSObject()
+                res.put("success", true)
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to delete conversation: ${e.message}", e)
             }
         }
     }

@@ -22,7 +22,7 @@ import java.util.UUID
  *
  * High-reliability Android NotificationListenerService for NotiCatch.
  * Delegates message extraction to WhatsAppNotificationParser and persists records
- * to local Room SQLite with SHA-256 integrity signatures, edit revisions, and duration metadata.
+ * to local Room SQLite with sequential burst handling, duplicate prevention, and SHA-256 signatures.
  */
 class NotificationListener : NotificationListenerService() {
 
@@ -70,13 +70,13 @@ class NotificationListener : NotificationListenerService() {
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
 
-        for (parsed in parsedList) {
-            if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
-                Log.d(TAG, "Suppressed OTP message from: ${parsed.senderName}")
-                continue
-            }
-
-            serviceScope.launch {
+        /* Execute all parsed messages in a single sequential coroutine job to prevent race conditions */
+        serviceScope.launch {
+            for (parsed in parsedList) {
+                if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
+                    Log.d(TAG, "Suppressed OTP message from: ${parsed.senderName}")
+                    continue
+                }
                 persistAndBroadcast(parsed)
             }
         }
@@ -91,36 +91,28 @@ class NotificationListener : NotificationListenerService() {
     }
 
     private suspend fun persistAndBroadcast(parsed: WhatsAppNotificationParser.ParsedMessage) {
-        val normalizedTitle = parsed.chatTitle.trim().lowercase()
-        val conversationKey = if (parsed.isGroup) {
-            "group_${parsed.packageName}_$normalizedTitle"
-        } else {
-            "direct_${parsed.packageName}_$normalizedTitle"
+        val cleanTitle = WhatsAppNotificationParser.cleanChatTitle(parsed.chatTitle)
+        val normalizedTitle = cleanTitle.lowercase().replace(Regex("\\s+"), " ")
+        val conversationKey = "${parsed.packageName}_$normalizedTitle"
+
+        /* 1. Resolve or create parent conversation (with title fallback to prevent split threads) */
+        var conversation = database.conversationDao().findByKey(conversationKey)
+        if (conversation == null) {
+            conversation = database.conversationDao().findByTitle(cleanTitle)
         }
 
-        /* 1. Resolve or create parent conversation */
-        var conversation = database.conversationDao().findByKey(conversationKey)
         if (conversation == null) {
             conversation = ConversationEntity(
                 id                   = UUID.randomUUID().toString(),
                 conversationKey      = conversationKey,
-                chatTitle            = parsed.chatTitle,
+                chatTitle            = cleanTitle,
                 isGroup              = parsed.isGroup,
                 unreadCount          = 1,
                 lastMessageTimestamp = parsed.timestamp,
                 deletedCount         = if (parsed.isDeletion) 1 else 0,
             )
             database.conversationDao().insert(conversation)
-            Log.i(TAG, "Created conversation: key=$conversationKey, title=${parsed.chatTitle}")
-        } else {
-            database.conversationDao().update(
-                conversation.copy(
-                    chatTitle            = parsed.chatTitle,
-                    lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
-                    unreadCount          = conversation.unreadCount + 1,
-                    deletedCount         = if (parsed.isDeletion) conversation.deletedCount + 1 else conversation.deletedCount,
-                )
-            )
+            Log.i(TAG, "Created unified conversation: key=$conversationKey, title=$cleanTitle")
         }
 
         /* 2. Deletion signal processing */
@@ -135,11 +127,19 @@ class NotificationListener : NotificationListenerService() {
 
             if (existing != null) {
                 database.messageDao().update(existing.copy(isDeletedBySender = true))
+                database.conversationDao().update(
+                    conversation.copy(
+                        chatTitle            = cleanTitle,
+                        lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
+                        deletedCount         = conversation.deletedCount + 1,
+                    )
+                )
                 Log.i(TAG, "Marked message as deleted: id=${existing.id}, sender=${existing.senderName}")
                 broadcastNewMessage(existing.senderName, existing.messageText, conversation.id, true, parsed.timestamp)
                 return
             } else {
                 Log.d(TAG, "Deletion signal received but no prior matching message in 72h window.")
+                return
             }
         }
 
@@ -155,15 +155,32 @@ class NotificationListener : NotificationListenerService() {
                     editedAt     = parsed.timestamp,
                 )
                 database.messageDao().update(updated)
+                database.conversationDao().update(
+                    conversation.copy(
+                        chatTitle            = cleanTitle,
+                        lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
+                    )
+                )
                 Log.i(TAG, "Updated message edit revision: id=${existing.id}")
                 broadcastNewMessage(existing.senderName, parsed.messageText, conversation.id, false, parsed.timestamp)
                 return
             }
         }
 
-        /* 4. Standard message insertion */
+        /* 4. Standard message insertion with sliding-window deduplication */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
+
+            /* Deduplication check: Do not re-insert identical message from WhatsApp update bundles */
+            val minTime = parsed.timestamp - 300000L // -5 minutes
+            val maxTime = parsed.timestamp + 300000L // +5 minutes
+            val duplicate = database.messageDao().findDuplicate(conversation.id, parsed.senderName, text, minTime, maxTime)
+
+            if (duplicate != null) {
+                Log.d(TAG, "Skipped duplicate message: '${text.take(20)}...' for chat '$cleanTitle'")
+                return
+            }
+
             val rawSignature = "${conversation.id}|${parsed.senderName}|${parsed.timestamp}|$text"
             val sha256Signature = computeSha256(rawSignature)
 
@@ -188,7 +205,17 @@ class NotificationListener : NotificationListenerService() {
                 purgedAt             = null,
             )
             database.messageDao().insert(message)
-            Log.i(TAG, "Persisted message: chat='${parsed.chatTitle}', sender='${parsed.senderName}'")
+
+            /* Update parent conversation metadata */
+            database.conversationDao().update(
+                conversation.copy(
+                    chatTitle            = cleanTitle,
+                    lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
+                    unreadCount          = conversation.unreadCount + 1,
+                )
+            )
+
+            Log.i(TAG, "Persisted message: chat='$cleanTitle', sender='${parsed.senderName}'")
             broadcastNewMessage(parsed.senderName, text, conversation.id, false, parsed.timestamp)
         }
     }

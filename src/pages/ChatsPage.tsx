@@ -6,11 +6,10 @@
  * Real-time refresh: listens for the 'noticatch:new-message' CustomEvent
  * dispatched by the Capacitor bridge when a new notification is captured.
  *
- * System Reliability:
- *   - Auto-detects Android Notification Access permission status
- *   - Displays inline 1-tap permission recovery banner if disabled
- *   - Includes Xiaomi/MIUI/HyperOS background optimization guides
- *   - Supports 1-tap Test Notification trigger directly from EmptyState
+ * Features:
+ *   - Auto-deduplicated conversation threads
+ *   - Long-press action sheet (Export PDF/CSV, Mark as Read, Delete Chat)
+ *   - Real-time unread badge clearance
  *   - Filter tabs: [All] [Has Deleted] [Groups] [Direct]
  */
 
@@ -21,23 +20,29 @@ import {
   RefreshCw,
   BellOff,
   Zap,
+  CheckCircle2,
+  FileText,
+  Share2,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';
-import { SearchInput, EmptyState, LoadingSpinner } from '@/components/common';
+import { SearchInput, EmptyState, LoadingSpinner, ConfirmationModal } from '@/components/common';
 import { ConversationRow } from '@/components/chat';
 import {
   getConversations,
   checkNotificationListenerEnabled,
   requestNotificationListenerPermission,
-  openAutostartSettings,
-  requestBatteryOptimizationExemption,
   simulateNotification,
+  markConversationAsReadNative,
+  deleteConversationNative,
+  exportChatAsPDFNative,
+  exportChatAsCSVNative,
   isNativeAndroid,
 } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
 import type { Conversation } from '@/types';
 
-/** Valid filter modes for the conversation list. */
 type ChatFilter = 'all' | 'deleted' | 'groups' | 'direct';
 
 const FILTER_LABELS: Record<ChatFilter, string> = {
@@ -47,14 +52,6 @@ const FILTER_LABELS: Record<ChatFilter, string> = {
   direct:  'Direct',
 };
 
-/**
- * ChatsPage
- *
- * Renders the full conversation list with real captured data, live updates,
- * permission status detection, and manual refresh.
- *
- * @returns {JSX.Element}
- */
 export function ChatsPage() {
   const navigate = useNavigate();
   const isNative = isNativeAndroid();
@@ -66,16 +63,13 @@ export function ChatsPage() {
   const [activeFilter,          setActiveFilter]          = useState<ChatFilter>('all');
   const [lastSynced,            setLastSynced]            = useState<Date | null>(null);
   const [hasNotifAccess,        setHasNotifAccess]        = useState<boolean | null>(null);
-  const [showMiuiGuide,         setShowMiuiGuide]         = useState(false);
   const [isSimulating,          setIsSimulating]          = useState(false);
 
-  /**
-   * verifyPermissionState
-   *
-   * Queries Android settings to check if NotificationListenerService is granted.
-   *
-   * @returns {Promise<void>}
-   */
+  /* Long-Press Action Sheet state */
+  const [selectedChat,          setSelectedChat]          = useState<Conversation | null>(null);
+  const [showDeleteConfirm,     setShowDeleteConfirm]     = useState(false);
+  const [actionFeedback,        setActionFeedback]        = useState<string | null>(null);
+
   const verifyPermissionState = useCallback(async (): Promise<void> => {
     if (!isNative) {
       setHasNotifAccess(true);
@@ -85,14 +79,6 @@ export function ChatsPage() {
     setHasNotifAccess(enabled);
   }, [isNative]);
 
-  /**
-   * loadData
-   *
-   * Fetches all conversations from the native Room SQLite database.
-   * Updates the lastSynced timestamp on success.
-   *
-   * @returns {Promise<void>}
-   */
   const loadData = useCallback(async (): Promise<void> => {
     const data = await getConversations();
     setConversations(data);
@@ -100,13 +86,6 @@ export function ChatsPage() {
     setIsLoading(false);
   }, []);
 
-  /**
-   * handleRefresh
-   *
-   * Manually re-fetches conversation data and re-verifies system permissions.
-   *
-   * @returns {Promise<void>}
-   */
   async function handleRefresh(): Promise<void> {
     setIsRefreshing(true);
     await Promise.all([loadData(), verifyPermissionState()]);
@@ -118,7 +97,6 @@ export function ChatsPage() {
     verifyPermissionState();
   }, [loadData, verifyPermissionState]);
 
-  /* Re-check permission and refresh data whenever app regains focus */
   useEffect(() => {
     function handleFocus(): void {
       verifyPermissionState();
@@ -132,7 +110,6 @@ export function ChatsPage() {
     };
   }, [verifyPermissionState, loadData]);
 
-  /* Foreground periodic sync every 3.5 seconds */
   useEffect(() => {
     const timer = setInterval(() => {
       loadData();
@@ -140,7 +117,6 @@ export function ChatsPage() {
     return () => clearInterval(timer);
   }, [loadData]);
 
-  /* Real-time refresh when Capacitor broadcasts a new WhatsApp message */
   useEffect(() => {
     function handleNewMessage(): void {
       loadData();
@@ -149,11 +125,6 @@ export function ChatsPage() {
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
 
-  /**
-   * handleTriggerTest
-   *
-   * Injects a sample message from "Mumma" to verify the database and UI pipeline.
-   */
   async function handleTriggerTest(): Promise<void> {
     setIsSimulating(true);
     await simulateNotification({
@@ -165,6 +136,43 @@ export function ChatsPage() {
     });
     await loadData();
     setIsSimulating(false);
+  }
+
+  /* Actions from Long-Press Sheet */
+  async function handleMarkAsRead(chat: Conversation) {
+    await markConversationAsReadNative(chat.id);
+    setSelectedChat(null);
+    await loadData();
+    setActionFeedback('Marked as read');
+    setTimeout(() => setActionFeedback(null), 2000);
+  }
+
+  async function handleExportPDF(chat: Conversation) {
+    const res = await exportChatAsPDFNative(chat.id, chat.chatTitle);
+    setSelectedChat(null);
+    if (res.filePath) {
+      setActionFeedback(`Exported ${res.rowCount} messages to PDF`);
+      setTimeout(() => setActionFeedback(null), 2500);
+    }
+  }
+
+  async function handleExportCSV(chat: Conversation) {
+    const res = await exportChatAsCSVNative(chat.id, chat.chatTitle);
+    setSelectedChat(null);
+    if (res.filePath) {
+      setActionFeedback(`Exported ${res.rowCount} messages to CSV`);
+      setTimeout(() => setActionFeedback(null), 2500);
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!selectedChat) return;
+    await deleteConversationNative(selectedChat.id);
+    setShowDeleteConfirm(false);
+    setSelectedChat(null);
+    await loadData();
+    setActionFeedback('Chat deleted');
+    setTimeout(() => setActionFeedback(null), 2000);
   }
 
   /* Apply Boyer-Moore-Horspool + Damerau-Levenshtein search ranking */
@@ -226,7 +234,7 @@ export function ChatsPage() {
         }
       />
 
-      {/* Permission Warning Banner (if Notification Access is disabled) */}
+      {/* Permission Warning Banner */}
       {hasNotifAccess === false && (
         <div className="pt-14 px-4 pt-3 pb-1 z-30 animate-slide-down">
           <div className="card p-3.5 bg-amber-50 border-2 border-amber-300 shadow-card space-y-2.5">
@@ -248,75 +256,38 @@ export function ChatsPage() {
               <button
                 type="button"
                 id="enable-notif-access-btn"
-                onClick={async () => {
-                  await requestNotificationListenerPermission();
-                }}
-                className="btn-primary flex-1 text-xs py-2 text-center"
+                onClick={requestNotificationListenerPermission}
+                className="btn-neu-primary flex-1 text-2xs py-2 font-black tracking-wide"
               >
-                Enable in Settings →
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowMiuiGuide(!showMiuiGuide)}
-                className="px-2.5 py-2 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-2xs font-bold hover:bg-amber-200 transition-colors"
-              >
-                Xiaomi / MIUI Guide
+                1. Enable Notification Access
               </button>
             </div>
-
-            {/* Xiaomi / MIUI / HyperOS Special Instructions */}
-            {showMiuiGuide && (
-              <div className="p-2.5 rounded-xl bg-white border border-amber-200 text-2xs text-content-secondary space-y-2 animate-fade-in font-medium">
-                <p className="font-bold text-content-primary">For Xiaomi, Redmi, Poco & Vivo devices:</p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>In Settings → Special permissions → Allow <strong>NotiCatch</strong>.</li>
-                  <li>Enable <strong>Autostart</strong> so the app runs when screen is off.</li>
-                  <li>Set Battery Saver to <strong>No restrictions</strong>.</li>
-                </ol>
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={openAutostartSettings}
-                    className="flex-1 py-1.5 rounded-lg bg-surface-700 border border-surface-600 text-content-primary font-bold text-center hover:bg-surface-600"
-                  >
-                    Open Autostart Settings
-                  </button>
-                  <button
-                    type="button"
-                    onClick={requestBatteryOptimizationExemption}
-                    className="flex-1 py-1.5 rounded-lg bg-surface-700 border border-surface-600 text-content-primary font-bold text-center hover:bg-surface-600"
-                  >
-                    Battery Exemption
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* Fixed Search + Filter Block */}
-      <div className={`${hasNotifAccess === false ? 'pt-2' : 'pt-14'} z-20 bg-surface-800 border-b border-surface-700/80 shadow-xs`}>
-        <div className="px-4 pt-2.5 pb-2">
-          <SearchInput
-            id="chats-search-input"
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search conversations..."
-            matchCount={searchQuery ? filteredResults.length : undefined}
-            algorithmLabel="Boyer-Moore-Horspool O(n/m)"
-          />
+      {/* Action Toast Feedback */}
+      {actionFeedback && (
+        <div className="fixed top-16 left-4 right-4 z-50 p-2.5 rounded-xl bg-accent text-white text-xs font-bold text-center shadow-lg animate-slide-down">
+          {actionFeedback}
         </div>
+      )}
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-2 px-4 pb-2.5 overflow-x-auto" role="tablist" aria-label="Conversation filters">
-          {(Object.keys(FILTER_LABELS) as ChatFilter[]).map(filter => (
+      {/* Search and Filters */}
+      <div className={`px-4 pt-3 pb-2 space-y-2 z-20 ${hasNotifAccess === false ? '' : 'pt-16'}`}>
+        <SearchInput
+          id="chats-search-input"
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search conversations..."
+        />
+
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {(['all', 'deleted', 'groups', 'direct'] as ChatFilter[]).map(filter => (
             <button
               key={filter}
-              id={`chats-filter-${filter}`}
               type="button"
-              role="tab"
+              id={`filter-pill-${filter}`}
               aria-selected={activeFilter === filter}
               onClick={() => setActiveFilter(filter)}
               className={activeFilter === filter ? 'filter-pill-active' : 'filter-pill-inactive'}
@@ -340,6 +311,7 @@ export function ChatsPage() {
                 <ConversationRow
                   conversation={result.item}
                   onClick={handleConversationSelect}
+                  onLongPress={chat => setSelectedChat(chat)}
                 />
               </li>
             ))}
@@ -380,6 +352,91 @@ export function ChatsPage() {
           </div>
         )}
       </div>
+
+      {/* Long-Press Action Sheet Modal */}
+      {selectedChat && !showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 animate-fade-in"
+          onClick={() => setSelectedChat(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-surface-900 rounded-3xl p-5 shadow-skeuo-heavy border border-white/80 animate-slide-up space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-surface-700">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-extrabold text-content-primary truncate">
+                  {selectedChat.chatTitle}
+                </h3>
+                <p className="text-2xs text-content-muted font-medium">
+                  {selectedChat.isGroup ? 'Group Chat' : 'Direct Contact'} &middot; {selectedChat.deletedCount} deleted
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedChat(null)}
+                className="w-7 h-7 rounded-full bg-surface-800 flex items-center justify-center text-content-muted"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => handleMarkAsRead(selectedChat)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-surface-850 hover:bg-surface-700 text-left transition-colors text-xs font-bold text-content-primary"
+              >
+                <CheckCircle2 className="w-4 h-4 text-accent" />
+                <span>Mark as Read</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportPDF(selectedChat)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-surface-850 hover:bg-surface-700 text-left transition-colors text-xs font-bold text-content-primary"
+              >
+                <FileText className="w-4 h-4 text-accent" />
+                <span>Export Chat to PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportCSV(selectedChat)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-surface-850 hover:bg-surface-700 text-left transition-colors text-xs font-bold text-content-primary"
+              >
+                <Share2 className="w-4 h-4 text-accent" />
+                <span>Export Chat to CSV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-left transition-colors text-xs font-bold text-rose-700 border border-rose-200"
+              >
+                <Trash2 className="w-4 h-4 text-rose-700" />
+                <span>Delete Entire Chat</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {selectedChat && (
+        <ConfirmationModal
+          isOpen={showDeleteConfirm}
+          title={`Delete "${selectedChat.chatTitle}"?`}
+          description="All captured messages and deletion history for this conversation will be permanently removed from local SQLite storage."
+          confirmLabel="Delete Chat"
+          confirmVariant="danger"
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => {
+            setShowDeleteConfirm(false);
+            setSelectedChat(null);
+          }}
+        />
+      )}
     </div>
   );
 }

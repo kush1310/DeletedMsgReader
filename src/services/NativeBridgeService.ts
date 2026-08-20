@@ -33,6 +33,8 @@ type CapacitorWindow = {
         wipeAllData:                   ()                                                  => Promise<{ wiped: boolean }>;
         exportChatAsPDF:               (args: { conversationId: string; chatTitle: string }) => Promise<{ filePath: string; rowCount: number }>;
         exportChatAsCSV:               (args: { conversationId: string; chatTitle: string }) => Promise<{ filePath: string; rowCount: number }>;
+        markConversationAsRead:        (args: { conversationId: string })                  => Promise<{ success: boolean }>;
+        deleteConversation:            (args: { conversationId: string })                  => Promise<{ success: boolean }>;
         setSpamFilter:                 (args: { enabled: boolean })                        => Promise<{ updated: boolean }>;
         getAuthState:                  ()                                                  => Promise<{ isAuthenticated: boolean }>;
       };
@@ -277,6 +279,28 @@ export async function getDeletedMessages(): Promise<Message[]> {
     return result.messages ?? [];
   } catch {
     return [];
+  }
+}
+
+export async function markConversationAsReadNative(conversationId: string): Promise<void> {
+  try {
+    const bridge = getBridge();
+    if (bridge) {
+      await bridge.markConversationAsRead({ conversationId });
+    }
+  } catch {
+    /* Non-critical */
+  }
+}
+
+export async function deleteConversationNative(conversationId: string): Promise<void> {
+  try {
+    const bridge = getBridge();
+    if (bridge) {
+      await bridge.deleteConversation({ conversationId });
+    }
+  } catch {
+    /* Non-critical */
   }
 }
 
