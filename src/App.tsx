@@ -20,16 +20,18 @@
 import { type ReactNode, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { BottomNavbar } from '@/components/navigation';
-import { LandingPage      } from '@/pages/LandingPage';
-import { LoginPage        } from '@/pages/LoginPage';
-import { SetupPage        } from '@/pages/SetupPage';
-import { ChatsPage        } from '@/pages/ChatsPage';
-import { ChatDetailPage   } from '@/pages/ChatDetailPage';
-import { DeletedOnlyPage  } from '@/pages/DeletedOnlyPage';
-import { SettingsPage     } from '@/pages/SettingsPage';
-import { ContactUsPage    } from '@/pages/ContactUsPage';
-import { FeedbackPage     } from '@/pages/FeedbackPage';
-import { loadAppSettings  } from '@/services/NativeBridgeService';
+import { LandingPage           } from '@/pages/LandingPage';
+import { LoginPage             } from '@/pages/LoginPage';
+import { PrivacyOnboardingPage } from '@/pages/PrivacyOnboardingPage';
+import { SetupPage             } from '@/pages/SetupPage';
+import { ChatsPage             } from '@/pages/ChatsPage';
+import { ChatDetailPage        } from '@/pages/ChatDetailPage';
+import { DeletedOnlyPage       } from '@/pages/DeletedOnlyPage';
+import { SettingsPage          } from '@/pages/SettingsPage';
+import { ContactUsPage         } from '@/pages/ContactUsPage';
+import { FeedbackPage          } from '@/pages/FeedbackPage';
+import { loadAppSettings       } from '@/services/NativeBridgeService';
+import { hasAcceptedPrivacyPolicy } from '@/services/SecurityService';
 import type { NavTab } from '@/types';
 
 /** Routes that show the bottom navigation bar */
@@ -43,7 +45,7 @@ const PATH_TO_TAB: Record<string, NavTab> = {
 };
 
 /** Routes that are exempt from session timeout enforcement */
-const AUTH_EXEMPT_ROUTES = new Set(['/login', '/setup']);
+const AUTH_EXEMPT_ROUTES = new Set(['/login', '/setup', '/onboarding/privacy']);
 
 /**
  * SessionGuard
@@ -60,6 +62,13 @@ function SessionGuard() {
   const location = useLocation();
 
   const checkSession = useCallback(async (): Promise<void> => {
+    if (!hasAcceptedPrivacyPolicy()) {
+      if (location.pathname !== '/onboarding/privacy') {
+        navigate('/onboarding/privacy', { replace: true });
+      }
+      return;
+    }
+
     if (AUTH_EXEMPT_ROUTES.has(location.pathname)) return;
 
     const sessionStart = sessionStorage.getItem('session_start');
@@ -155,6 +164,7 @@ export function App() {
       <Routes>
         <Route path="/"        element={<Navigate to="/login" replace />} />
         <Route path="/login"   element={<LoginPage />} />
+        <Route path="/onboarding/privacy" element={<PrivacyOnboardingPage />} />
         <Route path="/setup"   element={<SetupPage />} />
         <Route path="/dashboard" element={<LandingPage />} />
         <Route path="/landing"   element={<LandingPage />} />

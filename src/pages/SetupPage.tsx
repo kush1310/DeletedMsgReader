@@ -1,14 +1,8 @@
 /**
  * SetupPage
  *
- * Permission onboarding wizard that automatically launches the Android
- * notification listener settings panel on mount (native only).
- * Polls every 1.5 seconds for permission grant, then auto-proceeds.
- *
- * Flow:
- *   1. Mount → auto-launch notification settings (no user tap required).
- *   2. Poll until permission granted → auto-request battery exemption.
- *   3. Both complete → auto-navigate to /chats.
+ * Permission onboarding wizard for NotiCatch.
+ * Styled in Anthropic Claude warm editorial aesthetic.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -23,14 +17,6 @@ import {
   isNativeAndroid,
 } from '@/services/NativeBridgeService';
 
-/**
- * SetupPage
- *
- * Renders the permission setup wizard. Auto-opens the system permission
- * dialog on mount for a frictionless onboarding experience.
- *
- * @redirects - /chats once notification access is confirmed.
- */
 export function SetupPage() {
   const navigate = useNavigate();
   const native   = isNativeAndroid();
@@ -42,7 +28,6 @@ export function SetupPage() {
   const [batteryRequested, setBatteryRequested] = useState(false);
   const hasAutoNavigated = useRef(false);
 
-  /* Step 1: Check initial permission state on mount */
   useEffect(() => {
     async function checkInitial(): Promise<void> {
       if (native) {
@@ -50,20 +35,17 @@ export function SetupPage() {
         setNotifGranted(enabled);
         setIsChecking(false);
 
-        /* Auto-launch settings immediately if not yet granted */
         if (!enabled) {
           await requestNotificationListenerPermission();
           setAutoLaunched(true);
         }
       } else {
-        /* Web preview: simulate not-granted state */
         setIsChecking(false);
       }
     }
     checkInitial();
   }, [native]);
 
-  /* Step 2: Poll every 1.5s for notification permission grant */
   useEffect(() => {
     if (notifGranted || !native) return;
 
@@ -78,7 +60,6 @@ export function SetupPage() {
     return () => clearInterval(intervalId);
   }, [notifGranted, native]);
 
-  /* Step 3: Auto-request battery exemption once notif access is granted */
   useEffect(() => {
     if (!notifGranted || batteryRequested || !native) return;
     setBatteryRequested(true);
@@ -88,34 +69,18 @@ export function SetupPage() {
     });
   }, [notifGranted, batteryRequested, native]);
 
-  /* Step 4: Auto-navigate to /chats once both permissions are handled */
   useEffect(() => {
     if (notifGranted && !hasAutoNavigated.current) {
       hasAutoNavigated.current = true;
-      /* Small delay so user sees the success state before transition */
       setTimeout(() => navigate('/chats', { replace: true }), 800);
     }
   }, [notifGranted, navigate]);
 
-  /**
-   * handleManualNotifRequest
-   *
-   * Manual fallback handler if user dismissed the system dialog.
-   * Re-opens the notification settings screen.
-   */
   async function handleManualNotifRequest(): Promise<void> {
     await requestNotificationListenerPermission();
     setAutoLaunched(true);
   }
 
-  /**
-   * handleContinue
-   *
-   * Manual continue button — only active once notification access is confirmed.
-   * Allows user to proceed manually without waiting for the auto-navigate.
-   *
-   * @redirects - /chats when notifGranted is true.
-   */
   function handleContinue(): void {
     if (notifGranted) {
       navigate('/chats', { replace: true });
@@ -124,53 +89,53 @@ export function SetupPage() {
 
   if (isChecking) {
     return (
-      <main className="min-h-screen bg-surface-800 flex items-center justify-center">
+      <main className="min-h-screen bg-canvas flex items-center justify-center">
         <LoadingSpinner size="lg" />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-surface-800 flex flex-col">
+    <main className="min-h-screen bg-canvas flex flex-col">
       <div className="px-6 pt-safe pb-8 flex flex-col gap-6 flex-1 max-w-lg mx-auto w-full">
 
         {/* Brand header */}
         <div className="pt-6 flex flex-col items-center gap-2 animate-fade-in text-center">
-          <div className="w-20 h-20 rounded-2xl bg-surface-900 border border-white shadow-neu-flat flex items-center justify-center relative overflow-hidden mb-1">
+          <div className="w-20 h-20 rounded-2xl bg-white border border-surface-700 shadow-card flex items-center justify-center relative overflow-hidden mb-1">
             <ThreeSecurityCanvas size={80} active={!notifGranted} />
           </div>
           <AppBrand />
-          <p className="text-content-muted text-xs font-semibold max-w-[280px]">
+          <p className="text-content-muted text-xs font-medium max-w-[280px]">
             Grant system permissions to enable instant WhatsApp notification capture.
           </p>
         </div>
 
         {/* Permission steps */}
-        <div className="space-y-3 animate-slide-up delay-100">
+        <div className="space-y-3 animate-slide-up">
 
           {/* Notification Access */}
-          <div className="step-card shadow-neu-flat">
-            <div className={`step-icon ${notifGranted ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-surface-800 text-accent border-surface-700'}`}>
+          <div className="step-card shadow-card">
+            <div className={`step-icon ${notifGranted ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-surface-850 text-accent border-surface-700'}`}>
               <Bell className="w-5 h-5" strokeWidth={2.2} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-bold text-content-primary">Notification Access</p>
-                <span className="text-2xs text-accent border border-accent/30 bg-accent-muted px-2 py-0.5 rounded font-bold">Required</span>
+                <p className="text-xs sm:text-sm font-bold text-content-primary">Notification Access</p>
+                <span className="text-2xs text-accent border border-accent/20 bg-accent-muted px-2 py-0.5 rounded-full font-bold">Required</span>
               </div>
               <p className="text-xs text-content-muted leading-relaxed mb-3 font-medium">
                 Intercepts incoming WhatsApp notifications to preserve messages before deletion.
               </p>
 
               {notifGranted ? (
-                <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-extrabold">
+                <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold">
                   <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} />
-                  Permission Active
+                  <span>Permission Active</span>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
                   {native && autoLaunched && (
-                    <p className="text-xs text-amber-700 font-semibold">
+                    <p className="text-xs text-amber-800 font-medium">
                       Settings opened — enable NotiCatch in the list, then return here.
                     </p>
                   )}
@@ -178,7 +143,7 @@ export function SetupPage() {
                     id="grant-notification-button"
                     type="button"
                     onClick={handleManualNotifRequest}
-                    className="btn-primary py-2 px-4 text-xs self-start"
+                    className="btn-neu-primary py-2 px-4 text-xs self-start"
                   >
                     Re-open Settings
                   </button>
@@ -188,22 +153,22 @@ export function SetupPage() {
           </div>
 
           {/* Battery Optimization */}
-          <div className="step-card shadow-neu-flat">
-            <div className={`step-icon ${batteryGranted ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-surface-800 text-content-secondary border-surface-700'}`}>
+          <div className="step-card shadow-card">
+            <div className={`step-icon ${batteryGranted ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-surface-850 text-content-secondary border-surface-700'}`}>
               <BatteryCharging className="w-5 h-5" strokeWidth={2.2} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-bold text-content-primary">Battery Optimization Exemption</p>
-                <span className="text-2xs text-content-secondary border border-surface-600 px-2 py-0.5 rounded font-semibold">Recommended</span>
+                <p className="text-xs sm:text-sm font-bold text-content-primary">Battery Saver Exemption</p>
+                <span className="text-2xs text-content-secondary border border-surface-700 px-2 py-0.5 rounded-full font-medium">Recommended</span>
               </div>
               <p className="text-xs text-content-muted leading-relaxed font-medium">
-                Prevents Android Doze mode from sleeping the background listener daemon.
+                Prevents Android battery optimization from sleeping the background listener.
               </p>
               {batteryGranted && (
-                <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-extrabold mt-2">
+                <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold mt-2">
                   <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} />
-                  Exemption Active
+                  <span>Exemption Active</span>
                 </div>
               )}
             </div>
@@ -212,15 +177,15 @@ export function SetupPage() {
 
         {/* Waiting indicator */}
         {!notifGranted && native && (
-          <div className="card-neu flex items-center gap-3 p-4 border-amber-300 bg-gradient-to-r from-amber-50 to-amber-100/60 animate-fade-in">
-            <ShieldAlert className="w-5 h-5 text-amber-700 flex-shrink-0" strokeWidth={2.2} />
+          <div className="card flex items-center gap-3 p-4 border-[#F3D3A6] bg-[#FDF4E7] shadow-card animate-fade-in">
+            <ShieldAlert className="w-5 h-5 text-accent flex-shrink-0" strokeWidth={2.2} />
             <div>
-              <p className="text-xs text-amber-950 leading-relaxed font-semibold">
+              <p className="text-xs text-[#9C5418] leading-relaxed font-medium">
                 Waiting for notification access — enable <strong>NotiCatch</strong> in the system list, then return here.
               </p>
               <div className="flex items-center gap-1.5 mt-1.5">
                 <LoadingSpinner size="sm" />
-                <span className="text-2xs text-amber-700 font-medium">Checking every 1.5 seconds...</span>
+                <span className="text-2xs text-[#9C5418] font-medium">Checking every 1.5 seconds...</span>
               </div>
             </div>
           </div>
@@ -234,13 +199,13 @@ export function SetupPage() {
           type="button"
           onClick={handleContinue}
           disabled={!notifGranted}
-          className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+          className="btn-neu-primary w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-warm-sm"
         >
-          Continue to NotiCatch
+          <span>Continue to NotiCatch</span>
           <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
         </button>
 
-        <p className="text-2xs text-content-muted text-center font-semibold">
+        <p className="text-2xs text-content-muted text-center font-medium">
           Zero internet permissions. All data stored on-device only.
         </p>
       </div>

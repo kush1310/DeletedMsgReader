@@ -1,12 +1,8 @@
 /**
  * LandingPage (Dashboard)
  *
- * Primary overview screen displaying aggregate statistics for the
- * NotiCatch application: total messages captured, deleted messages
- * recovered, active conversations, and storage usage.
- *
- * Connected directly to NativeBridgeService to query real Room DB records
- * on Android, with real-time refresh upon receiving notification IPC events.
+ * Primary overview screen displaying aggregate statistics for NotiCatch.
+ * Styled in Anthropic Claude warm editorial aesthetic.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,30 +32,20 @@ interface StatCardProps {
   readonly id:      string;
 }
 
-/**
- * StatCard
- *
- * Individual metric display card with neumorphic relief.
- */
 function StatCard({ label, value, icon, accent = false, id }: StatCardProps) {
   return (
-    <div id={id} className="stat-card animate-fade-in">
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-1 shadow-skeuo-chip border border-white/80 ${accent ? 'bg-amber-100 text-amber-800' : 'bg-surface-800 text-accent'}`}>
+    <div id={id} className="card p-4 flex flex-col gap-1 shadow-card animate-fade-in">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-1 border ${accent ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-surface-850 text-accent border-surface-700'}`}>
         {icon}
       </div>
-      <span className={`text-2xl font-extrabold tabular-nums leading-tight tracking-tight ${accent ? 'text-amber-800' : 'text-content-primary'}`}>
+      <span className={`text-2xl font-bold tabular-nums leading-tight tracking-tight ${accent ? 'text-accent' : 'text-content-primary'}`}>
         {value}
       </span>
-      <span className="text-xs text-content-muted font-bold leading-tight">{label}</span>
+      <span className="text-2xs text-content-muted font-semibold leading-tight">{label}</span>
     </div>
   );
 }
 
-/**
- * LandingPage
- *
- * Renders the application dashboard in Neumorphic Light Mode.
- */
 export function LandingPage() {
   const navigate = useNavigate();
 
@@ -67,11 +53,6 @@ export function LandingPage() {
   const [deletedMessages, setDeletedMessages] = useState<Message[]>([]);
   const [isLoading,       setIsLoading]       = useState(true);
 
-  /**
-   * loadDashboardData
-   *
-   * Queries Room DB directly from the native bridge.
-   */
   const loadDashboardData = useCallback(async (): Promise<void> => {
     const [convs, deleted] = await Promise.all([
       getConversations(),
@@ -86,7 +67,6 @@ export function LandingPage() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  /* Real-time sync on new captured message */
   useEffect(() => {
     function handleNewMessage(): void {
       loadDashboardData();
@@ -117,7 +97,7 @@ export function LandingPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
         <TopAppBar title="Dashboard" />
         <div className="pt-14 flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -127,14 +107,14 @@ export function LandingPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
       <TopAppBar
         title="Dashboard"
-        subtitle="WhatsApp Notification Saver"
+        subtitle="Private Notification Vault"
         trailing={
           <IconButton
             id="landing-chats-nav-button"
-            icon={<TrendingUp className="w-5 h-5 text-accent" strokeWidth={2.2} />}
+            icon={<TrendingUp className="w-4 h-4 text-accent" strokeWidth={2.2} />}
             label="View chats"
             onClick={() => navigate('/chats')}
           />
@@ -144,16 +124,16 @@ export function LandingPage() {
       <div className="flex-1 overflow-y-auto pt-14 pb-20">
         {/* Active service banner with 3D Canvas */}
         <div className="px-4 pt-4 pb-2 animate-fade-in">
-          <div className="card-neu flex items-center gap-3 px-4 py-3 border-emerald-300 bg-gradient-to-r from-emerald-50 to-emerald-100/50">
+          <div className="card flex items-center gap-3 px-4 py-3 border-emerald-300 bg-emerald-50/50 shadow-xs">
             <div className="relative flex-shrink-0">
-              <ThreeSecurityCanvas size={42} active={true} />
+              <ThreeSecurityCanvas size={40} active={true} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-extrabold text-emerald-950">Notification Listener Active</p>
-              <p className="text-2xs text-emerald-800 font-semibold">Real-time local WhatsApp capture active</p>
+              <p className="text-xs font-bold text-emerald-950">Notification Listener Active</p>
+              <p className="text-2xs text-emerald-800 font-medium">Real-time local message capture active</p>
             </div>
             <div className="flex items-center gap-1">
-              <Radio className="w-4 h-4 text-emerald-700 animate-pulse-soft" strokeWidth={2.5} />
+              <Radio className="w-4 h-4 text-emerald-700 animate-pulse" strokeWidth={2.5} />
             </div>
           </div>
         </div>
@@ -162,39 +142,39 @@ export function LandingPage() {
         <div className="px-4 py-3 flex items-center justify-between">
           <div>
             <AppBrand className="mb-0.5" />
-            <p className="text-content-muted text-xs font-bold">
+            <p className="text-content-muted text-xs font-medium">
               {deletedMessages.length > 0
-                ? `${deletedMessages.length} deleted message${deletedMessages.length > 1 ? 's' : ''} captured & preserved`
-                : 'Monitoring incoming WhatsApp alerts'}
+                ? `${deletedMessages.length} deleted message${deletedMessages.length > 1 ? 's' : ''} recovered & preserved`
+                : 'Monitoring incoming message alerts'}
             </p>
           </div>
         </div>
 
-        {/* Stats grid with Neumorphic elevation */}
+        {/* Stats grid */}
         <div className="px-4 pb-2">
           <div className="grid grid-cols-2 gap-3.5">
             <StatCard
               id="stat-captured"
-              icon={<MessageCircle className="w-5 h-5" strokeWidth={2.2} />}
+              icon={<MessageCircle className="w-4 h-4" strokeWidth={2} />}
               label="Messages Captured"
               value={totalCapturedCount}
             />
             <StatCard
               id="stat-deleted"
-              icon={<Trash2 className="w-5 h-5" strokeWidth={2.2} />}
+              icon={<Trash2 className="w-4 h-4" strokeWidth={2} />}
               label="Deleted Recovered"
               value={deletedMessages.length}
               accent
             />
             <StatCard
               id="stat-conversations"
-              icon={<Users className="w-5 h-5" strokeWidth={2.2} />}
+              icon={<Users className="w-4 h-4" strokeWidth={2} />}
               label="Conversations"
               value={conversations.length}
             />
             <StatCard
               id="stat-storage"
-              icon={<HardDrive className="w-5 h-5" strokeWidth={2.2} />}
+              icon={<HardDrive className="w-4 h-4" strokeWidth={2} />}
               label="Storage Used"
               value={formatStorageSize(estimatedStorageBytes)}
             />
@@ -205,40 +185,40 @@ export function LandingPage() {
         {recentWithDeleted.length > 0 && (
           <div className="px-4 pt-4">
             <div className="flex items-center justify-between mb-2.5">
-              <h2 className="text-sm font-extrabold text-content-primary">Recent Deleted Messages</h2>
+              <h2 className="font-serif text-sm font-bold text-content-primary">Recent Deleted Messages</h2>
               <button
                 id="view-all-deleted-button"
                 type="button"
                 onClick={() => navigate('/deleted')}
-                className="text-xs text-accent hover:underline transition-colors font-extrabold flex items-center gap-0.5"
+                className="text-xs text-accent hover:underline transition-colors font-bold flex items-center gap-0.5"
               >
-                View all
-                <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+                <span>View all</span>
+                <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.2} />
               </button>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="card overflow-hidden divide-y divide-surface-700 shadow-card">
               {recentWithDeleted.map((conv, index) => (
                 <button
                   key={conv.id}
                   id={`landing-conv-${conv.id}`}
                   type="button"
                   onClick={() => navigate(`/chats/${conv.id}`)}
-                  className="card-interactive w-full flex items-center gap-3 px-4 py-3.5 text-left animate-slide-up"
-                  style={{ animationDelay: `${index * 60}ms` }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-850 active:bg-surface-750 transition-colors animate-slide-up"
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <Avatar name={conv.chatTitle} isGroup={conv.isGroup} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-content-primary truncate">{conv.chatTitle}</p>
-                    <p className="text-xs text-content-muted font-semibold">
+                    <p className="text-xs sm:text-sm font-bold text-content-primary truncate">{conv.chatTitle}</p>
+                    <p className="text-2xs text-content-muted font-medium">
                       {conv.deletedCount} deleted message{conv.deletedCount > 1 ? 's' : ''} recovered
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="w-5.5 h-5.5 px-1 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 text-2xs font-extrabold shadow-skeuo-chip">
+                    <span className="min-w-5 h-5 px-1.5 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 text-2xs font-bold shadow-xs">
                       {conv.deletedCount}
                     </span>
-                    <ChevronRight className="w-4 h-4 text-content-muted" strokeWidth={2.2} />
+                    <ChevronRight className="w-4 h-4 text-content-muted" strokeWidth={2} />
                   </div>
                 </button>
               ))}
@@ -249,13 +229,13 @@ export function LandingPage() {
         {/* Empty deleted state */}
         {recentWithDeleted.length === 0 && (
           <div className="px-4 pt-4">
-            <div className="card-neu flex flex-col items-center gap-3 py-10 text-center animate-fade-in">
-              <div className="w-12 h-12 rounded-lg bg-surface-800 flex items-center justify-center shadow-skeuo-chip border border-white">
-                <Trash2 className="w-6 h-6 text-content-muted" strokeWidth={2.2} />
+            <div className="card flex flex-col items-center gap-3 py-10 text-center animate-fade-in shadow-card">
+              <div className="w-11 h-11 rounded-2xl bg-surface-850 flex items-center justify-center border border-surface-700 text-content-muted">
+                <Trash2 className="w-5 h-5" strokeWidth={2} />
               </div>
               <div>
-                <p className="text-sm font-bold text-content-primary">No deleted messages yet</p>
-                <p className="text-xs text-content-muted mt-1 max-w-[240px] font-semibold leading-relaxed">
+                <p className="font-serif text-sm font-bold text-content-primary">No deleted messages yet</p>
+                <p className="text-xs text-content-muted mt-1 max-w-[240px] font-medium leading-relaxed">
                   NotiCatch will capture and highlight deleted messages automatically as they arrive.
                 </p>
               </div>

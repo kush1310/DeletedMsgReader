@@ -2,15 +2,7 @@
  * ChatsPage
  *
  * Lists all captured WhatsApp conversations sorted by most recent activity.
- * Data is loaded from the native Room DB via NativeBridgeService on Android.
- * Real-time refresh: listens for the 'noticatch:new-message' CustomEvent
- * dispatched by the Capacitor bridge when a new notification is captured.
- *
- * Features:
- *   - Auto-deduplicated conversation threads
- *   - Long-press action sheet (Export PDF/CSV, Mark as Read, Delete Chat)
- *   - Real-time unread badge clearance
- *   - Filter tabs: [All] [Has Deleted] [Groups] [Direct]
+ * Styled in Anthropic Claude warm editorial aesthetic.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -19,12 +11,12 @@ import {
   MessageCircle,
   RefreshCw,
   BellOff,
-  Zap,
   CheckCircle2,
   FileText,
   Share2,
   Trash2,
   X,
+  Zap,
 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';
 import { SearchInput, EmptyState, LoadingSpinner, ConfirmationModal } from '@/components/common';
@@ -65,7 +57,6 @@ export function ChatsPage() {
   const [hasNotifAccess,        setHasNotifAccess]        = useState<boolean | null>(null);
   const [isSimulating,          setIsSimulating]          = useState(false);
 
-  /* Long-Press Action Sheet state */
   const [selectedChat,          setSelectedChat]          = useState<Conversation | null>(null);
   const [showDeleteConfirm,     setShowDeleteConfirm]     = useState(false);
   const [actionFeedback,        setActionFeedback]        = useState<string | null>(null);
@@ -138,7 +129,6 @@ export function ChatsPage() {
     setIsSimulating(false);
   }
 
-  /* Actions from Long-Press Sheet */
   async function handleMarkAsRead(chat: Conversation) {
     await markConversationAsReadNative(chat.id);
     setSelectedChat(null);
@@ -175,12 +165,10 @@ export function ChatsPage() {
     setTimeout(() => setActionFeedback(null), 2000);
   }
 
-  /* Apply Boyer-Moore-Horspool + Damerau-Levenshtein search ranking */
   const searchResults = useMemo(() => {
     return searchAndRank(conversations, conversation => conversation.chatTitle, searchQuery);
   }, [conversations, searchQuery]);
 
-  /* Apply active filter to ranked search results */
   const filteredResults = useMemo(() => {
     return searchResults.filter(result => {
       const conv = result.item;
@@ -201,11 +189,11 @@ export function ChatsPage() {
     ? `Last synced ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     : conversations.length > 0
       ? `${conversations.length} conversation${conversations.length !== 1 ? 's' : ''} captured`
-      : 'Waiting for WhatsApp notifications...';
+      : 'Waiting for notifications...';
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
         <TopAppBar title="Chats" />
         <div className="pt-14 flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -215,7 +203,7 @@ export function ChatsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
       <TopAppBar
         title="Chats"
         subtitle={subtitleText}
@@ -224,8 +212,8 @@ export function ChatsPage() {
             id="chats-refresh-button"
             icon={
               <RefreshCw
-                className={`w-5 h-5 text-content-primary ${isRefreshing ? 'animate-spin' : ''}`}
-                strokeWidth={2.2}
+                className={`w-4 h-4 text-content-primary ${isRefreshing ? 'animate-spin' : ''}`}
+                strokeWidth={2}
               />
             }
             label="Refresh conversation list"
@@ -237,17 +225,17 @@ export function ChatsPage() {
       {/* Permission Warning Banner */}
       {hasNotifAccess === false && (
         <div className="pt-14 px-4 pt-3 pb-1 z-30 animate-slide-down">
-          <div className="card p-3.5 bg-amber-50 border-2 border-amber-300 shadow-card space-y-2.5">
+          <div className="card p-3.5 bg-[#FDF4E7] border border-[#F3D3A6] shadow-card space-y-2.5">
             <div className="flex items-start gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
-                <BellOff className="w-4 h-4 text-amber-800" strokeWidth={2.2} />
+              <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
+                <BellOff className="w-4 h-4 text-[#9C5418]" strokeWidth={2.2} />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-black text-amber-900 leading-tight">
+                <h4 className="text-xs font-bold text-[#9C5418] leading-tight">
                   Notification Access Required
                 </h4>
-                <p className="text-2xs text-amber-800 font-semibold mt-0.5 leading-snug">
-                  Android is blocking NotiCatch from reading incoming notifications. Enable Notification Access in Android Settings to capture WhatsApp messages.
+                <p className="text-2xs text-[#9C5418] mt-0.5 leading-snug">
+                  Android is blocking NotiCatch from reading incoming notifications. Enable Notification Access in Android Settings to capture messages.
                 </p>
               </div>
             </div>
@@ -257,9 +245,9 @@ export function ChatsPage() {
                 type="button"
                 id="enable-notif-access-btn"
                 onClick={requestNotificationListenerPermission}
-                className="btn-neu-primary flex-1 text-2xs py-2 font-black tracking-wide"
+                className="btn-neu-primary flex-1 text-2xs py-2 font-bold"
               >
-                1. Enable Notification Access
+                Enable Notification Access
               </button>
             </div>
           </div>
@@ -268,7 +256,7 @@ export function ChatsPage() {
 
       {/* Action Toast Feedback */}
       {actionFeedback && (
-        <div className="fixed top-16 left-4 right-4 z-50 p-2.5 rounded-xl bg-accent text-white text-xs font-bold text-center shadow-lg animate-slide-down">
+        <div className="fixed top-16 left-4 right-4 z-50 p-2.5 rounded-xl bg-accent text-white text-xs font-bold text-center shadow-warm-md animate-slide-down">
           {actionFeedback}
         </div>
       )}
@@ -301,25 +289,27 @@ export function ChatsPage() {
       {/* Scrollable Conversation List */}
       <div className="flex-1 overflow-y-auto pb-20">
         {filteredResults.length > 0 ? (
-          <ul role="list" className="bg-surface-900 shadow-skeuo-card divide-y divide-surface-700/60">
-            {filteredResults.map((result, index) => (
-              <li
-                key={result.item.id}
-                className="animate-slide-up"
-                style={{ animationDelay: `${Math.min(index * 40, 360)}ms` }}
-              >
-                <ConversationRow
-                  conversation={result.item}
-                  onClick={handleConversationSelect}
-                  onLongPress={chat => setSelectedChat(chat)}
-                />
-              </li>
-            ))}
-          </ul>
+          <div className="px-4">
+            <ul role="list" className="card overflow-hidden divide-y divide-surface-700 shadow-card">
+              {filteredResults.map((result, index) => (
+                <li
+                  key={result.item.id}
+                  className="animate-slide-up"
+                  style={{ animationDelay: `${Math.min(index * 30, 240)}ms` }}
+                >
+                  <ConversationRow
+                    conversation={result.item}
+                    onClick={handleConversationSelect}
+                    onLongPress={chat => setSelectedChat(chat)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center p-6 space-y-4">
             <EmptyState
-              icon={<MessageCircle className="w-8 h-8" strokeWidth={1.8} />}
+              icon={<MessageCircle className="w-7 h-7" strokeWidth={1.8} />}
               title={
                 searchQuery
                   ? 'No conversations found'
@@ -332,21 +322,20 @@ export function ChatsPage() {
                   ? `No conversations match "${searchQuery}".`
                   : activeFilter !== 'all'
                     ? 'Try the All tab to see every captured conversation.'
-                    : 'Send or receive a WhatsApp message — it will appear here automatically.'
+                    : 'Send or receive a message — it will appear here automatically.'
               }
             />
 
-            {/* Test Simulation Button */}
             <div className="w-full max-w-xs pt-2">
               <button
                 type="button"
                 id="simulate-test-notif-btn"
                 onClick={handleTriggerTest}
                 disabled={isSimulating}
-                className="w-full py-2.5 px-4 rounded-xl bg-surface-900 border border-surface-600 text-content-primary text-xs font-bold shadow-skeuo-chip flex items-center justify-center gap-2 hover:bg-surface-800 active:scale-95 transition-all"
+                className="w-full py-2.5 px-4 rounded-xl bg-surface-900 border border-surface-700 text-content-primary text-xs font-bold shadow-card flex items-center justify-center gap-2 hover:bg-surface-850 active:scale-95 transition-all"
               >
                 <Zap className="w-4 h-4 text-accent" strokeWidth={2.2} />
-                {isSimulating ? 'Sending test message...' : 'Simulate Test WhatsApp Message'}
+                {isSimulating ? 'Sending test message...' : 'Simulate Test Message'}
               </button>
             </div>
           </div>
@@ -360,12 +349,12 @@ export function ChatsPage() {
           onClick={() => setSelectedChat(null)}
         >
           <div
-            className="w-full max-w-sm bg-surface-900 rounded-3xl p-5 shadow-skeuo-heavy border border-white/80 animate-slide-up space-y-3"
+            className="w-full max-w-sm bg-surface-900 rounded-3xl p-5 shadow-card-lg border border-surface-700 animate-slide-up space-y-3"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-surface-700">
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-extrabold text-content-primary truncate">
+                <h3 className="font-serif text-base font-bold text-content-primary truncate">
                   {selectedChat.chatTitle}
                 </h3>
                 <p className="text-2xs text-content-muted font-medium">
@@ -375,7 +364,7 @@ export function ChatsPage() {
               <button
                 type="button"
                 onClick={() => setSelectedChat(null)}
-                className="w-7 h-7 rounded-full bg-surface-800 flex items-center justify-center text-content-muted"
+                className="w-7 h-7 rounded-full bg-surface-850 flex items-center justify-center text-content-muted"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -427,7 +416,7 @@ export function ChatsPage() {
         <ConfirmationModal
           isOpen={showDeleteConfirm}
           title={`Delete "${selectedChat.chatTitle}"?`}
-          description="All captured messages and deletion history for this conversation will be permanently removed from local SQLite storage."
+          description="All captured messages and deletion history for this conversation will be permanently removed from local storage."
           confirmLabel="Delete Chat"
           confirmVariant="danger"
           onConfirm={handleDeleteConfirm}

@@ -236,3 +236,36 @@ export function zeroMemoryBuffer(buffer: Uint8Array): void {
   buffer.fill(0);
 }
 
+const PRIVACY_POLICY_STORAGE_KEY = 'noticatch_privacy_policy_accepted_v1';
+
+/**
+ * hasAcceptedPrivacyPolicy
+ *
+ * Checks whether the user has previously accepted the Privacy Policy and Terms of Service.
+ *
+ * @returns {boolean} - True if consent has been recorded.
+ */
+export function hasAcceptedPrivacyPolicy(): boolean {
+  try {
+    return localStorage.getItem(PRIVACY_POLICY_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * setAcceptedPrivacyPolicy
+ *
+ * Records user acceptance of the Privacy Policy and Terms of Service.
+ *
+ * @param {boolean} accepted - Consent state to store.
+ */
+export function setAcceptedPrivacyPolicy(accepted: boolean): void {
+  try {
+    localStorage.setItem(PRIVACY_POLICY_STORAGE_KEY, accepted ? 'true' : 'false');
+  } catch {
+    /* Non-critical */
+  }
+}
+
+

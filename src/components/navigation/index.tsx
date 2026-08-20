@@ -1,8 +1,8 @@
 /**
  * Navigation Components
  *
- * Top application bar and bottom navigation bar for the NotiCatch app.
- * All interactive navigation elements use unique IDs for testing and accessibility.
+ * Top application bar and bottom navigation bar for NotiCatch.
+ * Styled in Anthropic Claude warm editorial aesthetic.
  */
 
 import React from 'react';
@@ -20,18 +20,6 @@ interface TopAppBarProps {
   readonly trailing?: React.ReactNode;
 }
 
-/**
- * TopAppBar
- *
- * Fixed top navigation bar with a title, optional subtitle,
- * leading slot (back button / avatar), and trailing slot (action icons).
- * Styled with light frosted surface over scroll content.
- *
- * @param  title     - Primary page title text.
- * @param  subtitle  - Optional secondary descriptor below the title.
- * @param  leading   - Optional leading element (icon button or avatar).
- * @param  trailing  - Optional trailing element (action button or icon).
- */
 export function TopAppBar({ title, subtitle, leading, trailing }: TopAppBarProps) {
   return (
     <header className="top-bar pt-safe">
@@ -42,11 +30,11 @@ export function TopAppBar({ title, subtitle, leading, trailing }: TopAppBarProps
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-bold text-content-primary truncate leading-tight tracking-tight">
+          <h1 className="font-serif text-base font-bold text-content-primary truncate leading-tight tracking-tight">
             {title}
           </h1>
           {subtitle && (
-            <p className="text-xs text-content-muted truncate leading-tight mt-0.5 font-medium">
+            <p className="text-2xs text-content-muted truncate leading-tight mt-0.5 font-medium">
               {subtitle}
             </p>
           )}
@@ -65,23 +53,20 @@ export function TopAppBar({ title, subtitle, leading, trailing }: TopAppBarProps
    App Brand Header (Landing / Auth screens)
    ============================================================= */
 
-/**
- * AppBrand
- *
- * Displays the NotiCatch application name as plain styled text with
- * a security badge icon and a muted version chip.
- * Plain text only — no abbreviation icons beside the name.
- */
-export function AppBrand({ className = '', subtitle, size: _size = 'md' }: { readonly className?: string; readonly subtitle?: string; readonly size?: string }) {
+export function AppBrand({ className = '', subtitle, size = 'md' }: { readonly className?: string; readonly subtitle?: string; readonly size?: string }) {
   return (
-    <div className={`flex flex-col items-center gap-1 ${className}`}>
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-xl bg-accent-muted flex items-center justify-center">
-          <ShieldCheck className="w-5 h-5 text-accent" strokeWidth={2.2} />
+    <div className={`flex flex-col items-center gap-1.5 ${className}`}>
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-accent-muted flex items-center justify-center text-accent shadow-warm-sm">
+          <ShieldCheck className="w-5 h-5" strokeWidth={2.2} />
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xl font-extrabold text-content-primary tracking-tight">NotiCatch</span>
-          <span className="text-2xs font-bold text-content-muted bg-surface-800 border border-surface-700 px-1.5 py-0.5 rounded-full">v1.0</span>
+        <div className="flex items-baseline gap-2">
+          <span className={`font-serif font-bold text-content-primary tracking-tight ${size === 'lg' ? 'text-2xl' : 'text-xl'}`}>
+            NotiCatch
+          </span>
+          <span className="text-2xs font-semibold text-accent bg-accent-muted px-2 py-0.5 rounded-full border border-accent/20">
+            Vault
+          </span>
         </div>
       </div>
       {subtitle && <p className="text-xs text-content-muted font-medium">{subtitle}</p>}
@@ -120,22 +105,10 @@ const navItems: Array<{ tab: NavTab; label: string; icon: React.ReactNode; id: s
   },
 ];
 
-/**
- * BottomNavbar
- *
- * Fixed bottom navigation bar with three primary tabs:
- *   - Chats: Conversation list view
- *   - Deleted: Filtered deleted-messages view with amber badge count
- *   - Settings: Security and configuration controls
- *
- * @param  {NavTab}   activeTab         - Currently active route tab.
- * @param  {Function} onTabChange       - Tab switch callback.
- * @param  {number}   deletedBadgeCount - Unread deleted message count for the Deleted tab badge.
- */
 export function BottomNavbar({ activeTab, onTabChange, deletedBadgeCount = 0 }: BottomNavbarProps) {
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
-      <div className="flex items-center">
+      <div className="flex items-center max-w-lg mx-auto">
         {navItems.map(item => {
           const isActive = activeTab === item.tab;
           return (
@@ -145,7 +118,7 @@ export function BottomNavbar({ activeTab, onTabChange, deletedBadgeCount = 0 }: 
               type="button"
               onClick={() => onTabChange(item.tab)}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 h-16 transition-all duration-200 relative ${
+              className={`flex-1 flex flex-col items-center justify-center gap-1 h-15 transition-all duration-180 relative ${
                 isActive
                   ? 'text-accent font-semibold'
                   : 'text-content-muted hover:text-content-secondary'
@@ -153,25 +126,25 @@ export function BottomNavbar({ activeTab, onTabChange, deletedBadgeCount = 0 }: 
             >
               {isActive && (
                 <span
-                  className="absolute top-0 w-10 h-0.5 bg-accent rounded-full"
+                  className="absolute top-0 w-8 h-0.5 bg-accent rounded-full"
                   style={{ marginTop: '-1px' }}
                 />
               )}
-              <div className="relative w-5 h-5 transition-transform duration-200">
-                <div className={`${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
+              <div className="relative w-5 h-5 transition-transform duration-180">
+                <div className={`${isActive ? 'scale-110 text-accent' : ''} transition-transform duration-180`}>
                   {item.icon}
                 </div>
                 {item.tab === 'deleted' && deletedBadgeCount > 0 && (
                   <span
-                    className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-white text-[0.5rem] font-extrabold flex items-center justify-center shadow-xs"
+                    className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-accent text-white text-[0.5rem] font-bold flex items-center justify-center shadow-xs"
                     aria-label={`${deletedBadgeCount} unread deleted messages`}
                   >
                     {deletedBadgeCount > 9 ? '9+' : deletedBadgeCount}
                   </span>
                 )}
               </div>
-              <span className={`text-2xs transition-all duration-200 ${
-                isActive ? 'opacity-100 font-bold' : 'opacity-80 font-medium'
+              <span className={`text-2xs transition-all duration-180 ${
+                isActive ? 'opacity-100 font-bold text-accent' : 'opacity-80 font-medium'
               }`}>
                 {item.label}
               </span>
@@ -195,12 +168,6 @@ interface IconButtonProps {
   readonly variant?: 'ghost' | 'filled';
 }
 
-/**
- * IconButton
- *
- * Circular tappable icon button for use in app bars and toolbars.
- * Always requires an accessible aria-label.
- */
 export function IconButton({ icon, onClick, label, id, variant = 'ghost' }: IconButtonProps) {
   return (
     <button
@@ -209,10 +176,10 @@ export function IconButton({ icon, onClick, label, id, variant = 'ghost' }: Icon
       onClick={onClick}
       aria-label={label}
       className={`w-9 h-9 rounded-xl flex items-center justify-center
-        transition-all duration-200 ease-spring active:scale-90 ${
+        transition-all duration-180 active:scale-92 ${
           variant === 'filled'
-            ? 'bg-surface-700 border border-surface-600 text-content-primary hover:bg-surface-600'
-            : 'text-content-secondary hover:text-content-primary hover:bg-surface-700'
+            ? 'bg-surface-850 border border-surface-700 text-content-primary hover:bg-surface-700'
+            : 'text-content-secondary hover:text-content-primary hover:bg-surface-850'
         }`}
     >
       {icon}

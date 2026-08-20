@@ -2,8 +2,7 @@
  * ContactUsPage
  *
  * Developer support and contact form page for NotiCatch.
- * Allows users to send feedback, report bugs, or request help.
- * All form inputs are validated client-side before submission.
+ * Styled in Anthropic Claude warm editorial aesthetic.
  */
 
 import { useState } from 'react';
@@ -21,11 +20,6 @@ const CATEGORY_OPTIONS: Array<{ value: ContactCategory; label: string }> = [
   { value: 'other',   label: 'Other' },
 ];
 
-/**
- * ContactUsPage
- *
- * Renders support contact form in Material Design 3 Light Mode.
- */
 export function ContactUsPage() {
   const navigate = useNavigate();
 
@@ -63,7 +57,7 @@ export function ContactUsPage() {
 
   if (submitted) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
         <TopAppBar
           title="Contact Us"
           leading={
@@ -76,16 +70,16 @@ export function ContactUsPage() {
           }
         />
         <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 text-center animate-scale-in max-w-sm mx-auto">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-100 border border-emerald-300 flex items-center justify-center shadow-sm">
-            <CheckCircle2 className="w-8 h-8 text-emerald" strokeWidth={2.2} />
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center justify-center shadow-card">
+            <CheckCircle2 className="w-8 h-8 text-emerald-600" strokeWidth={2.2} />
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-lg font-bold text-content-primary">Message Dispatched</h2>
-            <p className="text-sm text-content-muted leading-relaxed font-medium">
-              Your message has been logged locally and queued for response within 24 hours.
+            <h2 className="font-serif text-lg font-bold text-content-primary">Message Logged</h2>
+            <p className="text-xs text-content-muted leading-relaxed font-medium">
+              Your feedback has been recorded locally on your device.
             </p>
           </div>
-          <button id="contact-done-button" type="button" onClick={() => navigate(-1)} className="btn-primary px-8">
+          <button id="contact-done-button" type="button" onClick={() => navigate(-1)} className="btn-neu-primary px-8">
             Done
           </button>
         </div>
@@ -94,7 +88,7 @@ export function ContactUsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
       <TopAppBar
         title="Contact Us"
         subtitle="NotiCatch Developer Support"
@@ -116,10 +110,10 @@ export function ContactUsPage() {
             <a
               id="contact-email-link"
               href="mailto:support@noticatch.app"
-              className="card-interactive flex items-center gap-3 px-4 py-3 text-left"
+              className="card-interactive flex items-center gap-3 px-4 py-3 text-left shadow-card"
             >
-              <div className="w-9 h-9 rounded-xl bg-accent-muted flex items-center justify-center text-accent flex-shrink-0">
-                <Mail className="w-5 h-5 text-accent" strokeWidth={2} />
+              <div className="w-9 h-9 rounded-xl bg-accent-muted flex items-center justify-center text-accent shrink-0">
+                <Mail className="w-4 h-4 text-accent" strokeWidth={2} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-bold text-content-primary">Email Support</p>
@@ -131,10 +125,10 @@ export function ContactUsPage() {
               href="https://github.com/noticatch"
               target="_blank"
               rel="noopener noreferrer"
-              className="card-interactive flex items-center gap-3 px-4 py-3 text-left"
+              className="card-interactive flex items-center gap-3 px-4 py-3 text-left shadow-card"
             >
-              <div className="w-9 h-9 rounded-xl bg-surface-800 flex items-center justify-center text-content-secondary flex-shrink-0">
-                <Github className="w-5 h-5" strokeWidth={2} />
+              <div className="w-9 h-9 rounded-xl bg-surface-850 flex items-center justify-center text-content-secondary shrink-0 border border-surface-700">
+                <Github className="w-4 h-4" strokeWidth={2} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-bold text-content-primary">Repository</p>
@@ -144,8 +138,8 @@ export function ContactUsPage() {
           </div>
 
           {/* Support form */}
-          <form onSubmit={handleSubmit} className="card p-5 space-y-4">
-            <h2 className="text-sm font-bold text-content-primary">Send a Direct Message</h2>
+          <form onSubmit={handleSubmit} className="card p-5 space-y-4 shadow-card">
+            <h2 className="font-serif text-sm font-bold text-content-primary">Send a Direct Message</h2>
 
             {/* Category */}
             <div className="space-y-1.5">
@@ -159,10 +153,10 @@ export function ContactUsPage() {
                     id={`category-${option.value}-button`}
                     type="button"
                     onClick={() => setCategory(option.value)}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all duration-200 text-left ${
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-left ${
                       category === option.value
-                        ? 'bg-accent text-white border-accent shadow-xs'
-                        : 'bg-surface-800 border-surface-700 text-content-secondary hover:text-content-primary'
+                        ? 'bg-accent text-white border-accent shadow-warm-sm'
+                        : 'bg-surface-850 border-surface-700 text-content-secondary hover:text-content-primary'
                     }`}
                   >
                     {option.label}
@@ -185,7 +179,7 @@ export function ContactUsPage() {
                 maxLength={150}
                 className="input-field"
               />
-              {errors.subject && <p className="text-xs text-red-600 font-semibold" role="alert">{errors.subject}</p>}
+              {errors.subject && <p className="text-xs text-rose-600 font-semibold" role="alert">{errors.subject}</p>}
             </div>
 
             {/* Message */}
@@ -204,16 +198,16 @@ export function ContactUsPage() {
               />
               <div className="flex items-center justify-between">
                 {errors.message
-                  ? <p className="text-xs text-red-600 font-semibold" role="alert">{errors.message}</p>
+                  ? <p className="text-xs text-rose-600 font-semibold" role="alert">{errors.message}</p>
                   : <span />
                 }
                 <span className="text-2xs text-content-muted font-medium">{message.length}/2000</span>
               </div>
             </div>
 
-            <button id="contact-submit-button" type="submit" className="btn-primary w-full">
+            <button id="contact-submit-button" type="submit" className="btn-neu-primary w-full py-3">
               <Send className="w-4 h-4" strokeWidth={2} />
-              Submit Message
+              <span>Submit Message</span>
             </button>
           </form>
         </div>

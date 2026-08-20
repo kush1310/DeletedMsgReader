@@ -2,13 +2,7 @@
  * DeletedOnlyPage
  *
  * Shows ALL messages flagged as deleted by sender across ALL conversations.
- * Data is loaded from Room DB via NativeBridgeService on Android.
- *
- * Features:
- *   - Filter pills: [All] [Groups] [Direct] [Phones] [Links] [OTPs] [Today]
- *   - Sort controls: [Newest] [Oldest] [By Chat]
- *   - Total character count summary strip
- *   - Interactive entity chips on each card
+ * Styled in Anthropic Claude warm editorial aesthetic with honey-amber cards.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -118,7 +112,7 @@ export function DeletedOnlyPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
         <TopAppBar title="Deleted Messages" />
         <div className="pt-14 flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -128,7 +122,7 @@ export function DeletedOnlyPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-surface-800">
+    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
       <TopAppBar
         title="Deleted Messages"
         subtitle={
@@ -138,7 +132,7 @@ export function DeletedOnlyPage() {
         }
       />
 
-      <div className="pt-14 z-20 bg-surface-800 border-b border-surface-700/80 shadow-xs">
+      <div className="pt-14 z-20 bg-canvas border-b border-surface-700 shadow-xs">
         <div className="px-4 pt-2.5 pb-2">
           <SearchInput
             id="deleted-search-input"
@@ -149,7 +143,7 @@ export function DeletedOnlyPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 px-4 pb-2 overflow-x-auto" role="tablist" aria-label="Message filters">
+        <div className="flex items-center gap-2 px-4 pb-2 overflow-x-auto no-scrollbar" role="tablist" aria-label="Message filters">
           {(Object.keys(FILTER_LABELS) as DeletedFilter[]).map(filter => (
             <button
               key={filter}
@@ -172,8 +166,8 @@ export function DeletedOnlyPage() {
                 id={`deleted-sort-${mode}`}
                 type="button"
                 onClick={() => setSortMode(mode)}
-                className={`text-2xs px-2 py-0.5 rounded font-semibold transition-colors ${
-                  sortMode === mode ? 'text-accent font-extrabold bg-accent-muted' : 'text-content-muted hover:text-content-primary'
+                className={`text-2xs px-2 py-0.5 rounded-md font-semibold transition-colors ${
+                  sortMode === mode ? 'text-accent font-bold bg-accent-muted' : 'text-content-muted hover:text-content-primary'
                 }`}
               >
                 {SORT_LABELS[mode]}
@@ -183,9 +177,9 @@ export function DeletedOnlyPage() {
         </div>
 
         {displayedMessages.length > 0 && (
-          <div className="px-4 py-1.5 bg-surface-850 border-t border-surface-700/50 flex items-center justify-between text-2xs text-content-muted">
-            <span className="font-semibold">{displayedMessages.length} item{displayedMessages.length !== 1 ? 's' : ''} shown</span>
-            <span className="font-mono font-medium">{totalChars.toLocaleString()} characters total</span>
+          <div className="px-4 py-1.5 bg-surface-850 border-t border-surface-700 flex items-center justify-between text-2xs text-content-muted font-medium">
+            <span>{displayedMessages.length} item{displayedMessages.length !== 1 ? 's' : ''} shown</span>
+            <span className="font-mono">{totalChars.toLocaleString()} characters recovered</span>
           </div>
         )}
       </div>
@@ -193,7 +187,7 @@ export function DeletedOnlyPage() {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-24">
         {displayedMessages.length === 0 ? (
           <EmptyState
-            icon={<Trash2 className="w-8 h-8 text-content-muted" />}
+            icon={<Trash2 className="w-7 h-7 text-content-muted" />}
             title="No Deleted Messages Found"
             description={
               searchQuery || activeFilter !== 'all'
@@ -205,7 +199,7 @@ export function DeletedOnlyPage() {
                 <button
                   type="button"
                   onClick={() => setActiveFilter('all')}
-                  className="btn-secondary text-xs py-2 px-4"
+                  className="btn-neu-secondary text-xs py-2 px-4"
                 >
                   Reset Filters
                 </button>

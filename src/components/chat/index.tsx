@@ -2,13 +2,7 @@
  * Chat UI Components
  *
  * Conversation list row, message bubble, and deleted message card.
- * Enhanced with:
- *   - Edit revision diff visualizer (character/word level comparison)
- *   - Audio / Voice Note duration waveform visualizer
- *   - WhatsApp Disappearing messages retention badge
- *   - Entity extraction chips (Phone numbers, URLs, OTPs, Times)
- *   - Merkle hash integrity verification badge
- *   - Clean, accessible touch targets with unique IDs
+ * Styled in Anthropic Claude warm editorial aesthetic with honey-amber deleted cards.
  */
 
 import React, { useState } from 'react';
@@ -25,9 +19,6 @@ import {
   ExternalLink,
   Clock,
   KeyRound,
-  ShieldCheck,
-  Mic,
-  Hourglass,
   Check,
 } from 'lucide-react';
 import type { Conversation, Message, MediaType, ExtractedEntity } from '@/types';
@@ -82,8 +73,8 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
           onLongPress(conversation);
         }
       }}
-      className="w-full flex items-center gap-3 px-4 py-3.5 bg-surface-900 hover:bg-surface-850 active:bg-surface-700 transition-all duration-150 cursor-pointer text-left border-b border-surface-700/60 last:border-b-0"
-      style={hasDeleted ? { borderLeft: '3px solid #F59E0B' } : { borderLeft: '3px solid transparent' }}
+      className="w-full flex items-center gap-3.5 px-4 py-3.5 bg-surface-900 hover:bg-surface-850 active:bg-surface-750 transition-all duration-180 cursor-pointer text-left border-b border-surface-700 last:border-b-0"
+      style={hasDeleted ? { borderLeft: '3px solid #CC5A36' } : { borderLeft: '3px solid transparent' }}
     >
       <Avatar name={conversation.chatTitle} size="md" isGroup={conversation.isGroup} hasRecentDeletion={hasDeleted} />
 
@@ -102,9 +93,9 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             {hasDeleted && (
-              <Trash2 className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
+              <Trash2 className="w-3.5 h-3.5 text-accent flex-shrink-0" strokeWidth={2.2} />
             )}
-            <span className={`text-xs truncate ${hasDeleted ? 'text-amber-800 font-semibold' : 'text-content-secondary'}`}>
+            <span className={`text-xs truncate ${hasDeleted ? 'text-accent font-semibold' : 'text-content-secondary'}`}>
               {hasDeleted
                 ? `${conversation.deletedCount} deleted message${conversation.deletedCount > 1 ? 's' : ''} recovered`
                 : 'Tap to view chat'}
@@ -112,12 +103,12 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {hasDeleted && (
-              <span className="w-5 h-5 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 text-2xs font-extrabold shadow-xs">
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 text-2xs font-bold shadow-xs">
                 {conversation.deletedCount > 9 ? '9+' : conversation.deletedCount}
               </span>
             )}
             {conversation.unreadCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 rounded-full bg-accent flex items-center justify-center text-white text-2xs font-bold shadow-xs">
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-accent flex items-center justify-center text-white text-2xs font-bold shadow-warm-sm">
                 {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
               </span>
             )}
@@ -150,7 +141,7 @@ function EntityChips({ entities }: EntityChipsProps) {
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5 mt-2 pt-1.5 border-t border-amber-200/80">
+    <div className="flex flex-wrap gap-1.5 mt-2 pt-1.5 border-t border-amber-300/60">
       {entities.map((entity, idx) => {
         let icon = <Copy className="w-2.5 h-2.5" />;
         if (entity.type === 'PHONE_NUMBER') icon = <Phone className="w-2.5 h-2.5" />;
@@ -181,33 +172,25 @@ function EntityChips({ entities }: EntityChipsProps) {
    Audio Waveform Visualizer
    ============================================================= */
 
-interface AudioWaveformProps {
-  readonly durationSeconds?: number | null;
-}
-
-function AudioWaveform({ durationSeconds }: AudioWaveformProps) {
-  const durationText = durationSeconds
-    ? `${Math.floor(durationSeconds / 60)}:${(durationSeconds % 60).toString().padStart(2, '0')}`
-    : '0:30';
-
-  const heights = [35, 60, 45, 80, 50, 75, 40, 90, 65, 45, 70, 30, 85, 60, 40, 75];
+function AudioWaveform({ durationSeconds }: { readonly durationSeconds: number }) {
+  const bars = [4, 8, 14, 10, 18, 12, 16, 20, 14, 8, 16, 12, 6, 10, 14, 8];
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = durationSeconds % 60;
+  const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
   return (
-    <div className="flex items-center gap-2.5 my-1.5 p-2 bg-emerald-50 rounded-lg border border-emerald-200">
-      <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white flex-shrink-0 shadow-xs">
-        <Mic className="w-4 h-4" strokeWidth={2.2} />
-      </div>
-      <div className="flex-1 flex items-center gap-0.5 h-6">
-        {heights.map((h, i) => (
-          <span
+    <div className="flex items-center gap-2 mt-1.5 p-2 rounded-xl bg-surface-850 border border-surface-700">
+      <div className="flex items-center gap-0.5 h-5 flex-1">
+        {bars.map((height, i) => (
+          <div
             key={i}
-            className="w-1 bg-accent/80 rounded-full"
-            style={{ height: `${h}%` }}
+            className="w-1 bg-accent rounded-full opacity-80"
+            style={{ height: `${height}px` }}
           />
         ))}
       </div>
-      <span className="text-2xs font-bold text-accent tabular-nums flex-shrink-0">
-        {durationText}
+      <span className="text-2xs font-bold text-content-muted tabular-nums">
+        {formattedDuration}
       </span>
     </div>
   );
@@ -217,27 +200,22 @@ function AudioWaveform({ durationSeconds }: AudioWaveformProps) {
    Edit Diff Viewer
    ============================================================= */
 
-interface EditDiffViewerProps {
-  readonly originalText?: string | null;
-  readonly newText?: string | null;
-}
-
-function EditDiffViewer({ originalText, newText }: EditDiffViewerProps) {
-  const diffs = computeWordDiff(originalText, newText);
+function EditDiffViewer({ originalText, newText }: { readonly originalText: string; readonly newText?: string | null }) {
+  if (!newText || originalText === newText) return null;
+  const diffChunks = computeWordDiff(originalText, newText);
 
   return (
-    <div className="mt-1.5 pt-1.5 border-t border-surface-700/80 text-xs leading-relaxed">
+    <div className="mt-2 pt-2 border-t border-surface-700/80 text-xs">
       <span className="text-2xs font-bold text-accent uppercase tracking-wider block mb-1">
         Edit Revision Diff:
       </span>
-      <div className="p-1.5 bg-surface-850 rounded border border-surface-700 font-medium">
-        {diffs.map((chunk, idx) => {
+      <div className="p-2 rounded-xl bg-surface-850 border border-surface-700 text-content-primary leading-relaxed">
+        {diffChunks.map((chunk, idx) => {
           if (chunk.type === 'REMOVED') {
             return (
               <span
                 key={idx}
-                className="line-through text-rose-700 bg-rose-100/80 px-1 py-0.5 rounded mx-0.5 text-2xs"
-                title="Original (Removed)"
+                className="line-through text-rose-700 bg-rose-50 px-1 py-0.5 rounded mx-0.5 text-2xs font-medium"
               >
                 {chunk.text}
               </span>
@@ -247,8 +225,7 @@ function EditDiffViewer({ originalText, newText }: EditDiffViewerProps) {
             return (
               <span
                 key={idx}
-                className="text-emerald-900 bg-emerald-100 font-bold px-1 py-0.5 rounded mx-0.5 text-2xs"
-                title="Edited (Added)"
+                className="text-emerald-800 bg-emerald-50 font-bold px-1 py-0.5 rounded mx-0.5 text-2xs"
               >
                 {chunk.text}
               </span>
@@ -262,7 +239,7 @@ function EditDiffViewer({ originalText, newText }: EditDiffViewerProps) {
 }
 
 /* =============================================================
-   Message Bubble (WhatsApp Style)
+   Message Bubble
    ============================================================= */
 
 interface MessageBubbleProps {
@@ -292,22 +269,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       >
         <div className="flex items-center gap-1.5 mb-0.5">
           <span className="text-2xs text-accent font-bold">{message.senderName}</span>
-          {message.hashSignature && (
-            <span title="Cryptographic SHA-256 Fingerprinted" className="flex items-center text-accent">
-              <ShieldCheck className="w-2.5 h-2.5 text-accent" strokeWidth={2.5} />
-            </span>
-          )}
-          {message.isDisappearing && (
-            <span className="inline-flex items-center gap-0.5 px-1 rounded bg-amber-100 text-amber-900 text-2xs font-bold">
-              <Hourglass className="w-2.5 h-2.5" /> Disappearing
-            </span>
-          )}
         </div>
-        <div className="bubble-deleted w-full shadow-sm">
+        <div className="bubble-deleted w-full">
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-2">
-              <Trash2 className="w-4 h-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
-              <span className="text-amber-900 text-xs font-bold">Message deleted by sender</span>
+              <Trash2 className="w-4 h-4 text-accent flex-shrink-0" strokeWidth={2.2} />
+              <span className="text-[#9C5418] text-xs font-bold">Message deleted by sender</span>
             </div>
             {message.messageText && (
               <button
@@ -315,15 +282,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 id={`copy-bubble-${message.id}`}
                 onClick={copyDeletedText}
                 aria-label="Copy recovered message text"
-                className="p-1 rounded hover:bg-amber-200/60 text-amber-700 transition-colors flex-shrink-0"
+                className="p-1 rounded-lg hover:bg-amber-200/70 text-[#9C5418] transition-colors flex-shrink-0"
               >
                 <Copy className="w-3.5 h-3.5" strokeWidth={2} />
               </button>
             )}
           </div>
           {message.messageText && (
-            <div className="mt-2 pt-2 border-t border-amber-200">
-              <span className="text-2xs font-semibold text-amber-700 uppercase tracking-wider block mb-0.5">
+            <div className="mt-2 pt-2 border-t border-amber-300/60">
+              <span className="text-2xs font-bold text-[#9C5418] uppercase tracking-wider block mb-0.5">
                 Recovered Text:
               </span>
               <p className="text-content-primary text-sm not-italic font-medium leading-relaxed">{message.messageText}</p>
@@ -350,14 +317,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div className="flex items-center gap-1.5 mb-0.5">
         <span className="text-2xs text-accent font-bold">{message.senderName}</span>
         {message.isEdited && (
-          <span className="flex items-center gap-0.5 text-2xs text-accent font-semibold bg-emerald-50 px-1 py-0.2 rounded">
+          <span className="flex items-center gap-0.5 text-2xs text-accent font-semibold bg-accent-muted px-1.5 py-0.5 rounded-full">
             <Pencil className="w-2.5 h-2.5" strokeWidth={2} />
             Edited {message.editCount ? `(v${message.editCount + 1})` : ''}
-          </span>
-        )}
-        {message.isDisappearing && (
-          <span className="inline-flex items-center gap-0.5 px-1 rounded bg-surface-700 text-content-secondary text-2xs font-bold">
-            <Hourglass className="w-2.5 h-2.5" /> Disappearing
           </span>
         )}
       </div>
@@ -421,7 +383,7 @@ function MediaIndicator({ mediaType }: MediaIndicatorProps) {
 }
 
 /* =============================================================
-   Deleted Message Card (for the Deleted-Only Page)
+   Deleted Message Card (for Deleted-Only Page)
    ============================================================= */
 
 interface DeletedMessageCardProps {
@@ -451,13 +413,13 @@ export function DeletedMessageCard({ message, chatTitle, onClick }: DeletedMessa
     <div
       id={`deleted-card-${message.id}`}
       onClick={onClick}
-      className="card-neu p-4 border border-amber-200/90 bg-gradient-to-b from-white to-amber-50/20 relative overflow-hidden transition-all duration-200 hover:border-amber-400 active:scale-[0.99] cursor-pointer shadow-xs"
+      className="card p-4 border border-[#F3D3A6] bg-[#FDF4E7] transition-all duration-180 hover:border-accent active:scale-[0.99] cursor-pointer shadow-card"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Avatar name={chatTitle} size="sm" hasRecentDeletion />
           <div className="min-w-0">
-            <span className="text-xs font-extrabold text-content-primary truncate block">
+            <span className="text-xs font-bold text-content-primary truncate block">
               {chatTitle}
             </span>
             <span className="text-2xs text-accent font-semibold truncate block">
@@ -469,16 +431,16 @@ export function DeletedMessageCard({ message, chatTitle, onClick }: DeletedMessa
       </div>
 
       {message.messageText ? (
-        <div className="p-3 rounded-lg bg-surface-900 border border-amber-200/80 mb-2 shadow-inner-neu">
+        <div className="p-3 rounded-xl bg-white border border-[#F3D3A6] mb-2 shadow-xs">
           <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-2xs font-extrabold text-amber-900 uppercase tracking-wider">
+            <span className="text-2xs font-bold text-[#9C5418] uppercase tracking-wider">
               Recovered Content:
             </span>
-            <span className="text-2xs text-content-muted tabular-nums font-bold">
+            <span className="text-2xs text-content-muted tabular-nums font-semibold">
               {charCount} chars
             </span>
           </div>
-          <p className="text-content-primary text-sm font-semibold leading-relaxed break-words">
+          <p className="text-content-primary text-sm font-medium leading-relaxed break-words">
             {message.messageText}
           </p>
           {message.audioDurationSeconds && (
@@ -487,26 +449,24 @@ export function DeletedMessageCard({ message, chatTitle, onClick }: DeletedMessa
           <EntityChips entities={entities} />
         </div>
       ) : (
-        <div className="p-2.5 rounded-lg bg-surface-800 mb-2 text-content-muted text-xs italic">
+        <div className="p-2.5 rounded-xl bg-white/70 mb-2 text-content-muted text-xs italic">
           No message body was captured prior to deletion.
         </div>
       )}
 
-      <div className="flex items-center justify-between text-2xs text-content-muted pt-1 border-t border-surface-700/60 font-medium">
+      <div className="flex items-center justify-between text-2xs text-content-muted pt-1 border-t border-amber-300/60 font-medium">
         <span className="tabular-nums">{formattedTime}</span>
-        <div className="flex items-center gap-2">
-          {message.messageText && (
-            <button
-              type="button"
-              id={`copy-card-${message.id}`}
-              onClick={copyText}
-              className="flex items-center gap-1 text-accent font-bold hover:text-accent-hover transition-colors px-1.5 py-0.5 rounded bg-surface-800 border border-surface-700/80 shadow-xs"
-            >
-              <Copy className="w-3 h-3" />
-              Copy
-            </button>
-          )}
-        </div>
+        {message.messageText && (
+          <button
+            type="button"
+            id={`copy-card-${message.id}`}
+            onClick={copyText}
+            className="flex items-center gap-1 text-accent font-bold hover:text-accent-hover transition-colors px-2 py-0.5 rounded-md bg-white border border-[#F3D3A6] shadow-xs"
+          >
+            <Copy className="w-3 h-3" />
+            Copy
+          </button>
+        )}
       </div>
     </div>
   );
