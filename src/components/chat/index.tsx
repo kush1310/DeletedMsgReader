@@ -73,8 +73,8 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
           onLongPress(conversation);
         }
       }}
-      className="w-full flex items-center gap-3.5 px-4 py-3.5 bg-surface-900 hover:bg-surface-850 active:bg-surface-750 transition-all duration-180 cursor-pointer text-left border-b border-surface-700 last:border-b-0"
-      style={hasDeleted ? { borderLeft: '3px solid #CC5A36' } : { borderLeft: '3px solid transparent' }}
+      className="w-full flex items-center gap-3.5 px-4 py-3.5 bg-white hover:bg-[#F8F9FA] active:bg-[#F3F4F6] transition-all duration-180 cursor-pointer text-left border-b border-[#E5E7EB] last:border-b-0"
+      style={hasDeleted ? { borderLeft: '3px solid #D97706' } : { borderLeft: '3px solid transparent' }}
     >
       <Avatar name={conversation.chatTitle} size="md" isGroup={conversation.isGroup} hasRecentDeletion={hasDeleted} />
 
@@ -82,20 +82,20 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <div className="flex items-center gap-1.5 min-w-0">
             {conversation.isGroup && (
-              <Users className="w-3 h-3 text-content-muted flex-shrink-0" strokeWidth={2.2} />
+              <Users className="w-3 h-3 text-[#6B7280] flex-shrink-0" strokeWidth={2.2} />
             )}
-            <span className="text-sm font-bold text-content-primary truncate">
+            <span className="text-sm font-bold text-[#111827] truncate">
               {conversation.chatTitle}
             </span>
           </div>
-          <span className="text-2xs text-content-muted flex-shrink-0 font-medium">{formattedTime}</span>
+          <span className="text-2xs text-[#6B7280] flex-shrink-0 font-medium">{formattedTime}</span>
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             {hasDeleted && (
-              <Trash2 className="w-3.5 h-3.5 text-accent flex-shrink-0" strokeWidth={2.2} />
+              <Trash2 className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0" strokeWidth={2.2} />
             )}
-            <span className={`text-xs truncate ${hasDeleted ? 'text-accent font-semibold' : 'text-content-secondary'}`}>
+            <span className={`text-xs truncate ${hasDeleted ? 'text-[#D97706] font-semibold' : 'text-[#6B7280]'}`}>
               {hasDeleted
                 ? `${conversation.deletedCount} deleted message${conversation.deletedCount > 1 ? 's' : ''} recovered`
                 : 'Tap to view chat'}
@@ -103,12 +103,12 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {hasDeleted && (
-              <span className="min-w-5 h-5 px-1.5 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 text-2xs font-bold shadow-xs">
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-900 text-2xs font-bold shadow-xs">
                 {conversation.deletedCount > 9 ? '9+' : conversation.deletedCount}
               </span>
             )}
             {conversation.unreadCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 rounded-full bg-accent flex items-center justify-center text-white text-2xs font-bold shadow-warm-sm">
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-[#2C6BED] flex items-center justify-center text-white text-2xs font-bold shadow-xs">
                 {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
               </span>
             )}
@@ -413,16 +413,16 @@ export function DeletedMessageCard({ message, chatTitle, onClick }: DeletedMessa
     <div
       id={`deleted-card-${message.id}`}
       onClick={onClick}
-      className="card p-4 border border-[#F3D3A6] bg-[#FDF4E7] transition-all duration-180 hover:border-accent active:scale-[0.99] cursor-pointer shadow-card"
+      className="p-4 rounded-2xl border border-[#FED7AA] bg-[#FFF4E5] transition-all duration-180 hover:border-[#D97706] active:scale-[0.99] cursor-pointer shadow-xs"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <Avatar name={chatTitle} size="sm" hasRecentDeletion />
           <div className="min-w-0">
-            <span className="text-xs font-bold text-content-primary truncate block">
+            <span className="text-xs font-bold text-[#111827] truncate block">
               {chatTitle}
             </span>
-            <span className="text-2xs text-accent font-semibold truncate block">
+            <span className="text-2xs text-[#D97706] font-semibold truncate block">
               From: {message.senderName}
             </span>
           </div>
@@ -431,16 +431,16 @@ export function DeletedMessageCard({ message, chatTitle, onClick }: DeletedMessa
       </div>
 
       {message.messageText ? (
-        <div className="p-3 rounded-xl bg-white border border-[#F3D3A6] mb-2 shadow-xs">
+        <div className="p-3 rounded-xl bg-white border border-[#FED7AA] mb-2 shadow-xs">
           <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-2xs font-bold text-[#9C5418] uppercase tracking-wider">
+            <span className="text-2xs font-bold text-[#92400E] uppercase tracking-wider">
               Recovered Content:
             </span>
-            <span className="text-2xs text-content-muted tabular-nums font-semibold">
+            <span className="text-2xs text-[#6B7280] tabular-nums font-semibold">
               {charCount} chars
             </span>
           </div>
-          <p className="text-content-primary text-sm font-medium leading-relaxed break-words">
+          <p className="text-[#111827] text-sm font-medium leading-relaxed break-words">
             {message.messageText}
           </p>
           {message.audioDurationSeconds && (
@@ -449,19 +449,19 @@ export function DeletedMessageCard({ message, chatTitle, onClick }: DeletedMessa
           <EntityChips entities={entities} />
         </div>
       ) : (
-        <div className="p-2.5 rounded-xl bg-white/70 mb-2 text-content-muted text-xs italic">
+        <div className="p-2.5 rounded-xl bg-white/70 mb-2 text-[#6B7280] text-xs italic">
           No message body was captured prior to deletion.
         </div>
       )}
 
-      <div className="flex items-center justify-between text-2xs text-content-muted pt-1 border-t border-amber-300/60 font-medium">
+      <div className="flex items-center justify-between text-2xs text-[#6B7280] pt-1 border-t border-amber-200/80 font-medium">
         <span className="tabular-nums">{formattedTime}</span>
         {message.messageText && (
           <button
             type="button"
             id={`copy-card-${message.id}`}
             onClick={copyText}
-            className="flex items-center gap-1 text-accent font-bold hover:text-accent-hover transition-colors px-2 py-0.5 rounded-md bg-white border border-[#F3D3A6] shadow-xs"
+            className="flex items-center gap-1 text-[#D97706] font-bold hover:text-[#B45309] transition-colors px-2 py-0.5 rounded-md bg-white border border-[#FED7AA] shadow-xs"
           >
             <Copy className="w-3 h-3" />
             Copy

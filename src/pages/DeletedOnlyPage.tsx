@@ -135,7 +135,7 @@ export function DeletedOnlyPage() {
         }
       />
 
-      <div className="pt-14 z-20 bg-white border-b border-[#E5E7EB] shadow-xs">
+      <div className="pt-16 z-20 bg-white border-b border-[#E5E7EB] shadow-xs">
         <div className="px-4 pt-2.5 pb-2">
           <SearchInput
             id="deleted-search-input"
