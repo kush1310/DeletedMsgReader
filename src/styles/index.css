@@ -3,30 +3,82 @@
 @tailwind utilities;
 
 /* =========================================================
-   NotiCatch — Signal-Inspired Privacy Communication Design
-   Plus Jakarta Sans · Clean Neutral Surfaces · Signal Blue
-   Pure White Canvas · Deep Charcoal Typography
+   NotiCatch — Material Design 3 Communication Design System
+   Plus Jakarta Sans · Tonal Surfaces · Signal Blue Accents
+   WCAG AAA Accessible Contrast · 48dp Minimum Touch Targets
    ========================================================= */
 
 @layer base {
   :root {
-    --color-accent:            #2C6BED;
+    /* Primary & Brand Accents */
+    --md-sys-color-primary:                  #2C6BED;
+    --md-sys-color-on-primary:               #FFFFFF;
+    --md-sys-color-primary-container:        #EEF2FF;
+    --md-sys-color-on-primary-container:     #1E40AF;
+
+    /* Secondary Brand Accents */
+    --md-sys-color-secondary:                #4B5563;
+    --md-sys-color-on-secondary:             #FFFFFF;
+    --md-sys-color-secondary-container:      #F3F4F6;
+    --md-sys-color-on-secondary-container:   #1F2937;
+
+    /* Amber / Recovery Highlight Palette */
+    --md-sys-color-tertiary:                 #D97706;
+    --md-sys-color-on-tertiary:              #FFFFFF;
+    --md-sys-color-tertiary-container:       #FFF4E5;
+    --md-sys-color-on-tertiary-container:    #92400E;
+    --md-sys-color-tertiary-border:          #FED7AA;
+
+    /* Error / Destructive Palette */
+    --md-sys-color-error:                    #DC2626;
+    --md-sys-color-on-error:                 #FFFFFF;
+    --md-sys-color-error-container:          #FEF2F2;
+    --md-sys-color-on-error-container:       #991B1B;
+
+    /* Success / Security Verified Palette */
+    --md-sys-color-success:                  #059669;
+    --md-sys-color-on-success:               #FFFFFF;
+    --md-sys-color-success-container:        #ECFDF5;
+    --md-sys-color-on-success-container:     #065F46;
+
+    /* Material 3 Tonal Surface Hierarchy */
+    --md-sys-color-surface:                  #FFFFFF;
+    --md-sys-color-surface-dim:              #F8F9FA;
+    --md-sys-color-surface-bright:           #FFFFFF;
+    --md-sys-color-surface-container-lowest: #FFFFFF;
+    --md-sys-color-surface-container-low:    #F8F9FA;
+    --md-sys-color-surface-container:        #F2F2F7;
+    --md-sys-color-surface-container-high:   #E9ECEF;
+    --md-sys-color-surface-container-highest:#E5E7EB;
+
+    /* Content & Typography Tokens */
+    --md-sys-color-on-surface:               #111827;
+    --md-sys-color-on-surface-variant:       #4B5563;
+    --md-sys-color-outline:                  #D1D5DB;
+    --md-sys-color-outline-variant:          #E5E7EB;
+    --md-sys-color-inverse-surface:          #111827;
+    --md-sys-color-inverse-on-surface:       #F9FAFB;
+
+    /* Backward compatibility mapping */
+    --color-accent:            var(--md-sys-color-primary);
     --color-accent-hover:      #1B54D4;
-    --color-accent-muted:      #EEF2FF;
-    --color-canvas:            #FFFFFF;
-    --color-surface-900:       #FFFFFF;
-    --color-surface-850:       #F8F9FA;
-    --color-surface-800:       #F2F2F7;
-    --color-surface-750:       #E9ECEF;
-    --color-surface-700:       #E5E7EB;
-    --color-surface-600:       #D1D5DB;
-    --color-content-primary:   #111827;
-    --color-content-secondary: #4B5563;
+    --color-accent-muted:      var(--md-sys-color-primary-container);
+    --color-canvas:            var(--md-sys-color-surface);
+    --color-surface-900:       var(--md-sys-color-surface);
+    --color-surface-850:       var(--md-sys-color-surface-container-low);
+    --color-surface-800:       var(--md-sys-color-surface-container);
+    --color-surface-750:       var(--md-sys-color-surface-container-high);
+    --color-surface-700:       var(--md-sys-color-outline-variant);
+    --color-surface-600:       var(--md-sys-color-outline);
+    --color-content-primary:   var(--md-sys-color-on-surface);
+    --color-content-secondary: var(--md-sys-color-on-surface-variant);
     --color-content-muted:     #9CA3AF;
   }
 
   * {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
 
   html {
@@ -35,317 +87,286 @@
   }
 
   body {
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior: none;
-    background-color: #FFFFFF;
-    color: #111827;
+    background-color: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+    line-height: 1.5;
   }
 
-  /* All headings use clean sans — no serif */
+  /* All headings strictly use clean sans-serif */
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
     font-weight: 700;
+    letter-spacing: -0.015em;
   }
 
+  /* Minimal Custom Scrollbar */
   ::-webkit-scrollbar { width: 3px; height: 3px; }
-  ::-webkit-scrollbar-track { background: #F2F2F7; }
+  ::-webkit-scrollbar-track { background: var(--md-sys-color-surface-container); }
   ::-webkit-scrollbar-thumb {
-    background: #D1D5DB;
+    background: var(--md-sys-color-outline);
     border-radius: 100px;
   }
-  ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-content-muted); }
 
   * { -webkit-tap-highlight-color: transparent; }
 
+  /* Accessible Focus Indicator */
   :focus-visible {
-    outline: 2px solid #2C6BED;
+    outline: 2.5px solid var(--md-sys-color-primary);
     outline-offset: 2px;
     border-radius: 8px;
   }
 
   ::selection {
-    background-color: rgba(44, 107, 237, 0.16);
-    color: #111827;
+    background-color: rgba(44, 107, 237, 0.18);
+    color: var(--md-sys-color-on-surface);
+  }
+
+  /* Reduced Motion Support */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
 @layer components {
 
-  /* === Clean White Surface Cards === */
+  /* === Material 3 Tonal Surface Cards === */
   .card {
-    background-color: #FFFFFF;
-    border-radius: 1rem;
-    border: 1px solid #E5E7EB;
-    box-shadow: 0 1px 3px rgba(17, 24, 39, 0.06), 0 1px 2px rgba(17, 24, 39, 0.04);
-    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color: var(--md-sys-color-surface);
+    border-radius: 1.25rem;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    box-shadow: 0 1px 3px rgba(17, 24, 39, 0.04), 0 1px 2px rgba(17, 24, 39, 0.02);
+    transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
   }
 
   .card-neu {
-    background-color: #FFFFFF;
-    border-radius: 1rem;
-    border: 1px solid #E5E7EB;
-    box-shadow: 0 2px 8px rgba(17, 24, 39, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-    transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color: var(--md-sys-color-surface);
+    border-radius: 1.25rem;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    box-shadow: 0 2px 8px rgba(17, 24, 39, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
   }
 
   .card-interactive {
-    background-color: #FFFFFF;
-    border-radius: 1rem;
-    border: 1px solid #E5E7EB;
-    box-shadow: 0 1px 3px rgba(17, 24, 39, 0.06);
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color: var(--md-sys-color-surface);
+    border-radius: 1.25rem;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    box-shadow: 0 1px 3px rgba(17, 24, 39, 0.04);
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
     cursor: pointer;
   }
   .card-interactive:hover {
-    box-shadow: 0 6px 16px rgba(17, 24, 39, 0.07);
-    border-color: #2C6BED;
+    box-shadow: 0 6px 16px rgba(17, 24, 39, 0.06);
+    border-color: var(--md-sys-color-primary);
     transform: translateY(-1px);
   }
   .card-interactive:active {
-    transform: scale(0.99);
+    transform: scale(0.985);
   }
 
-  /* === Modal / Bottom Sheet === */
-  .overlay { @apply fixed inset-0 z-40 bg-black/40 backdrop-blur-sm; }
+  /* === Modal & Overlays === */
+  .overlay {
+    @apply fixed inset-0 z-40 bg-black/45 backdrop-blur-xs;
+  }
 
   .bottom-sheet {
-    @apply fixed bottom-0 left-0 right-0 z-50 bg-surface-900 p-6 border-t border-surface-700 animate-slide-up;
-    border-radius: 1.5rem 1.5rem 0 0;
-    box-shadow: 0 -4px 24px rgba(17, 24, 39, 0.10);
+    @apply fixed bottom-0 left-0 right-0 z-50 bg-white p-6 border-t border-[#E5E7EB] animate-slide-up;
+    border-radius: 1.75rem 1.75rem 0 0;
+    box-shadow: 0 -4px 32px rgba(17, 24, 39, 0.12);
   }
 
-  /* === Badges === */
+  /* === Material Badges === */
   .badge-deleted {
     @apply inline-flex items-center gap-1.5 px-2.5 py-0.5
            text-2xs font-bold rounded-full uppercase tracking-wider;
-    background-color: #FFF4E5;
-    color: #92400E;
-    border: 1px solid #FED7AA;
+    background-color: var(--md-sys-color-tertiary-container);
+    color: var(--md-sys-color-on-tertiary-container);
+    border: 1px solid var(--md-sys-color-tertiary-border);
   }
 
   .badge-recovered {
     @apply inline-flex items-center gap-1.5 px-2.5 py-0.5
-           bg-[#F0FDF4] text-[#15803D] text-2xs font-bold
-           rounded-full border border-[#BBF7D0] uppercase tracking-wider;
+           bg-[#ECFDF5] text-[#065F46] text-2xs font-bold
+           rounded-full border border-[#A7F3D0] uppercase tracking-wider;
   }
 
   .badge-unread {
     @apply min-w-5 h-5 px-1.5 rounded-full text-white text-2xs font-bold
            flex items-center justify-center;
-    background-color: #2C6BED;
+    background-color: var(--md-sys-color-primary);
   }
 
   .badge-online {
     @apply w-2.5 h-2.5 rounded-full border-2 border-white bg-emerald-500;
   }
 
-  /* === Message Bubbles — Light Mode (Chats) === */
+  /* === Message Bubbles (Material 3 Surface Elevation) === */
   .bubble-received {
-    @apply bg-surface-900 text-content-primary rounded-2xl rounded-tl-none
-           px-4 py-2.5 max-w-[82%] border border-surface-700 text-sm leading-relaxed;
-    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
-  }
-
-  /* === Message Bubbles — Dark Mode (Chat Detail timeline) === */
-  .bubble-received-dark {
-    background-color: #1E2028;
-    color: #F9FAFB;
-    border-radius: 1rem;
-    border-top-left-radius: 0;
-    padding: 0.625rem 1rem;
-    max-width: 82%;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.20);
+    @apply bg-white text-[#111827] rounded-2xl rounded-tl-none
+           px-4 py-2.5 max-w-[84%] border border-[#E5E7EB] text-sm leading-relaxed;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
   }
 
   .bubble-sent-signal {
-    background-color: #2C6BED;
+    background-color: var(--md-sys-color-primary);
     color: #FFFFFF;
     border-radius: 1rem;
     border-bottom-right-radius: 0;
     padding: 0.625rem 1rem;
-    max-width: 82%;
+    max-width: 84%;
     font-size: 0.875rem;
     line-height: 1.5;
-    box-shadow: 0 2px 8px rgba(44, 107, 237, 0.25);
+    box-shadow: 0 2px 8px rgba(44, 107, 237, 0.22);
   }
 
-  /* === Deleted Message Bubble — Amber Palette === */
   .bubble-deleted {
-    color: #92400E;
-    border-radius: 1rem;
+    color: var(--md-sys-color-on-tertiary-container);
+    border-radius: 1.25rem;
     border-top-left-radius: 0;
     padding: 0.75rem 1rem;
-    max-width: 85%;
+    max-width: 88%;
     font-size: 0.875rem;
     line-height: 1.5;
-    background-color: #FFF4E5;
-    border: 1px solid #FED7AA;
-    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.08);
+    background-color: var(--md-sys-color-tertiary-container);
+    border: 1px solid var(--md-sys-color-tertiary-border);
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.08);
   }
 
-  /* === Buttons === */
+  /* === Material 3 Action Buttons === */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2
            active:scale-[0.98]
-           text-white font-bold text-sm px-5 py-3 rounded-xl;
-    background-color: #2C6BED;
-    box-shadow: 0 2px 8px rgba(44, 107, 237, 0.25);
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+           text-white font-bold text-xs px-5 py-3 rounded-2xl min-h-[44px];
+    background-color: var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(44, 107, 237, 0.22);
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
-  .btn-primary:hover { background-color: #1B54D4; }
+  .btn-primary:hover { background-color: var(--color-accent-hover); }
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
-           bg-surface-850 hover:bg-surface-750 active:scale-[0.98]
-           text-content-primary font-bold text-sm px-4 py-2.5 rounded-xl
-           border border-surface-700;
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+           bg-[#F8F9FA] hover:bg-[#F2F2F7] active:scale-[0.98]
+           text-[#111827] font-bold text-xs px-4 py-2.5 rounded-2xl
+           border border-[#E5E7EB] min-h-[44px];
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
 
   .btn-neu-primary {
     @apply inline-flex items-center justify-center gap-2
            active:scale-[0.98]
-           text-white font-bold text-sm px-5 py-2.5 rounded-xl;
-    background-color: #2C6BED;
-    box-shadow: 0 2px 8px rgba(44, 107, 237, 0.25);
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+           text-white font-bold text-xs px-5 py-2.5 rounded-2xl min-h-[44px];
+    background-color: var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(44, 107, 237, 0.22);
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
-  .btn-neu-primary:hover { background-color: #1B54D4; }
+  .btn-neu-primary:hover { background-color: var(--color-accent-hover); }
 
   .btn-neu-secondary {
     @apply inline-flex items-center justify-center gap-2
-           bg-surface-850 hover:bg-surface-750 active:scale-[0.98]
-           text-content-primary font-bold text-sm px-4 py-2.5 rounded-xl
-           border border-surface-700;
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+           bg-[#F8F9FA] hover:bg-[#F2F2F7] active:scale-[0.98]
+           text-[#111827] font-bold text-xs px-4 py-2.5 rounded-2xl
+           border border-[#E5E7EB] min-h-[44px];
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
 
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2
-           bg-transparent hover:bg-surface-850 active:scale-[0.97]
-           text-content-secondary hover:text-content-primary font-semibold text-sm
-           px-4 py-2.5 rounded-xl;
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+           bg-transparent hover:bg-[#F8F9FA] active:scale-[0.97]
+           text-[#4B5563] hover:text-[#111827] font-semibold text-xs
+           px-4 py-2.5 rounded-2xl min-h-[44px];
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
 
   .btn-danger {
     @apply inline-flex items-center justify-center gap-2
            bg-rose-50 hover:bg-rose-100 active:scale-[0.98]
-           text-rose-700 font-bold text-sm px-5 py-3 rounded-xl border border-rose-200;
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+           text-rose-700 font-bold text-xs px-5 py-3 rounded-2xl border border-rose-200 min-h-[44px];
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
 
-  /* === Inputs === */
+  /* === Inputs & Form Controls === */
   .input-field {
-    @apply w-full bg-surface-900 border border-surface-700
-           text-content-primary placeholder-content-muted
-           px-4 py-3 text-sm rounded-xl
-           focus:outline-none focus:ring-2;
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    @apply w-full bg-[#F8F9FA] border border-[#E5E7EB]
+           text-[#111827] placeholder-[#9CA3AF]
+           px-4 py-3 text-xs rounded-2xl min-h-[44px]
+           focus:outline-none focus:ring-2 focus:bg-white;
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
   .input-field:focus {
-    border-color: #2C6BED;
-    --tw-ring-color: rgba(44, 107, 237, 0.20);
+    border-color: var(--md-sys-color-primary);
+    --tw-ring-color: rgba(44, 107, 237, 0.18);
   }
 
   .search-bar { @apply input-field pl-10; }
 
   /* === Skeleton Loader === */
   .skeleton {
-    @apply bg-surface-750 rounded-lg animate-pulse;
+    @apply bg-[#E9ECEF] rounded-xl animate-pulse;
   }
 
-  /* === App Bars — Signal White Style === */
+  /* === Top App Bars === */
   .top-bar {
     @apply fixed top-0 left-0 right-0 z-30 border-b;
     background-color: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-color: #E5E7EB;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-color: var(--md-sys-color-outline-variant);
   }
 
-  /* === Chat Detail Dark Top Bar === */
-  .top-bar-dark {
-    @apply fixed top-0 left-0 right-0 z-30 border-b;
-    background-color: rgba(28, 28, 30, 0.98);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-color: #2C2C2E;
-  }
-
-  /* === Bottom Navigation — Signal Clean White === */
+  /* === Bottom Navigation Bar === */
   .bottom-nav {
     @apply fixed bottom-0 left-0 right-0 z-30 border-t pb-safe;
     background-color: rgba(255, 255, 255, 0.97);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-color: #E5E7EB;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-color: var(--md-sys-color-outline-variant);
     box-shadow: 0 -1px 8px rgba(17, 24, 39, 0.04);
   }
 
-  /* === Step & Stat Cards === */
-  .step-card {
-    @apply card p-4 flex items-start gap-4;
-  }
-
-  .step-icon {
-    @apply w-10 h-10 flex items-center justify-center flex-shrink-0 rounded-xl border;
-    background-color: #EEF2FF;
-    border-color: #DBEAFE;
-    color: #2C6BED;
-  }
-
-  .stat-card { @apply card p-4 flex flex-col gap-1; }
-
-  /* === Filter Pill Tabs — Signal Blue Active === */
+  /* === Filter Chips === */
   .filter-pill {
-    @apply flex-shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200;
+    @apply flex-shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 min-h-[36px] flex items-center justify-center;
   }
   .filter-pill-active {
     @apply filter-pill text-white;
-    background-color: #2C6BED;
-    border-color: #2C6BED;
+    background-color: var(--md-sys-color-primary);
+    border-color: var(--md-sys-color-primary);
     box-shadow: 0 2px 6px rgba(44, 107, 237, 0.22);
   }
   .filter-pill-inactive {
-    @apply filter-pill bg-surface-900 text-content-secondary border-surface-700;
+    @apply filter-pill bg-white text-[#4B5563] border-[#E5E7EB];
   }
   .filter-pill-inactive:hover {
     border-color: rgba(44, 107, 237, 0.4);
-    color: #2C6BED;
+    color: var(--md-sys-color-primary);
   }
 
-  /* === Floating Action Pill === */
+  /* === Floating Action Button === */
   .floating-pill {
-    @apply fixed z-40 flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white rounded-full;
-    background-color: #2C6BED;
+    @apply fixed z-40 flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white rounded-full min-h-[44px];
+    background-color: var(--md-sys-color-primary);
     box-shadow: 0 4px 16px rgba(44, 107, 237, 0.35);
-    transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
   }
-  .floating-pill:hover { background-color: #1B54D4; }
+  .floating-pill:hover { background-color: var(--color-accent-hover); }
   .floating-pill:active { transform: scale(0.95); }
 
-  /* === Conversation Avatar (Signal-style initials circle) === */
+  /* === Conversation Avatar === */
   .avatar-circle {
     @apply flex-shrink-0 rounded-full flex items-center justify-center
-           font-bold text-sm select-none;
+           font-bold text-xs select-none;
     width: 2.75rem;
     height: 2.75rem;
-  }
-
-  /* === Settings Row === */
-  .settings-row {
-    @apply w-full flex items-center justify-between px-4 py-3.5
-           hover:bg-surface-850 transition-colors text-left;
-  }
-
-  .settings-row-icon {
-    @apply w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0;
   }
 }
 
