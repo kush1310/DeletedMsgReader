@@ -10,12 +10,12 @@ import android.util.Log
 /**
  * WhatsAppNotificationParser
  *
- * Decoupled, pure-Kotlin notification extraction and heuristic parsing engine.
+ * Decoupled, pure-Kotlin notification extraction and heuristic parsing engine for NotiCatch.
  * Isolates parsing logic from Android service bindings to enable deterministic unit testing.
  *
- * Features:
+ * Capabilities:
  *   - Automatic message-count suffix stripping (" (6 messages)" -> single unified thread)
- *   - Embedded group sender extraction ("~Naitri Jasani: So what !!" -> author attribution)
+ *   - Embedded group sender extraction ("~Parth: Hi" -> author attribution)
  *   - Android 10-15 MessagingStyle multi-message bundle array extraction
  *   - Multilingual deletion detection across 25+ language variants
  *   - WhatsApp Edit notification detection & original text extraction
@@ -45,10 +45,12 @@ object WhatsAppNotificationParser {
         val isDisappearing:       Boolean,
     )
 
-    /** Multilingual deletion signal regex heuristic catalog (25+ languages). */
+    /** Multilingual deletion signal regex heuristic catalog (25+ languages and WhatsApp format variants). */
     private val DELETION_PATTERNS = listOf(
         Regex("this message was deleted",               RegexOption.IGNORE_CASE),
+        Regex("this message has been deleted",          RegexOption.IGNORE_CASE),
         Regex("you deleted this message",               RegexOption.IGNORE_CASE),
+        Regex("you deleted a message",                  RegexOption.IGNORE_CASE),
         Regex("message deleted",                        RegexOption.IGNORE_CASE),
         Regex("deleted this message",                   RegexOption.IGNORE_CASE),
         Regex("deleted a message",                      RegexOption.IGNORE_CASE),
@@ -66,7 +68,7 @@ object WhatsAppNotificationParser {
         Regex("यह संदेश हटा दिया गया"),
         Regex("આ સંદેશ કાઢી નાખવામાં આવ્યો છે"),
         Regex("இந்த செய்தி நீக்கப்பட்டது"),
-        Regex("ఈ సందేశం తొలగించబడింది"),
+        Regex("ఈ సందేశం తొలகించబడింది"),
         Regex("ಈ ಸಂದೇಶವನ್ನು ಅಳಿಸಲಾಗಿದೆ"),
         Regex("ഈ സന്ദേശം ഇല്ലാതാക്കി"),
         Regex("تم حذف هذه الرسالة"),
@@ -74,7 +76,7 @@ object WhatsAppNotificationParser {
         Regex("这个消息已被删除"),
         Regex("這個訊息已被刪除"),
         Regex("このメッセージは削除されました"),
-        Regex("이 메시지는 삭제되었습니다"),
+        Regex("이 메시지는 삭제되었습니다")
     )
 
     /** OTP & transactional automated broadcast filter patterns. */
@@ -82,7 +84,7 @@ object WhatsAppNotificationParser {
         Regex("\\b\\d{4,8}\\b.*\\b(code|otp|passcode|pin)\\b", RegexOption.IGNORE_CASE),
         Regex("\\bverification code\\b",                       RegexOption.IGNORE_CASE),
         Regex("\\bone[\\s-]?time[\\s-]?password\\b",           RegexOption.IGNORE_CASE),
-        Regex("\\bdo not share\\b.*\\b(code|otp)\\b",          RegexOption.IGNORE_CASE),
+        Regex("\\bdo not share\\b.*\\b(code|otp)\\b",          RegexOption.IGNORE_CASE)
     )
 
     /** Suffix pattern attached by WhatsApp for batched notifications (e.g., "(6 messages)", "(12 new messages)") */
@@ -153,10 +155,10 @@ object WhatsAppNotificationParser {
                     if (rawMsgText.isBlank() || isSummaryCount(rawMsgText)) continue
 
                     val msgTime = item.getLong("time", timestamp)
-                    var sender = extractSenderFromBundle(item) ?: if (isGroup) chatTitle else chatTitle
+                    var sender = extractSenderFromBundle(item) ?: chatTitle
                     var cleanText = cleanEditedText(rawMsgText)
 
-                    /* Extract embedded sender from group message text (e.g. "~Naitri Jasani: So what !!") */
+                    /* Extract embedded sender from group message text (e.g. "~Parth: Hi") */
                     if (cleanText.contains(": ")) {
                         val colonIdx = cleanText.indexOf(": ")
                         if (colonIdx in 1..40) {
@@ -181,7 +183,7 @@ object WhatsAppNotificationParser {
                             packageName          = packageName,
                             chatTitle            = chatTitle,
                             senderName           = sender.ifBlank { chatTitle },
-                            messageText          = if (isDeletion) null else cleanText,
+                            messageText          = if (isDeletion) cleanText else cleanText,
                             notificationId       = notificationId,
                             timestamp            = if (msgTime > 0) msgTime else timestamp,
                             isDeletion           = isDeletion,
@@ -224,7 +226,7 @@ object WhatsAppNotificationParser {
                         packageName          = packageName,
                         chatTitle            = chatTitle,
                         senderName           = senderName.ifBlank { chatTitle },
-                        messageText          = if (isDeletion) null else cleanText,
+                        messageText          = cleanText,
                         notificationId       = notificationId,
                         timestamp            = timestamp,
                         isDeletion           = isDeletion,
@@ -243,7 +245,8 @@ object WhatsAppNotificationParser {
 
     private fun isSummaryCount(text: String): Boolean {
         return text.matches(Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE)) ||
-               text.matches(Regex("^\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?$", RegexOption.IGNORE_CASE))
+               text.matches(Regex("^\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?$", RegexOption.IGNORE_CASE)) ||
+               text.matches(Regex("^[\\w\\s°.~]+:\\s+\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE))
     }
 
     fun isDeletion(text: String, title: String): Boolean {

@@ -185,7 +185,7 @@ export function LandingPage() {
         {recentWithDeleted.length > 0 && (
           <div className="px-4 pt-4">
             <div className="flex items-center justify-between mb-2.5">
-              <h2 className="font-serif text-sm font-bold text-content-primary">Recent Deleted Messages</h2>
+              <h2 className="text-sm font-bold text-content-primary">Recent Deleted Messages</h2>
               <button
                 id="view-all-deleted-button"
                 type="button"
@@ -234,7 +234,7 @@ export function LandingPage() {
                 <Trash2 className="w-5 h-5" strokeWidth={2} />
               </div>
               <div>
-                <p className="font-serif text-sm font-bold text-content-primary">No deleted messages yet</p>
+                <p className="text-sm font-bold text-content-primary">No deleted messages yet</p>
                 <p className="text-xs text-content-muted mt-1 max-w-[240px] font-medium leading-relaxed">
                   NotiCatch will capture and highlight deleted messages automatically as they arrive.
                 </p>

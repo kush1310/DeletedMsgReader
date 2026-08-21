@@ -51,7 +51,7 @@ export function NotificationsSettingsPage() {
           >
             <ArrowLeft className="w-5 h-5" strokeWidth={2} />
           </button>
-          <h1 className="font-serif text-lg font-bold text-content-primary tracking-tight">
+          <h1 className="text-lg font-bold text-content-primary tracking-tight">
             Notifications
           </h1>
           <div className="w-9" />

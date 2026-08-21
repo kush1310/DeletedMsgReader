@@ -37,7 +37,7 @@ export function PrivacySettingsPage() {
           >
             <ArrowLeft className="w-5 h-5" strokeWidth={2} />
           </button>
-          <h1 className="font-serif text-lg font-bold text-content-primary tracking-tight">
+          <h1 className="text-lg font-bold text-content-primary tracking-tight">
             Privacy
           </h1>
           <div className="w-9" />

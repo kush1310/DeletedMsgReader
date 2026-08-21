@@ -1,5 +1,6 @@
 name: Build & Release NotiCatch Android APK
 
+# Trigger: every push to main (CI build + artifact), every v* tag (CI + GitHub Release)
 on:
   push:
     branches: [ "main" ]
@@ -22,13 +23,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install Node Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run Unit Tests
         run: npm test
@@ -36,7 +38,7 @@ jobs:
       - name: Build Web Application
         run: npm run build
 
-      - name: Sync Android Assets
+      - name: Sync Capacitor Android Assets
         run: npx cap sync android
 
       - name: Set up JDK 17
@@ -54,30 +56,84 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Prepare Release APK Artifacts
+      # Resolve the release version:
+      #   - On a tag push (v1.6.3):   TAG_NAME = v1.6.3
+      #   - On a branch push / PR:    TAG_NAME = v{version from package.json}-dev
+      - name: Resolve Release Tag Name
+        id: resolve_tag
         run: |
-          TAG_NAME="${GITHUB_REF_NAME:-v1.6.3}"
-          mkdir -p release-apks
-          cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-${TAG_NAME}.apk"
-          cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-latest.apk"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+          else
+            PKG_VERSION=$(node -p "require('./package.json').version")
+            TAG_NAME="v${PKG_VERSION}-dev"
+          fi
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG_NAME}"
 
-      - name: Upload Debug APK Artifact
+      # Copy the APK to a named directory using the versioned name.
+      # IMPORTANT: No zip is created here — the file is a raw .apk throughout.
+      # GitHub Actions UI will zip artifacts on download (this is a GitHub limitation,
+      # not our code). The GitHub RELEASE assets are always direct .apk files.
+      - name: Prepare Named APK Files
+        run: |
+          TAG="${{ steps.resolve_tag.outputs.tag_name }}"
+          mkdir -p release-apks
+          # Primary versioned APK — e.g. NotiCatch-v1.6.3.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-${TAG}.apk"
+          # Alias for always-latest download URL
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-latest.apk"
+          echo "Contents of release-apks/:"
+          ls -lh release-apks/
+          # Verify both files are valid APKs (zip magic bytes PK)
+          for f in release-apks/*.apk; do
+            MAGIC=$(xxd -l 4 "$f" | awk '{print $2$3}')
+            if [[ "$MAGIC" != "504b0304" ]]; then
+              echo "ERROR: $f does not appear to be a valid APK/zip file (magic: $MAGIC)"
+              exit 1
+            fi
+            echo "VERIFIED: $f is a valid APK"
+          done
+
+      # Upload as Actions artifact — NOTE: GitHub wraps ALL artifacts in a zip
+      # when downloaded from the Actions UI tab. This is a GitHub platform behaviour
+      # and is unavoidable. The RELEASE assets (below) are always direct .apk files.
+      - name: Upload APK as Actions Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NotiCatch-APK-Artifacts
+          name: NotiCatch-${{ steps.resolve_tag.outputs.tag_name }}-APK
           path: release-apks/*.apk
           if-no-files-found: error
           retention-days: 30
+          compression-level: 0
 
-      - name: Publish GitHub Release
+      # Only runs on v* tag pushes — creates a GitHub Release with direct .apk assets.
+      # Users should download the .apk from the Assets section of the release page.
+      # The "Source code (zip)" and "Source code (tar.gz)" links that GitHub shows
+      # automatically at the bottom of every release are source code — not the app.
+      - name: Publish GitHub Release with Direct APK Assets
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: "Release ${{ github.ref_name }}"
+          name: "NotiCatch ${{ github.ref_name }}"
           tag_name: ${{ github.ref_name }}
-          files: release-apks/*.apk
-          generate_release_notes: true
+          body: |
+            ## NotiCatch ${{ github.ref_name }}
+
+            ### How to Install
+            1. Download **NotiCatch-${{ github.ref_name }}.apk** from the Assets section below.
+            2. On your Android device, enable **Install from unknown sources** in Settings.
+            3. Open the downloaded `.apk` file to install.
+
+            > **Note:** The "Source code (zip)" and "Source code (tar.gz)" links at the very bottom of this page are the repository source code — **not** the app. Always install the `.apk` file.
+
+            ---
+            **Full Changelog**: https://github.com/kush1310/DeletedMsgReader/compare/${{ github.ref_name }}...main
+          files: |
+            release-apks/NotiCatch-${{ github.ref_name }}.apk
+            release-apks/NotiCatch-latest.apk
+          generate_release_notes: false
           draft: false
           prerelease: false

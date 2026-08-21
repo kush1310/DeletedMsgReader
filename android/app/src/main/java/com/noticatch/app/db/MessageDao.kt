@@ -40,7 +40,6 @@ interface MessageDao {
     @Query("""
         SELECT * FROM messages
         WHERE conversationId = :conversationId
-          AND senderName = :senderName
           AND messageText = :text
           AND timestamp >= :minTimestamp
           AND timestamp <= :maxTimestamp
@@ -49,7 +48,6 @@ interface MessageDao {
     """)
     suspend fun findDuplicate(
         conversationId: String,
-        senderName:     String,
         text:           String,
         minTimestamp:   Long,
         maxTimestamp:   Long,

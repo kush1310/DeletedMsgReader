@@ -2,7 +2,7 @@
  * ContactUsPage
  *
  * Developer support and contact form page for NotiCatch.
- * Styled in Anthropic Claude warm editorial aesthetic.
+ * Styled in clean Signal aesthetic with crisp white card surfaces and blue accent.
  */
 
 import { useState } from 'react';
@@ -38,8 +38,8 @@ export function ContactUsPage() {
     if (!validateSearchQuery(sanitizedSubject)) {
       newErrors.subject = 'Subject is required (max 150 characters).';
     }
-    if (sanitizedMessage.length < 20) {
-      newErrors.message = 'Message must be at least 20 characters.';
+    if (sanitizedMessage.length < 10) {
+      newErrors.message = 'Message must be at least 10 characters.';
     }
     if (sanitizedMessage.length > 2000) {
       newErrors.message = 'Message must not exceed 2000 characters.';
@@ -57,29 +57,35 @@ export function ContactUsPage() {
 
   if (submitted) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
+      <div className="flex flex-col h-screen overflow-hidden bg-white text-[#111827]">
         <TopAppBar
           title="Contact Us"
           leading={
             <IconButton
               id="contact-back-button"
-              icon={<ArrowLeft className="w-5 h-5 text-content-primary" strokeWidth={2.2} />}
+              icon={<ArrowLeft className="w-5 h-5 text-[#111827]" strokeWidth={2.2} />}
               label="Go back"
               onClick={() => navigate(-1)}
             />
           }
         />
         <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 text-center animate-scale-in max-w-sm mx-auto">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center justify-center shadow-card">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center justify-center shadow-xs">
             <CheckCircle2 className="w-8 h-8 text-emerald-600" strokeWidth={2.2} />
           </div>
           <div className="space-y-1.5">
-            <h2 className="font-serif text-lg font-bold text-content-primary">Message Logged</h2>
-            <p className="text-xs text-content-muted leading-relaxed font-medium">
+            <h2 className="text-lg font-bold text-[#111827]">Message Logged</h2>
+            <p className="text-xs text-[#6B7280] leading-relaxed font-medium">
               Your feedback has been recorded locally on your device.
             </p>
           </div>
-          <button id="contact-done-button" type="button" onClick={() => navigate(-1)} className="btn-neu-primary px-8">
+          <button
+            id="contact-done-button"
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-full py-3 rounded-2xl text-white font-bold text-xs shadow-xs"
+            style={{ background: '#2C6BED' }}
+          >
             Done
           </button>
         </div>
@@ -88,62 +94,62 @@ export function ContactUsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
+    <div className="flex flex-col h-screen overflow-hidden bg-white text-[#111827]">
       <TopAppBar
         title="Contact Us"
         subtitle="NotiCatch Developer Support"
         leading={
           <IconButton
             id="contact-back-button"
-            icon={<ArrowLeft className="w-5 h-5 text-content-primary" strokeWidth={2.2} />}
+            icon={<ArrowLeft className="w-5 h-5 text-[#111827]" strokeWidth={2.2} />}
             label="Go back"
             onClick={() => navigate(-1)}
           />
         }
       />
 
-      <div className="flex-1 overflow-y-auto pt-14 pb-8 px-4">
-        <div className="py-4 space-y-4 max-w-lg mx-auto animate-slide-up">
+      <div className="flex-1 overflow-y-auto pt-16 pb-8 px-4">
+        <div className="py-2 space-y-4 max-w-lg mx-auto animate-slide-up">
 
           {/* Quick contact channels */}
           <div className="grid grid-cols-2 gap-3">
             <a
               id="contact-email-link"
-              href="mailto:support@noticatch.app"
-              className="card-interactive flex items-center gap-3 px-4 py-3 text-left shadow-card"
+              href="mailto:kushshah.ce@gmail.com"
+              className="flex items-center gap-3 px-4 py-3 text-left rounded-2xl border border-[#E5E7EB] bg-white shadow-xs hover:border-[#2C6BED] transition-colors"
             >
-              <div className="w-9 h-9 rounded-xl bg-accent-muted flex items-center justify-center text-accent shrink-0">
-                <Mail className="w-4 h-4 text-accent" strokeWidth={2} />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <Mail className="w-4 h-4" strokeWidth={2} />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-content-primary">Email Support</p>
-                <p className="text-2xs text-content-muted truncate font-medium">support@noticatch.app</p>
+                <p className="text-xs font-bold text-[#111827]">Email Support</p>
+                <p className="text-2xs text-[#6B7280] truncate font-medium">kushshah.ce@gmail.com</p>
               </div>
             </a>
             <a
               id="contact-github-link"
-              href="https://github.com/noticatch"
+              href="https://github.com/kush1310/DeletedMsgReader"
               target="_blank"
               rel="noopener noreferrer"
-              className="card-interactive flex items-center gap-3 px-4 py-3 text-left shadow-card"
+              className="flex items-center gap-3 px-4 py-3 text-left rounded-2xl border border-[#E5E7EB] bg-white shadow-xs hover:border-[#2C6BED] transition-colors"
             >
-              <div className="w-9 h-9 rounded-xl bg-surface-850 flex items-center justify-center text-content-secondary shrink-0 border border-surface-700">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#111827] shrink-0 border border-[#E5E7EB]" style={{ background: '#F8F9FA' }}>
                 <Github className="w-4 h-4" strokeWidth={2} />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-content-primary">Repository</p>
-                <p className="text-2xs text-content-muted truncate font-medium">Open an issue</p>
+                <p className="text-xs font-bold text-[#111827]">Repository</p>
+                <p className="text-2xs text-[#6B7280] truncate font-medium">Open an issue</p>
               </div>
             </a>
           </div>
 
           {/* Support form */}
-          <form onSubmit={handleSubmit} className="card p-5 space-y-4 shadow-card">
-            <h2 className="font-serif text-sm font-bold text-content-primary">Send a Direct Message</h2>
+          <form onSubmit={handleSubmit} className="p-5 space-y-4 rounded-2xl border border-[#E5E7EB] bg-white shadow-xs">
+            <h2 className="text-sm font-bold text-[#111827]">Send a Direct Message</h2>
 
             {/* Category */}
             <div className="space-y-1.5">
-              <label htmlFor="contact-category" className="text-xs font-semibold text-content-secondary">
+              <label htmlFor="contact-category" className="text-xs font-semibold text-[#6B7280]">
                 Category
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -155,8 +161,8 @@ export function ContactUsPage() {
                     onClick={() => setCategory(option.value)}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-left ${
                       category === option.value
-                        ? 'bg-accent text-white border-accent shadow-warm-sm'
-                        : 'bg-surface-850 border-surface-700 text-content-secondary hover:text-content-primary'
+                        ? 'border-[#2C6BED] text-[#2C6BED] bg-[#EEF2FF]'
+                        : 'border-[#E5E7EB] text-[#6B7280] bg-[#F8F9FA] hover:text-[#111827]'
                     }`}
                   >
                     {option.label}
@@ -167,7 +173,7 @@ export function ContactUsPage() {
 
             {/* Subject */}
             <div className="space-y-1.5">
-              <label htmlFor="contact-subject" className="text-xs font-semibold text-content-secondary">
+              <label htmlFor="contact-subject" className="text-xs font-semibold text-[#6B7280]">
                 Subject
               </label>
               <input
@@ -177,14 +183,14 @@ export function ContactUsPage() {
                 onChange={event => { setSubject(event.target.value); setErrors(prev => ({ ...prev, subject: '' })); }}
                 placeholder="Brief summary of your inquiry..."
                 maxLength={150}
-                className="input-field"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] text-xs font-medium text-[#111827] focus:outline-none focus:border-[#2C6BED] focus:bg-white transition-all"
               />
               {errors.subject && <p className="text-xs text-rose-600 font-semibold" role="alert">{errors.subject}</p>}
             </div>
 
             {/* Message */}
             <div className="space-y-1.5">
-              <label htmlFor="contact-message" className="text-xs font-semibold text-content-secondary">
+              <label htmlFor="contact-message" className="text-xs font-semibold text-[#6B7280]">
                 Message
               </label>
               <textarea
@@ -194,18 +200,23 @@ export function ContactUsPage() {
                 placeholder="Detailed explanation of the issue or feedback..."
                 rows={5}
                 maxLength={2000}
-                className="input-field resize-none"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] text-xs font-medium text-[#111827] focus:outline-none focus:border-[#2C6BED] focus:bg-white resize-none transition-all"
               />
               <div className="flex items-center justify-between">
                 {errors.message
                   ? <p className="text-xs text-rose-600 font-semibold" role="alert">{errors.message}</p>
                   : <span />
                 }
-                <span className="text-2xs text-content-muted font-medium">{message.length}/2000</span>
+                <span className="text-2xs text-[#6B7280] font-medium">{message.length}/2000</span>
               </div>
             </div>
 
-            <button id="contact-submit-button" type="submit" className="btn-neu-primary w-full py-3">
+            <button
+              id="contact-submit-button"
+              type="submit"
+              className="w-full py-3 rounded-2xl text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
+              style={{ background: '#2C6BED' }}
+            >
               <Send className="w-4 h-4" strokeWidth={2} />
               <span>Submit Message</span>
             </button>

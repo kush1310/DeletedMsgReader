@@ -302,7 +302,7 @@ export function ChatsPage() {
       )}
 
       {/* Search + Filter Strip */}
-      <div className={`px-4 space-y-2 z-20 border-b border-[#E5E7EB] bg-white ${hasNotifAccess === false ? 'pt-2' : 'pt-[3.75rem]'} pb-2`}>
+      <div className={`px-4 space-y-2 z-20 border-b border-[#E5E7EB] bg-white ${hasNotifAccess === false ? 'pt-2' : 'pt-20'} pb-2.5`}>
         {searchVisible && (
           <SearchInput
             id="chats-search-input"

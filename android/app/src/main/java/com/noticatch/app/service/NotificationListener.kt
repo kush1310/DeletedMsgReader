@@ -70,7 +70,7 @@ class NotificationListener : NotificationListenerService() {
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
 
-        /* Execute all parsed messages in a single sequential coroutine job to prevent race conditions */
+        /* Execute all parsed messages sequentially to prevent race conditions */
         serviceScope.launch {
             for (parsed in parsedList) {
                 if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
@@ -95,7 +95,7 @@ class NotificationListener : NotificationListenerService() {
         val normalizedTitle = cleanTitle.lowercase().replace(Regex("\\s+"), " ")
         val conversationKey = "${parsed.packageName}_$normalizedTitle"
 
-        /* 1. Resolve or create parent conversation (with title fallback to prevent split threads) */
+        /* 1. Resolve or create parent conversation */
         var conversation = database.conversationDao().findByKey(conversationKey)
         if (conversation == null) {
             conversation = database.conversationDao().findByTitle(cleanTitle)
@@ -107,7 +107,7 @@ class NotificationListener : NotificationListenerService() {
                 conversationKey      = conversationKey,
                 chatTitle            = cleanTitle,
                 isGroup              = parsed.isGroup,
-                unreadCount          = 1,
+                unreadCount          = if (parsed.isDeletion) 0 else 1,
                 lastMessageTimestamp = parsed.timestamp,
                 deletedCount         = if (parsed.isDeletion) 1 else 0,
             )
@@ -138,7 +138,40 @@ class NotificationListener : NotificationListenerService() {
                 broadcastNewMessage(existing.senderName, existing.messageText, conversation.id, true, parsed.timestamp)
                 return
             } else {
-                Log.d(TAG, "Deletion signal received but no prior matching message in 72h window.")
+                /* If no prior message was captured, insert a deleted placeholder record so the deletion event is never lost */
+                val rawSignature = "${conversation.id}|${parsed.senderName}|${parsed.timestamp}|deleted"
+                val sha256Signature = computeSha256(rawSignature)
+
+                val placeholder = MessageEntity(
+                    id                   = UUID.randomUUID().toString(),
+                    conversationId       = conversation.id,
+                    senderName           = parsed.senderName,
+                    messageText          = "This message was deleted",
+                    originalText         = null,
+                    notificationId       = parsed.notificationId,
+                    timestamp            = parsed.timestamp,
+                    isDeletedBySender    = true,
+                    isEdited             = false,
+                    editCount            = 0,
+                    editedAt             = null,
+                    mediaType            = null,
+                    mediaPath            = null,
+                    audioDurationSeconds = null,
+                    isDisappearing       = false,
+                    hashSignature        = sha256Signature,
+                    isPurged             = false,
+                    purgedAt             = null,
+                )
+                database.messageDao().insert(placeholder)
+                database.conversationDao().update(
+                    conversation.copy(
+                        chatTitle            = cleanTitle,
+                        lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
+                        deletedCount         = conversation.deletedCount + 1,
+                    )
+                )
+                Log.i(TAG, "Inserted deleted placeholder message for chat '$cleanTitle'")
+                broadcastNewMessage(parsed.senderName, placeholder.messageText, conversation.id, true, parsed.timestamp)
                 return
             }
         }
@@ -167,17 +200,17 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 4. Standard message insertion with sliding-window deduplication */
+        /* 4. Standard message insertion with strict sliding-window deduplication */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
 
-            /* Deduplication check: Do not re-insert identical message from WhatsApp update bundles */
-            val minTime = parsed.timestamp - 300000L // -5 minutes
-            val maxTime = parsed.timestamp + 300000L // +5 minutes
-            val duplicate = database.messageDao().findDuplicate(conversation.id, parsed.senderName, text, minTime, maxTime)
+            /* Deduplication check: Match text & conversation within a ±15 second window */
+            val minTime = parsed.timestamp - 15000L // -15 seconds
+            val maxTime = parsed.timestamp + 15000L // +15 seconds
+            val duplicate = database.messageDao().findDuplicate(conversation.id, text, minTime, maxTime)
 
             if (duplicate != null) {
-                Log.d(TAG, "Skipped duplicate message: '${text.take(20)}...' for chat '$cleanTitle'")
+                Log.d(TAG, "Skipped duplicate notification message: '${text.take(20)}...' for chat '$cleanTitle'")
                 return
             }
 
@@ -206,7 +239,7 @@ class NotificationListener : NotificationListenerService() {
             )
             database.messageDao().insert(message)
 
-            /* Update parent conversation metadata */
+            /* Update parent conversation metadata — unreadCount only increments on true new messages */
             database.conversationDao().update(
                 conversation.copy(
                     chatTitle            = cleanTitle,

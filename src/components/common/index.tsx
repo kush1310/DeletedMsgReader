@@ -215,7 +215,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
         {icon}
       </div>
       <div className="space-y-1">
-        <p className="font-serif font-bold text-content-primary text-base tracking-tight">{title}</p>
+        <p className="font-bold text-content-primary text-base tracking-tight">{title}</p>
         <p className="text-content-muted text-xs leading-relaxed max-w-[280px] font-medium">{description}</p>
       </div>
       {action && <div className="mt-2">{action}</div>}
