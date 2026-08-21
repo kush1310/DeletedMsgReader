@@ -56,7 +56,7 @@ jobs:
 
       - name: Prepare Release APK Artifacts
         run: |
-          TAG_NAME="${GITHUB_REF_NAME:-v1.6.2}"
+          TAG_NAME="${GITHUB_REF_NAME:-v1.6.3}"
           mkdir -p release-apks
           cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-${TAG_NAME}.apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-latest.apk"
