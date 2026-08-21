@@ -54,13 +54,20 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon --stacktrace
 
+      - name: Prepare Release APK Artifacts
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME:-v1.6.2}"
+          mkdir -p release-apks
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-${TAG_NAME}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release-apks/NotiCatch-latest.apk"
+
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NotiCatch-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: NotiCatch-APK-Artifacts
+          path: release-apks/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -68,7 +75,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          name: "Release ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          files: release-apks/*.apk
           generate_release_notes: true
           draft: false
           prerelease: false

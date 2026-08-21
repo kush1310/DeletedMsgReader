@@ -2,7 +2,10 @@
  * DeletedOnlyPage
  *
  * Shows ALL messages flagged as deleted by sender across ALL conversations.
- * Styled in Anthropic Claude warm editorial aesthetic with honey-amber cards.
+ *
+ * Visual system: Signal-inspired white canvas with amber deleted message cards,
+ * Signal-blue active filter pills, and charcoal typography.
+ * Covers every conversation — not scoped to a single contact.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -112,8 +115,8 @@ export function DeletedOnlyPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-canvas">
-        <TopAppBar title="Deleted Messages" />
+      <div className="flex flex-col h-screen overflow-hidden bg-white">
+        <TopAppBar title="Deleted Vault" />
         <div className="pt-14 flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
         </div>
@@ -122,9 +125,9 @@ export function DeletedOnlyPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
       <TopAppBar
-        title="Deleted Messages"
+        title="Deleted Vault"
         subtitle={
           deletedMessages.length > 0
             ? `${deletedMessages.length} message${deletedMessages.length !== 1 ? 's' : ''} recovered`
@@ -132,7 +135,7 @@ export function DeletedOnlyPage() {
         }
       />
 
-      <div className="pt-14 z-20 bg-canvas border-b border-surface-700 shadow-xs">
+      <div className="pt-14 z-20 bg-white border-b border-[#E5E7EB] shadow-xs">
         <div className="px-4 pt-2.5 pb-2">
           <SearchInput
             id="deleted-search-input"
@@ -177,7 +180,7 @@ export function DeletedOnlyPage() {
         </div>
 
         {displayedMessages.length > 0 && (
-          <div className="px-4 py-1.5 bg-surface-850 border-t border-surface-700 flex items-center justify-between text-2xs text-content-muted font-medium">
+          <div className="px-4 py-1.5 flex items-center justify-between text-2xs font-medium border-t" style={{ background: '#F8F9FA', borderColor: '#E5E7EB', color: '#9CA3AF' }}>
             <span>{displayedMessages.length} item{displayedMessages.length !== 1 ? 's' : ''} shown</span>
             <span className="font-mono">{totalChars.toLocaleString()} characters recovered</span>
           </div>

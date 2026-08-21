@@ -3,12 +3,13 @@
 /**
  * Tailwind CSS configuration for NotiCatch.
  *
- * Configured strictly for Anthropic Claude Aesthetic:
- * - Fonts: Lora (Editorial Serif) + Plus Jakarta Sans (Clean Neo-grotesque UI Sans)
- * - Warm Parchment / Stone Cream canvas palette (#FAF9F5, #F4F3EE)
- * - Claude Terracotta Accent (#CC5A36, #B84D2B, #E06C48)
- * - Warm Honey-Amber for deleted messages (#FDF4E7, #9C5418)
- * - Soft warm elevations & pill radii
+ * Signal-inspired privacy communication design system:
+ * - Fonts: Plus Jakarta Sans (clean system sans — no serif)
+ * - Pure white canvas (#FFFFFF, #F8F9FA, #F2F2F7)
+ * - Signal Blue accent (#2C6BED, #1B54D4)
+ * - Deep charcoal typography (#111827, #4B5563, #9CA3AF)
+ * - Amber deleted message palette (#FFF4E5, #92400E, #FED7AA)
+ * - Hairline neutral borders (#E5E7EB, #D1D5DB)
  */
 export default {
   content: [
@@ -18,54 +19,51 @@ export default {
   theme: {
     extend: {
       colors: {
-        /* === Claude Warm Canvas & Surface Palette === */
+        /* === Signal-Inspired Clean Surfaces === */
         canvas: {
-          DEFAULT: '#FAF9F5', // Claude Main Canvas (Warm Parchment)
-          dark:    '#1C1C1A', // Dark Canvas
+          DEFAULT: '#FFFFFF', // Pure White Main Canvas
+          dark:    '#121212', // Signal Dark Chat Background
         },
         surface: {
-          900: '#FFFFFF', // Crisp White Cards / Sheet Backdrops
-          850: '#F4F3EE', // Light Bone / Container Backdrop
-          800: '#FAF9F5', // Canvas Background (Warm Cream)
-          750: '#EDE9DE', // Pill & Button Inset Surface
-          700: '#E8E4D8', // Card Borders & Subtle Dividers
-          600: '#D8D4C5', // Outline Borders & Separators
-          500: '#A39F93', // Muted Icons & Secondary Borders
-          400: '#7A766B', // Tertiary Text
+          900: '#FFFFFF', // Crisp White Cards
+          850: '#F8F9FA', // Off-White / Hovered Surface
+          800: '#F2F2F7', // Section Divider Background (iOS/Signal style)
+          750: '#E9ECEF', // Pressed / Active Surface
+          700: '#E5E7EB', // Hairline Border — primary
+          600: '#D1D5DB', // Heavier Separator
+          500: '#9CA3AF', // Muted Icon / Placeholder
+          400: '#6B7280', // Secondary Text / Icon
+          dark: {
+            900: '#1C1C1E', // Dark top bar / chat header
+            850: '#1E2028', // Dark received bubble
+            800: '#121212', // Chat timeline background
+            700: '#2C2C2E', // Dark card border
+          },
         },
-        /* === Claude Editorial High-Contrast Typography === */
+        /* === High-Contrast Typography === */
         content: {
-          primary:   '#1A1915', // Deep Charcoal Headings & Body Text
-          secondary: '#4F4D46', // Warm Slate Subtitles & Secondary Text
-          muted:     '#827F75', // Olive-Stone Timestamps & Muted Captions
-          inverse:   '#FFFFFF', // White text on dark/colored buttons
+          primary:   '#111827', // Deep Charcoal — headings & body
+          secondary: '#4B5563', // Medium Grey — subtitles & labels
+          muted:     '#9CA3AF', // Muted — timestamps & captions
+          inverse:   '#FFFFFF', // White text on colored/dark backgrounds
         },
-        /* === Claude Signature Terracotta Accent === */
+        /* === Signal Blue — Sole Accent === */
         accent: {
-          DEFAULT: '#CC5A36', // Anthropic Claude Terracotta Coral
-          hover:   '#B84D2B', // Deep Terracotta on touch/hover
-          muted:   '#F8ECE8', // Warm Terracotta Muted Pill Background
-          light:   '#E06C48', // Lighter Terracotta Accent
+          DEFAULT: '#2C6BED', // Signal Ultramarine Blue
+          hover:   '#1B54D4', // Pressed state
+          deep:    '#1447C0', // Active / focused state
+          muted:   '#EEF2FF', // Soft blue tinted pill backgrounds
+          light:   '#DBEAFE', // Lighter blue chip / badge backgrounds
         },
-        /* === Recovered Deleted Message Honey-Amber Palette === */
-        warning: {
-          DEFAULT: '#CC5A36', // Terracotta Accent
-          dark:    '#9C5418', // Dark Honey Amber Text
-          muted:   '#FDF4E7', // Light Honey Amber Card Background
-          light:   '#F3D3A6', // Soft Amber Border
+        /* === Amber — Deleted Message Palette === */
+        deleted: {
+          DEFAULT: '#FFF4E5', // Amber surface for deleted cards
+          text:    '#92400E', // Dark amber readable text
+          border:  '#FED7AA', // Soft amber border
+          badge:   '#F59E0B', // Badge count indicator
+          strong:  '#D97706', // Emphasis / icon color
         },
-        amber: {
-          50:  '#FDF8EE',
-          100: '#FDF4E7',
-          200: '#FBE8C8',
-          300: '#F3D3A6',
-          400: '#EBB46D',
-          500: '#D9822B',
-          600: '#C2691B',
-          700: '#9C5418',
-          800: '#7A4012',
-          900: '#5C2F0C',
-        },
+        /* === Status Colors === */
         emerald: {
           50:  '#F0FDF4',
           100: '#DCFCE7',
@@ -78,11 +76,19 @@ export default {
           800: '#166534',
           900: '#14532D',
         },
+        rose: {
+          50:  '#FFF1F2',
+          100: '#FFE4E6',
+          200: '#FECDD3',
+          300: '#FDA4AF',
+          500: '#F43F5E',
+          600: '#E11D48',
+          700: '#BE123C',
+        },
       },
       fontFamily: {
-        serif: ['Lora', 'Newsreader', 'Georgia', 'serif'],
-        sans:  ['Plus Jakarta Sans', 'Inter', '-apple-system', 'sans-serif'],
-        mono:  ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Plus Jakarta Sans', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       },
       fontSize: {
         '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
@@ -94,7 +100,7 @@ export default {
         '4xl': '1.5rem',
       },
       transitionTimingFunction: {
-        'spring': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'spring':  'cubic-bezier(0.16, 1, 0.3, 1)',
         'ease-ios': 'cubic-bezier(0.4, 0.0, 0.2, 1)',
       },
       transitionDuration: {
@@ -128,13 +134,11 @@ export default {
         'scale-in':   'scale-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both',
       },
       boxShadow: {
-        'xs':      '0 1px 2px rgba(26, 25, 21, 0.04)',
-        'card':    '0 1px 3px rgba(26, 25, 21, 0.05), 0 1px 2px rgba(26, 25, 21, 0.03)',
-        'card-lg': '0 8px 24px -4px rgba(26, 25, 21, 0.07), 0 4px 8px -2px rgba(26, 25, 21, 0.03)',
-        'warm-sm': '0 2px 6px rgba(204, 90, 54, 0.08), 0 1px 2px rgba(26, 25, 21, 0.04)',
-        'warm-md': '0 6px 16px rgba(204, 90, 54, 0.12), 0 2px 4px rgba(26, 25, 21, 0.04)',
-        'skeuo-card': '0 2px 8px rgba(26, 25, 21, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.95)',
-        'skeuo-chip': 'inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 1px 2px rgba(26, 25, 21, 0.04)',
+        'xs':      '0 1px 2px rgba(17, 24, 39, 0.04)',
+        'card':    '0 1px 3px rgba(17, 24, 39, 0.06), 0 1px 2px rgba(17, 24, 39, 0.04)',
+        'card-lg': '0 8px 24px -4px rgba(17, 24, 39, 0.09), 0 4px 8px -2px rgba(17, 24, 39, 0.05)',
+        'blue-sm': '0 2px 6px rgba(44, 107, 237, 0.18), 0 1px 2px rgba(17, 24, 39, 0.04)',
+        'blue-md': '0 4px 14px rgba(44, 107, 237, 0.22), 0 2px 4px rgba(17, 24, 39, 0.04)',
       },
     },
   },

@@ -175,7 +175,7 @@ export function FeedbackPage() {
                 <span className="text-xs font-bold">Diagnostic payload preview</span>
               </div>
               <div className="bg-surface-900 rounded-xl p-3 font-mono text-2xs text-content-secondary border border-surface-700 space-y-0.5">
-                <p>app: NotiCatch v1.6.2</p>
+                <p>app: NotiCatch v1.6.3</p>
                 <p>target_pkg: com.whatsapp</p>
                 <p>listener_service: ACTIVE</p>
                 <p>battery_saver_exemption: GRANTED</p>

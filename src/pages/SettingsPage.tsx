@@ -1,31 +1,53 @@
 /**
  * SettingsPage.tsx
  *
- * System Settings Hub for NotiCatch.
- * Styled to precisely match Anthropic Claude's mobile Settings screen (Screenshots 1 & 3).
+ * System Settings Hub for NotiCatch — 100% application-specific.
+ *
+ * Visual system: Signal Android Settings — clean white grouped list with
+ * section headers, icon-prefixed rows, toggle switches, and chevron navigation.
+ * No hamburger button. No sidebar drawer.
+ *
+ * All Claude-specific content has been completely removed:
+ * - "Want more Claude?" promo banner
+ * - "Capabilities (4 enabled)" and "Connectors" rows
+ * - "Billing" and "Voice" rows
+ * - Free / Vault tier badges
+ * - Hardcoded email in account card
+ *
+ * Settings are organized into 5 application-specific groups:
+ * 1. Vault Security (biometric, auto-lock, screen protection, PIN)
+ * 2. Interception Status (notification listener, battery exemption, spam filter)
+ * 3. Appearance (color mode, haptic feedback)
+ * 4. Data & Export (PDF, CSV, storage stats)
+ * 5. Support & Legal (help, contact, privacy, terms, version)
+ * Danger Zone: Lock Vault, Panic Wipe
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Menu,
-  Info,
-  User,
-  CreditCard,
-  Sliders,
-  Cable,
-  Smartphone,
-  Moon,
-  Type,
-  Mic,
-  Vibrate,
-  Bell,
+  Fingerprint,
   Clock,
   Shield,
+  Lock,
+  Bell,
+  Zap,
+  ListFilter,
+  Moon,
+  Vibrate,
+  FileText,
   Share2,
+  Database,
+  HelpCircle,
+  Mail,
+  ScrollText,
   LogOut,
+  Trash2,
   ChevronRight,
+  Info,
   Download,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import {
   ToggleSwitch,
@@ -36,19 +58,128 @@ import {
   type ColorMode,
   type FontStyle,
 } from '@/components/common';
-import { SideNavigationDrawer } from '@/components/navigation';
 import {
   loadAppSettings,
   saveAppSettings,
   exportChatAsPDFNative,
   exportChatAsCSVNative,
   executePanicWipe,
+  checkNotificationListenerEnabled,
+  isNativeAndroid,
 } from '@/services/NativeBridgeService';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDocument } from '@/data/legalContent';
 import type { AppSettings } from '@/types';
 
+/* ============================================================
+   Section Header Component
+   ============================================================ */
+
+function SectionHeader({ label }: { readonly label: string }) {
+  return (
+    <div className="px-4 pt-5 pb-1.5">
+      <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#6B7280' }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/* ============================================================
+   Settings Row Components
+   ============================================================ */
+
+interface RowProps {
+  readonly id: string;
+  readonly icon: React.ReactNode;
+  readonly iconBg: string;
+  readonly label: string;
+  readonly subtitle?: string;
+  readonly trailing?: React.ReactNode;
+  readonly onClick?: () => void;
+}
+
+function SettingsRow({ id, icon, iconBg, label, subtitle, trailing, onClick }: RowProps) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      id={id}
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-[#F8F9FA] active:bg-[#F2F2F7]"
+    >
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ background: iconBg }}
+      >
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <span className="block text-sm font-semibold text-[#111827]">{label}</span>
+        {subtitle && (
+          <span className="block text-xs text-[#9CA3AF] font-medium mt-0.5 truncate">{subtitle}</span>
+        )}
+      </div>
+      {trailing ?? (onClick ? <ChevronRight className="w-4 h-4 text-[#D1D5DB] flex-shrink-0" /> : null)}
+    </Tag>
+  );
+}
+
+function ToggleRow({ id, icon, iconBg, label, subtitle, checked, onChange }: {
+  readonly id: string;
+  readonly icon: React.ReactNode;
+  readonly iconBg: string;
+  readonly label: string;
+  readonly subtitle?: string;
+  readonly checked: boolean;
+  readonly onChange: (val: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3.5 px-4 py-3.5">
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ background: iconBg }}
+      >
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <span className="block text-sm font-semibold text-[#111827]">{label}</span>
+        {subtitle && (
+          <span className="block text-xs text-[#9CA3AF] font-medium mt-0.5">{subtitle}</span>
+        )}
+      </div>
+      <ToggleSwitch id={id} checked={checked} onChange={onChange} />
+    </div>
+  );
+}
+
+function DangerRow({ id, icon, label, onClick }: {
+  readonly id: string;
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-rose-50 active:bg-rose-100"
+    >
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-50">
+        {icon}
+      </div>
+      <span className="text-sm font-bold text-rose-700">{label}</span>
+    </button>
+  );
+}
+
+/* ============================================================
+   SettingsPage
+   ============================================================ */
+
 export function SettingsPage() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const isNative  = isNativeAndroid();
 
   const [settings, setSettings] = useState<AppSettings>({
     biometricEnabled:      true,
@@ -66,23 +197,37 @@ export function SettingsPage() {
     fontStyle:             'default',
   });
 
-  const [isDrawerOpen,        setIsDrawerOpen]        = useState(false);
-  const [showColorModal,      setShowColorModal]      = useState(false);
-  const [showFontModal,       setShowFontModal]       = useState(false);
-  const [showTimeModal,       setShowTimeModal]       = useState(false);
-  const [showExportModal,     setShowExportModal]     = useState(false);
-  const [showLogoutModal,     setShowLogoutModal]     = useState(false);
-  const [showWipeModal,       setShowWipeModal]       = useState(false);
-  const [activeLegalDoc,      setActiveLegalDoc]      = useState<LegalDocument | null>(null);
-  const [isProcessing,        setIsProcessing]        = useState(false);
-  const [hapticsActive,       setHapticsActive]       = useState(
+  const [showColorModal,    setShowColorModal]    = useState(false);
+  const [showFontModal,     setShowFontModal]     = useState(false);
+  const [showTimeModal,     setShowTimeModal]     = useState(false);
+  const [showExportModal,   setShowExportModal]   = useState(false);
+  const [showLogoutModal,   setShowLogoutModal]   = useState(false);
+  const [showWipeModal,     setShowWipeModal]     = useState(false);
+  const [activeLegalDoc,    setActiveLegalDoc]    = useState<LegalDocument | null>(null);
+  const [isProcessing,      setIsProcessing]      = useState(false);
+  const [hapticsActive,     setHapticsActive]     = useState(
     () => localStorage.getItem('noticatch_haptics') !== 'false'
   );
+  const [notifListenerOn,   setNotifListenerOn]   = useState<boolean | null>(null);
 
   useEffect(() => {
     loadAppSettings().then(setSettings);
-  }, []);
+    if (isNative) {
+      checkNotificationListenerEnabled().then(setNotifListenerOn);
+    } else {
+      setNotifListenerOn(true);
+    }
+  }, [isNative]);
 
+  /**
+   * updateSetting
+   *
+   * Merges a single key-value pair into the settings object and persists
+   * the updated state to the on-device SQLite preferences store.
+   *
+   * @param key   - AppSettings property key to update.
+   * @param value - New value for the property.
+   */
   async function updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void> {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
@@ -95,12 +240,30 @@ export function SettingsPage() {
     updateSetting('hapticsEnabled', val);
   }
 
+  /**
+   * handleLogout
+   *
+   * Clears session tokens from sessionStorage and redirects to the Login
+   * screen, triggering the biometric/PIN authentication gate.
+   *
+   * @redirects - /login (replace: true — prevents back navigation to settings)
+   */
   function handleLogout(): void {
     sessionStorage.removeItem('session_start');
     sessionStorage.removeItem('session_last_active');
     navigate('/login', { replace: true });
   }
 
+  /**
+   * handlePermanentWipe
+   *
+   * Executes the Panic Wipe sequence: erases all data from the Room SQLite DB,
+   * clears all shared preferences, and navigates to the Setup wizard so the
+   * user must re-grant all Android permissions from scratch.
+   *
+   * @edge-cases - Sets isProcessing during the async wipe to prevent double-tap.
+   * @redirects  - /setup (replace: true) on successful wipe.
+   */
   async function handlePermanentWipe(): Promise<void> {
     setIsProcessing(true);
     await executePanicWipe();
@@ -117,266 +280,263 @@ export function SettingsPage() {
     0:    'Never',
   };
 
+  const currentTimeoutLabel = timeoutLabels[settings.sessionTimeoutSeconds] ?? '5 minutes';
+
+  /* ============================================================
+     Render
+     ============================================================ */
   return (
-    <div className="flex flex-col min-h-screen bg-[#FAF9F5] text-content-primary">
-      {/* Top App Bar matching Screenshot 1 & 3 */}
-      <header className="fixed top-0 left-0 right-0 z-30 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-[#E8E4D8] pt-safe">
+    <div className="flex flex-col min-h-screen bg-[#F2F2F7] text-[#111827]">
+
+      {/* Top App Bar — Signal White — no hamburger */}
+      <header className="fixed top-0 left-0 right-0 z-30 border-b pt-safe"
+        style={{ background: 'rgba(255,255,255,0.97)', borderColor: '#E5E7EB', backdropFilter: 'blur(12px)' }}>
         <div className="flex items-center justify-between px-4 h-14">
-          <button
-            type="button"
-            id="settings-hamburger-button"
-            onClick={() => setIsDrawerOpen(true)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-content-primary hover:bg-surface-850 transition-colors"
-          >
-            <Menu className="w-5 h-5" strokeWidth={2} />
-          </button>
-          <h1 className="font-serif text-lg font-bold text-content-primary tracking-tight">
+          <h1 className="text-lg font-bold text-[#111827] tracking-tight">
             Settings
           </h1>
           <button
             type="button"
             id="settings-info-button"
             onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-content-primary hover:bg-surface-850 transition-colors"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[#4B5563] hover:bg-[#F2F2F7] transition-colors"
           >
             <Info className="w-5 h-5" strokeWidth={2} />
           </button>
         </div>
       </header>
 
-      {/* Main Settings List */}
-      <main className="flex-1 pt-18 pb-24 px-4 max-w-lg mx-auto w-full space-y-3.5 animate-slide-up">
+      {/* Settings Content */}
+      <main className="flex-1 pt-16 pb-28 max-w-lg mx-auto w-full animate-slide-up">
 
-        {/* Card 1: Account Header Card */}
-        <div className="card bg-white rounded-3xl p-4 shadow-card border border-[#E8E4D8] flex items-center justify-between">
-          <span className="text-sm font-bold text-content-primary truncate">
-            kushshah900@gmail.com
-          </span>
-          <span className="px-2.5 py-0.5 rounded-full bg-black text-white text-xs font-bold shrink-0">
-            Free
-          </span>
-        </div>
+        {/* ======================================================
+            GROUP 1: Vault Security
+            ====================================================== */}
+        <SectionHeader label="Vault Security" />
+        <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E7EB] mx-4 divide-y divide-[#F2F2F7]">
+          <ToggleRow
+            id="toggle-biometric"
+            icon={<Fingerprint className="w-5 h-5 text-[#2C6BED]" strokeWidth={2} />}
+            iconBg="#EEF2FF"
+            label="Biometric Unlock"
+            subtitle={settings.biometricEnabled ? 'Fingerprint / Face ID active' : 'Disabled'}
+            checked={settings.biometricEnabled}
+            onChange={val => updateSetting('biometricEnabled', val)}
+          />
 
-        {/* Card 2: Upgrade Promo Banner Card */}
-        <div className="card bg-white rounded-3xl p-5 shadow-card border border-[#E8E4D8] space-y-2">
-          <h2 className="text-base font-bold text-content-primary">
-            Want more Claude?
-          </h2>
-          <p className="text-xs text-content-muted leading-relaxed font-medium pb-1">
-            Upgrade for more usage and capabilities.
-          </p>
-          <button
-            type="button"
-            id="upgrade-button"
-            onClick={() => setActiveLegalDoc(TERMS_OF_SERVICE)}
-            className="px-5 py-2 rounded-full bg-black text-white text-xs font-bold hover:bg-neutral-800 transition-colors shadow-xs"
-          >
-            Upgrade
-          </button>
-        </div>
-
-        {/* Card 3: Profile & Billing */}
-        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
-          <button
-            type="button"
-            id="settings-profile-row"
-            onClick={() => navigate('/settings/profile')}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <User className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Profile</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
-
-          <button
-            type="button"
-            id="settings-billing-row"
-            onClick={() => navigate('/settings/profile')}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <CreditCard className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Billing</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
-        </div>
-
-        {/* Card 4: Capabilities, Connectors, Permissions */}
-        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3.5">
-              <Sliders className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <div>
-                <span className="text-sm font-semibold text-content-primary block">Capabilities</span>
-                <span className="text-xs text-content-muted font-medium">4 enabled</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3.5">
-              <Cable className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Connectors</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            id="settings-permissions-row"
-            onClick={() => navigate('/settings/permissions')}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Smartphone className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Permissions</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
-        </div>
-
-        {/* Card 5: Color mode, Font style, Voice */}
-        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
-          <button
-            type="button"
-            id="settings-color-mode-row"
-            onClick={() => setShowColorModal(true)}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Moon className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <div>
-                <span className="text-sm font-semibold text-content-primary block">Color mode</span>
-                <span className="text-xs text-content-muted capitalize font-medium">{settings.colorMode || 'System'}</span>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
-
-          <button
-            type="button"
-            id="settings-font-style-row"
-            onClick={() => setShowFontModal(true)}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Type className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <div>
-                <span className="text-sm font-semibold text-content-primary block">Font style</span>
-                <span className="text-xs text-content-muted capitalize font-medium">{settings.fontStyle || 'Default'}</span>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
-
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3.5">
-              <Mic className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Voice</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 6: Haptic feedback, Notifications, Time & focus, Privacy, Sharing */}
-        <div className="card bg-white rounded-3xl overflow-hidden shadow-card border border-[#E8E4D8] divide-y divide-surface-700">
-          {/* Haptic feedback */}
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3.5">
-              <Vibrate className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Haptic feedback</span>
-            </div>
-            <ToggleSwitch
-              id="toggle-haptics"
-              checked={hapticsActive}
-              onChange={handleToggleHaptics}
-            />
-          </div>
-
-          {/* Notifications */}
-          <button
-            type="button"
-            id="settings-notifications-row"
-            onClick={() => navigate('/settings/notifications')}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Bell className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Notifications</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
-
-          {/* Time & focus (Inactivity Auto-Lock) */}
-          <button
-            type="button"
-            id="settings-time-focus-row"
+          <SettingsRow
+            id="settings-autolock-row"
+            icon={<Clock className="w-5 h-5 text-[#7C3AED]" strokeWidth={2} />}
+            iconBg="#F5F3FF"
+            label="Inactivity Auto-Lock"
+            subtitle={`Locks after ${currentTimeoutLabel}`}
             onClick={() => setShowTimeModal(true)}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Clock className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <div>
-                <span className="text-sm font-semibold text-content-primary block">Time & focus</span>
-                <span className="text-xs text-content-muted font-medium">
-                  Auto-lock after {timeoutLabels[settings.sessionTimeoutSeconds] || '5 minutes'}
-                </span>
+          />
+
+          <ToggleRow
+            id="toggle-screen-secure"
+            icon={<Shield className="w-5 h-5 text-[#059669]" strokeWidth={2} />}
+            iconBg="#F0FDF4"
+            label="Screen Capture Protection"
+            subtitle="FLAG_SECURE — blocks screenshots & screen recording"
+            checked={settings.screenSecureEnabled}
+            onChange={val => updateSetting('screenSecureEnabled', val)}
+          />
+
+          <SettingsRow
+            id="settings-pin-row"
+            icon={<Lock className="w-5 h-5 text-[#DC2626]" strokeWidth={2} />}
+            iconBg="#FEF2F2"
+            label="Change Master PIN"
+            subtitle={settings.isPinSet ? 'PIN is set' : 'No PIN configured'}
+            onClick={() => navigate('/settings/security')}
+          />
+        </div>
+
+        {/* ======================================================
+            GROUP 2: Interception Status
+            ====================================================== */}
+        <SectionHeader label="Interception Status" />
+        <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E7EB] mx-4 divide-y divide-[#F2F2F7]">
+          <SettingsRow
+            id="settings-notif-listener-row"
+            icon={<Bell className="w-5 h-5 text-[#2C6BED]" strokeWidth={2} />}
+            iconBg="#EEF2FF"
+            label="Notification Listener Service"
+            subtitle={
+              notifListenerOn === null ? 'Checking...' :
+              notifListenerOn ? 'Active — capturing WhatsApp notifications' :
+              'Disabled — tap to enable in system settings'
+            }
+            trailing={
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {notifListenerOn === true && <CheckCircle2 className="w-4 h-4 text-[#059669]" strokeWidth={2.2} />}
+                {notifListenerOn === false && <XCircle className="w-4 h-4 text-[#DC2626]" strokeWidth={2.2} />}
+                {notifListenerOn !== null && <ChevronRight className="w-4 h-4 text-[#D1D5DB]" />}
               </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
+            }
+            onClick={() => navigate('/settings/permissions')}
+          />
 
-          {/* Privacy */}
-          <button
-            type="button"
-            id="settings-privacy-row"
-            onClick={() => navigate('/settings/privacy')}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Shield className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Privacy</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
+          <SettingsRow
+            id="settings-battery-row"
+            icon={<Zap className="w-5 h-5 text-[#D97706]" strokeWidth={2} />}
+            iconBg="#FFF7ED"
+            label="Battery Optimization Exemption"
+            subtitle="Prevents Android from killing the listener service"
+            onClick={() => navigate('/settings/permissions')}
+          />
 
-          {/* Sharing / Export */}
-          <button
-            type="button"
-            id="settings-sharing-row"
+          <ToggleRow
+            id="toggle-spam-filter"
+            icon={<ListFilter className="w-5 h-5 text-[#0284C7]" strokeWidth={2} />}
+            iconBg="#F0F9FF"
+            label="Noise / Spam Filter"
+            subtitle="Hides system notifications and irrelevant messages"
+            checked={settings.spamFilterEnabled}
+            onChange={val => updateSetting('spamFilterEnabled', val)}
+          />
+        </div>
+
+        {/* ======================================================
+            GROUP 3: Appearance
+            ====================================================== */}
+        <SectionHeader label="Appearance" />
+        <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E7EB] mx-4 divide-y divide-[#F2F2F7]">
+          <SettingsRow
+            id="settings-color-mode-row"
+            icon={<Moon className="w-5 h-5 text-[#6D28D9]" strokeWidth={2} />}
+            iconBg="#F5F3FF"
+            label="Color Mode"
+            subtitle={`Currently: ${String(settings.colorMode ?? 'System').charAt(0).toUpperCase()}${String(settings.colorMode ?? 'system').slice(1)}`}
+            onClick={() => setShowColorModal(true)}
+          />
+
+          <ToggleRow
+            id="toggle-haptics"
+            icon={<Vibrate className="w-5 h-5 text-[#0284C7]" strokeWidth={2} />}
+            iconBg="#F0F9FF"
+            label="Keypad Haptic Feedback"
+            subtitle="Vibration on PIN keypad taps"
+            checked={hapticsActive}
+            onChange={handleToggleHaptics}
+          />
+        </div>
+
+        {/* ======================================================
+            GROUP 4: Data & Export
+            ====================================================== */}
+        <SectionHeader label="Data & Export" />
+        <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E7EB] mx-4 divide-y divide-[#F2F2F7]">
+          <SettingsRow
+            id="settings-export-pdf-row"
+            icon={<FileText className="w-5 h-5 text-[#2C6BED]" strokeWidth={2} />}
+            iconBg="#EEF2FF"
+            label="Export All Chats as PDF"
+            subtitle="Generates a formatted PDF dossier to device storage"
             onClick={() => setShowExportModal(true)}
-            className="w-full flex items-center justify-between p-4 hover:bg-surface-850 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3.5">
-              <Share2 className="w-5 h-5 text-content-secondary" strokeWidth={2} />
-              <span className="text-sm font-semibold text-content-primary">Sharing & Export</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-content-muted" />
-          </button>
+          />
+
+          <SettingsRow
+            id="settings-export-csv-row"
+            icon={<Share2 className="w-5 h-5 text-[#059669]" strokeWidth={2} />}
+            iconBg="#F0FDF4"
+            label="Export All Chats as CSV"
+            subtitle="Spreadsheet format — compatible with Excel, Sheets"
+            onClick={async () => { await exportChatAsCSVNative('all'); }}
+          />
+
+          <SettingsRow
+            id="settings-storage-row"
+            icon={<Database className="w-5 h-5 text-[#D97706]" strokeWidth={2} />}
+            iconBg="#FFF7ED"
+            label="Storage Statistics"
+            subtitle="Room SQLite WAL · On-device encrypted vault"
+            trailing={
+              <span className="text-xs font-bold text-[#9CA3AF] flex-shrink-0">
+                {(settings.databaseVersion ?? 1)} version
+              </span>
+            }
+          />
         </div>
 
-        {/* Log Out Action */}
-        <div className="pt-2">
-          <button
-            type="button"
-            id="settings-logout-button"
-            onClick={() => setShowLogoutModal(true)}
-            className="w-full flex items-center gap-3.5 px-4 py-3 text-left text-rose-700 hover:text-rose-800 transition-colors"
-          >
-            <LogOut className="w-5 h-5 text-rose-700" strokeWidth={2} />
-            <span className="text-sm font-semibold">Log out</span>
-          </button>
+        {/* ======================================================
+            GROUP 5: Support & Legal
+            ====================================================== */}
+        <SectionHeader label="Support & Legal" />
+        <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E7EB] mx-4 divide-y divide-[#F2F2F7]">
+          <SettingsRow
+            id="settings-help-row"
+            icon={<HelpCircle className="w-5 h-5 text-[#2C6BED]" strokeWidth={2} />}
+            iconBg="#EEF2FF"
+            label="Help & Support"
+            subtitle="Diagnostics, feedback, and issue reporting"
+            onClick={() => navigate('/feedback')}
+          />
+
+          <SettingsRow
+            id="settings-contact-row"
+            icon={<Mail className="w-5 h-5 text-[#059669]" strokeWidth={2} />}
+            iconBg="#F0FDF4"
+            label="Contact Developer"
+            subtitle="Security disclosures and direct support"
+            onClick={() => navigate('/contact')}
+          />
+
+          <SettingsRow
+            id="settings-privacy-row"
+            icon={<ScrollText className="w-5 h-5 text-[#6B7280]" strokeWidth={2} />}
+            iconBg="#F9FAFB"
+            label="Privacy Policy"
+            subtitle="100% on-device, air-gap zero egress"
+            onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
+          />
+
+          <SettingsRow
+            id="settings-terms-row"
+            icon={<ScrollText className="w-5 h-5 text-[#6B7280]" strokeWidth={2} />}
+            iconBg="#F9FAFB"
+            label="Terms of Service"
+            onClick={() => setActiveLegalDoc(TERMS_OF_SERVICE)}
+          />
+
+          {/* App version — non-interactive */}
+          <div className="flex items-center justify-between px-4 py-3.5">
+            <div className="flex items-center gap-3.5">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F9FAFB]">
+                <Info className="w-5 h-5 text-[#9CA3AF]" strokeWidth={2} />
+              </div>
+              <span className="text-sm font-semibold text-[#111827]">App Version</span>
+            </div>
+            <span className="text-sm font-bold text-[#9CA3AF]">v1.6.3</span>
+          </div>
         </div>
+
+        {/* ======================================================
+            DANGER ZONE
+            ====================================================== */}
+        <SectionHeader label="Danger Zone" />
+        <div className="bg-white rounded-2xl overflow-hidden border border-[#FFE4E6] mx-4 divide-y divide-[#FFF1F2]">
+          <DangerRow
+            id="settings-logout-button"
+            icon={<LogOut className="w-5 h-5 text-rose-600" strokeWidth={2} />}
+            label="Lock Vault Now"
+            onClick={() => setShowLogoutModal(true)}
+          />
+          <DangerRow
+            id="settings-wipe-button"
+            icon={<Trash2 className="w-5 h-5 text-rose-700" strokeWidth={2} />}
+            label="Erase All Data — Panic Wipe"
+            onClick={() => setShowWipeModal(true)}
+          />
+        </div>
+
+        {/* Bottom safe space */}
+        <div className="h-6" />
       </main>
 
-      {/* Side Navigation Drawer */}
-      <SideNavigationDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-      />
+      {/* ===== Modals ===== */}
 
-      {/* Color Mode Modal */}
       <ColorModeModal
         isOpen={showColorModal}
         currentMode={(settings.colorMode as ColorMode) || 'system'}
@@ -384,7 +544,6 @@ export function SettingsPage() {
         onClose={() => setShowColorModal(false)}
       />
 
-      {/* Font Style Modal */}
       <FontStyleModal
         isOpen={showFontModal}
         currentStyle={(settings.fontStyle as FontStyle) || 'default'}
@@ -392,18 +551,18 @@ export function SettingsPage() {
         onClose={() => setShowFontModal(false)}
       />
 
-      {/* Time & Focus (Auto-Lock Timeout) Dialog Modal */}
+      {/* Auto-Lock Timeout Picker */}
       {showTimeModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in"
           onClick={() => setShowTimeModal(false)}
         >
           <div
-            className="w-full max-w-xs bg-white rounded-3xl p-5 shadow-card-lg border border-surface-700 animate-scale-in"
+            className="w-full max-w-xs bg-white rounded-3xl p-5 shadow-xl border border-[#E5E7EB] animate-scale-in"
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="text-base font-bold text-content-primary mb-4 px-1">
-              Time & focus (Auto-lock)
+            <h3 className="text-base font-bold text-[#111827] mb-4 px-1">
+              Inactivity Auto-Lock
             </h3>
             <div className="space-y-1">
               {[
@@ -422,12 +581,19 @@ export function SettingsPage() {
                   }}
                   className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-left text-sm font-semibold transition-colors ${
                     settings.sessionTimeoutSeconds === opt.seconds
-                      ? 'bg-surface-850 text-accent font-bold'
-                      : 'text-content-primary hover:bg-surface-850'
+                      ? 'text-[#2C6BED] font-bold'
+                      : 'text-[#111827] hover:bg-[#F8F9FA]'
                   }`}
+                  style={
+                    settings.sessionTimeoutSeconds === opt.seconds
+                      ? { background: '#EEF2FF' }
+                      : {}
+                  }
                 >
                   <span>{opt.label}</span>
-                  {settings.sessionTimeoutSeconds === opt.seconds && <span>✓</span>}
+                  {settings.sessionTimeoutSeconds === opt.seconds && (
+                    <CheckCircle2 className="w-4 h-4 text-[#2C6BED]" strokeWidth={2.5} />
+                  )}
                 </button>
               ))}
             </div>
@@ -438,17 +604,15 @@ export function SettingsPage() {
       {/* Export Selection Modal */}
       {showExportModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-6 animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in"
           onClick={() => setShowExportModal(false)}
         >
           <div
-            className="w-full max-w-xs bg-white rounded-3xl p-5 shadow-card-lg border border-surface-700 animate-scale-in space-y-3"
+            className="w-full max-w-xs bg-white rounded-3xl p-5 shadow-xl border border-[#E5E7EB] animate-scale-in space-y-3"
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="text-base font-bold text-content-primary px-1">
-              Export Chat History
-            </h3>
-            <p className="text-xs text-content-muted px-1 font-medium">
+            <h3 className="text-base font-bold text-[#111827] px-1">Export Chat History</h3>
+            <p className="text-xs text-[#9CA3AF] px-1 font-medium">
               Save all captured conversations to your device storage.
             </p>
             <div className="space-y-2 pt-1">
@@ -458,9 +622,10 @@ export function SettingsPage() {
                   setShowExportModal(false);
                   await exportChatAsPDFNative('all');
                 }}
-                className="w-full py-3 px-4 rounded-2xl bg-surface-850 hover:bg-surface-700 text-content-primary font-semibold text-xs flex items-center justify-center gap-2"
+                className="w-full py-3 px-4 rounded-2xl text-[#111827] font-semibold text-sm flex items-center gap-2 transition-colors hover:bg-[#F8F9FA]"
+                style={{ background: '#F2F2F7' }}
               >
-                <Download className="w-4 h-4 text-accent" />
+                <Download className="w-4 h-4 text-[#2C6BED]" />
                 <span>Export as PDF Dossier</span>
               </button>
               <button
@@ -469,9 +634,10 @@ export function SettingsPage() {
                   setShowExportModal(false);
                   await exportChatAsCSVNative('all');
                 }}
-                className="w-full py-3 px-4 rounded-2xl bg-surface-850 hover:bg-surface-700 text-content-primary font-semibold text-xs flex items-center justify-center gap-2"
+                className="w-full py-3 px-4 rounded-2xl text-[#111827] font-semibold text-sm flex items-center gap-2 transition-colors hover:bg-[#F8F9FA]"
+                style={{ background: '#F2F2F7' }}
               >
-                <Download className="w-4 h-4 text-accent" />
+                <Download className="w-4 h-4 text-[#059669]" />
                 <span>Export as CSV Spreadsheet</span>
               </button>
             </div>
@@ -479,11 +645,11 @@ export function SettingsPage() {
         </div>
       )}
 
-      {/* Logout Confirmation Modal */}
+      {/* Lock Vault Confirmation */}
       <ConfirmationModal
         isOpen={showLogoutModal}
         title="Lock Vault"
-        description="Are you sure you want to lock the vault? Biometric or PIN authentication will be required upon return."
+        description="Lock the vault now? Biometric or PIN authentication will be required upon return."
         confirmLabel="Lock Vault"
         cancelLabel="Cancel"
         confirmVariant="primary"
@@ -491,11 +657,11 @@ export function SettingsPage() {
         onCancel={() => setShowLogoutModal(false)}
       />
 
-      {/* Permanent Wipe Confirmation Modal */}
+      {/* Panic Wipe Confirmation */}
       <ConfirmationModal
         isOpen={showWipeModal}
-        title="Permanent Wipe"
-        description="This will permanently delete all stored messages and encryption keys. This action cannot be reversed."
+        title="Erase All Data"
+        description="This permanently deletes all stored messages and encryption keys from the device. This action cannot be reversed."
         confirmLabel="Wipe Everything"
         cancelLabel="Cancel"
         confirmVariant="danger"
@@ -504,7 +670,7 @@ export function SettingsPage() {
         onCancel={() => setShowWipeModal(false)}
       />
 
-      {/* Legal Document Viewer Modal */}
+      {/* Legal Document Viewer */}
       {activeLegalDoc && (
         <LegalDocumentModal
           isOpen={true}
