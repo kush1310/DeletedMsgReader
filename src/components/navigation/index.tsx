@@ -128,7 +128,7 @@ export function AppBrand({ className = '', subtitle, size = 'md' }: AppBrandProp
             border: '1px solid var(--md-sys-color-outline-variant)',
           }}
         >
-          v2.0.1
+          v2.0.2
         </span>
       </div>
       {subtitle && (

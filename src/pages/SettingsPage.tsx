@@ -855,7 +855,7 @@ export function SettingsPage() {
                   borderColor: 'var(--md-sys-color-outline-variant)',
                 }}
               >
-                v2.0.1
+                v2.0.2
               </span>
             </div>
           </div>
