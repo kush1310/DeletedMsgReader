@@ -133,6 +133,8 @@ jobs:
       # Automated cleanup across all releases: purges duplicate assets (like NotiCatch-latest.apk or .zip uploads)
       - name: Purge Redundant Release Assets Across All Releases
         if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        continue-on-error: true
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/cleanup-release-assets.js

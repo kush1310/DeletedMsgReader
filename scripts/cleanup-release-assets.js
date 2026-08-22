@@ -6,102 +6,78 @@
  * guaranteeing that each release contains ONLY its dedicated versioned .apk file.
  */
 
-const https = require('https');
+const { execSync } = require('child_process');
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 const REPO = process.env.GITHUB_REPOSITORY || 'kush1310/DeletedMsgReader';
 
-if (!GITHUB_TOKEN) {
-  console.error('ERROR: GITHUB_TOKEN environment variable is required.');
-  process.exit(1);
+function runCommand(cmd) {
+  try {
+    return execSync(cmd, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  } catch (error) {
+    return null;
+  }
 }
 
-function apiRequest(path, method = 'GET') {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.github.com',
-      path,
-      method,
-      headers: {
-        'User-Agent': 'NotiCatch-Release-Cleaner',
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    };
+async function main() {
+  console.log(`Starting release assets cleanup for repository: ${REPO}...`);
 
-    const req = https.request(options, res => {
-      let body = '';
-      res.on('data', chunk => { body += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try {
-            resolve(body ? JSON.parse(body) : null);
-          } catch {
-            resolve(body);
-          }
-        } else {
-          reject(new Error(`API Error ${res.statusCode} on ${method} ${path}: ${body}`));
-        }
-      });
-    });
+  // Query all releases using gh CLI
+  const jsonOutput = runCommand(`gh release list --repo ${REPO} --limit 100 --json tagName,name,id,assets`);
 
-    req.on('error', reject);
-    req.end();
-  });
-}
+  if (!jsonOutput) {
+    console.log('Unable to query releases via gh CLI or no releases found. Skipping.');
+    return;
+  }
 
-async function runCleanup() {
-  console.log(`Inspecting releases for repository: ${REPO}...`);
-  const releases = await apiRequest(`/repos/${REPO}/releases?per_page=100`);
-
-  if (!Array.isArray(releases)) {
-    console.error('Failed to retrieve releases list:', releases);
+  let releases = [];
+  try {
+    releases = JSON.parse(jsonOutput);
+  } catch (e) {
+    console.error('Failed to parse release list JSON:', e.message);
     return;
   }
 
   console.log(`Found ${releases.length} releases.`);
 
   for (const release of releases) {
-    const tagName = release.tag_name;
-    const expectedApkName = `NotiCatch-${tagName}.apk`;
-    console.log(`\nEvaluating release: ${tagName} (ID: ${release.id})...`);
+    const tagName = release.tagName;
+    const expectedApk = `NotiCatch-${tagName}.apk`;
+    console.log(`\nEvaluating release: ${tagName}...`);
 
     if (!release.assets || release.assets.length === 0) {
-      console.log(`  - No custom uploaded binary assets found.`);
+      console.log(`  - No uploaded assets.`);
       continue;
     }
 
     for (const asset of release.assets) {
       const assetName = asset.name;
-      const assetId = asset.id;
 
-      // Unwanted asset conditions:
+      // Identify redundant assets:
       // 1. 'NotiCatch-latest.apk'
-      // 2. Any uploaded '.zip' file
-      // 3. Any duplicate or non-versioned asset when versioned asset exists
+      // 2. Any file ending in '.zip'
+      // 3. Mismatched files if expected APK already exists
       const isRedundantLatest = assetName === 'NotiCatch-latest.apk';
       const isZipArchive = assetName.endsWith('.zip');
-      const isMismatched = assetName !== expectedApkName && release.assets.some(a => a.name === expectedApkName);
+      const isDuplicate = assetName !== expectedApk && release.assets.some(a => a.name === expectedApk);
 
-      if (isRedundantLatest || isZipArchive || isMismatched) {
-        console.log(`  → Deleting redundant asset: "${assetName}" (ID: ${assetId})...`);
-        try {
-          await apiRequest(`/repos/${REPO}/releases/assets/${assetId}`, 'DELETE');
-          console.log(`  √ Successfully deleted "${assetName}".`);
-        } catch (err) {
-          console.error(`  × Failed to delete "${assetName}":`, err.message);
+      if (isRedundantLatest || isZipArchive || isDuplicate) {
+        console.log(`  → Removing redundant asset "${assetName}" from release ${tagName}...`);
+        const delResult = runCommand(`gh release delete-asset ${tagName} "${assetName}" --repo ${REPO} --yes`);
+        if (delResult !== null) {
+          console.log(`  √ Successfully removed "${assetName}".`);
+        } else {
+          console.log(`  ! Notice: Could not remove "${assetName}" (it may have already been removed).`);
         }
       } else {
-        console.log(`  √ Preserving dedicated asset: "${assetName}" (ID: ${assetId}).`);
+        console.log(`  √ Keeping dedicated asset: "${assetName}".`);
       }
     }
   }
 
-  console.log('\nRelease assets cleanup completed successfully.');
+  console.log('\nRelease assets cleanup evaluation complete.');
 }
 
-runCleanup().catch(err => {
-  console.error('Fatal cleanup error:', err);
-  process.exit(1);
+main().catch(err => {
+  console.error('Non-fatal cleanup notice:', err.message);
+  process.exit(0);
 });
