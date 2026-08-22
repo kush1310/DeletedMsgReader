@@ -56,8 +56,27 @@ interface MessageDao {
     @Query("""
         SELECT * FROM messages
         WHERE conversationId = :conversationId
+          AND (
+            (senderName = :senderName AND messageText = :text AND timestamp >= :minTimestamp AND timestamp <= :maxTimestamp)
+            OR
+            (messageText = :text AND timestamp >= :minTimestamp AND timestamp <= :maxTimestamp)
+          )
+          AND isPurged = 0
+        LIMIT 1
+    """)
+    suspend fun findDuplicateWithSender(
+        conversationId: String,
+        senderName:     String,
+        text:           String,
+        minTimestamp:   Long,
+        maxTimestamp:   Long,
+    ): MessageEntity?
+
+    @Query("""
+        SELECT * FROM messages
+        WHERE conversationId = :conversationId
           AND senderName = :senderName
-          AND timestamp >= :beforeTimestamp - 259200000
+          AND timestamp >= :beforeTimestamp - 604800000
           AND isDeletedBySender = 0
           AND isPurged = 0
         ORDER BY timestamp DESC
@@ -72,7 +91,7 @@ interface MessageDao {
     @Query("""
         SELECT * FROM messages
         WHERE conversationId = :conversationId
-          AND timestamp >= :beforeTimestamp - 259200000
+          AND timestamp >= :beforeTimestamp - 604800000
           AND isDeletedBySender = 0
           AND isPurged = 0
         ORDER BY timestamp DESC

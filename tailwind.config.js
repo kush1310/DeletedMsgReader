@@ -1,69 +1,70 @@
 /** @type {import('tailwindcss').Config} */
 
 /**
- * Tailwind CSS configuration for NotiCatch.
+ * tailwind.config.js — NotiCatch Material You + Material 3 Expressive Design System
  *
- * Signal-inspired privacy communication design system:
- * - Fonts: Plus Jakarta Sans (clean system sans — no serif)
- * - Pure white canvas (#FFFFFF, #F8F9FA, #F2F2F7)
- * - Signal Blue accent (#2C6BED, #1B54D4)
- * - Deep charcoal typography (#111827, #4B5563, #9CA3AF)
- * - Amber deleted message palette (#FFF4E5, #92400E, #FED7AA)
- * - Hairline neutral borders (#E5E7EB, #D1D5DB)
+ * Dark mode: class strategy — toggled via 'dark' class on <html> element.
+ * All semantic tokens live in index.css as CSS custom properties.
+ * Tailwind extends with animation keyframes, motion durations, and utilities.
  */
 export default {
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        /* === Signal-Inspired Clean Surfaces === */
+        /* Semantic aliases that map to CSS custom properties */
+        primary:   'var(--md-sys-color-primary)',
+        'on-primary': 'var(--md-sys-color-on-primary)',
+        'primary-container': 'var(--md-sys-color-primary-container)',
+        'on-primary-container': 'var(--md-sys-color-on-primary-container)',
+        secondary: 'var(--md-sys-color-secondary)',
+        surface:   'var(--md-sys-color-surface)',
+        'on-surface': 'var(--md-sys-color-on-surface)',
+        'surface-variant': 'var(--md-sys-color-surface-variant)',
+        'on-surface-variant': 'var(--md-sys-color-on-surface-variant)',
+        outline:   'var(--md-sys-color-outline)',
+        'outline-variant': 'var(--md-sys-color-outline-variant)',
+        tertiary:  'var(--md-sys-color-tertiary)',
+        'tertiary-container': 'var(--md-sys-color-tertiary-container)',
+        error:     'var(--md-sys-color-error)',
+        'error-container': 'var(--md-sys-color-error-container)',
+        /* Legacy aliases — retained for backward compat */
         canvas: {
-          DEFAULT: '#FFFFFF', // Pure White Main Canvas
-          dark:    '#121212', // Signal Dark Chat Background
+          DEFAULT: 'var(--md-sys-color-background)',
+          dark:    '#0F0F14',
         },
         surface: {
-          900: '#FFFFFF', // Crisp White Cards
-          850: '#F8F9FA', // Off-White / Hovered Surface
-          800: '#F2F2F7', // Section Divider Background (iOS/Signal style)
-          750: '#E9ECEF', // Pressed / Active Surface
-          700: '#E5E7EB', // Hairline Border — primary
-          600: '#D1D5DB', // Heavier Separator
-          500: '#9CA3AF', // Muted Icon / Placeholder
-          400: '#6B7280', // Secondary Text / Icon
-          dark: {
-            900: '#1C1C1E', // Dark top bar / chat header
-            850: '#1E2028', // Dark received bubble
-            800: '#121212', // Chat timeline background
-            700: '#2C2C2E', // Dark card border
-          },
+          900: 'var(--md-sys-color-surface-container-lowest)',
+          850: 'var(--md-sys-color-surface-container-low)',
+          800: 'var(--md-sys-color-surface-container)',
+          750: 'var(--md-sys-color-surface-container-high)',
+          700: 'var(--md-sys-color-outline-variant)',
+          600: 'var(--md-sys-color-outline)',
         },
-        /* === High-Contrast Typography === */
         content: {
-          primary:   '#111827', // Deep Charcoal — headings & body
-          secondary: '#4B5563', // Medium Grey — subtitles & labels
-          muted:     '#9CA3AF', // Muted — timestamps & captions
-          inverse:   '#FFFFFF', // White text on colored/dark backgrounds
+          primary:   'var(--md-sys-color-on-surface)',
+          secondary: 'var(--md-sys-color-on-surface-variant)',
+          muted:     'var(--md-sys-color-on-surface-muted)',
+          inverse:   'var(--md-sys-color-inverse-on-surface)',
         },
-        /* === Signal Blue — Sole Accent === */
         accent: {
-          DEFAULT: '#2C6BED', // Signal Ultramarine Blue
-          hover:   '#1B54D4', // Pressed state
-          deep:    '#1447C0', // Active / focused state
-          muted:   '#EEF2FF', // Soft blue tinted pill backgrounds
-          light:   '#DBEAFE', // Lighter blue chip / badge backgrounds
+          DEFAULT: 'var(--md-sys-color-primary)',
+          hover:   'var(--md-sys-color-primary-hover)',
+          deep:    'var(--md-sys-color-primary-deep)',
+          muted:   'var(--md-sys-color-primary-container)',
+          light:   'var(--md-sys-color-primary-container)',
         },
-        /* === Amber — Deleted Message Palette === */
         deleted: {
-          DEFAULT: '#FFF4E5', // Amber surface for deleted cards
-          text:    '#92400E', // Dark amber readable text
-          border:  '#FED7AA', // Soft amber border
-          badge:   '#F59E0B', // Badge count indicator
-          strong:  '#D97706', // Emphasis / icon color
+          DEFAULT: 'var(--md-sys-color-tertiary-container)',
+          text:    'var(--md-sys-color-on-tertiary-container)',
+          border:  'var(--md-sys-color-tertiary-border)',
+          badge:   'var(--md-sys-color-tertiary)',
+          strong:  'var(--md-sys-color-tertiary)',
         },
-        /* === Status Colors === */
         emerald: {
           50:  '#F0FDF4',
           100: '#DCFCE7',
@@ -75,6 +76,7 @@ export default {
           700: '#15803D',
           800: '#166534',
           900: '#14532D',
+          950: '#052E16',
         },
         rose: {
           50:  '#FFF1F2',
@@ -87,58 +89,240 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        sans: ['Plus Jakarta Sans', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       },
       fontSize: {
-        '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
+        '2xs': ['0.625rem', { lineHeight: '0.875rem', letterSpacing: '0.01em' }],
+        'xs':  ['0.75rem',  { lineHeight: '1rem' }],
+        'sm':  ['0.875rem', { lineHeight: '1.25rem' }],
+        'md':  ['1rem',     { lineHeight: '1.5rem' }],
+        'lg':  ['1.125rem', { lineHeight: '1.75rem' }],
+        'xl':  ['1.25rem',  { lineHeight: '1.75rem' }],
+        '2xl': ['1.5rem',   { lineHeight: '2rem' }],
+        '3xl': ['1.875rem', { lineHeight: '2.25rem' }],
       },
       borderRadius: {
-        'xl':  '0.75rem',
-        '2xl': '1rem',
-        '3xl': '1.25rem',
-        '4xl': '1.5rem',
+        'none':  '0',
+        'xs':    '4px',
+        'sm':    '8px',
+        'md':    '12px',
+        'lg':    '16px',
+        'xl':    '20px',
+        '2xl':   '24px',
+        '3xl':   '28px',
+        'full':  '9999px',
+      },
+      spacing: {
+        '4.5': '1.125rem',
+        '13':  '3.25rem',
+        '15':  '3.75rem',
+        '17':  '4.25rem',
+        '18':  '4.5rem',
+        '22':  '5.5rem',
+        '26':  '6.5rem',
+        '30':  '7.5rem',
       },
       transitionTimingFunction: {
-        'spring':  'cubic-bezier(0.16, 1, 0.3, 1)',
-        'ease-ios': 'cubic-bezier(0.4, 0.0, 0.2, 1)',
+        'spring':      'cubic-bezier(0.16, 1, 0.3, 1)',
+        'spring-soft': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'md-standard': 'cubic-bezier(0.2, 0, 0, 1)',
+        'md-decel':    'cubic-bezier(0, 0, 0, 1)',
+        'md-accel':    'cubic-bezier(0.3, 0, 1, 1)',
+        'md-emphasized': 'cubic-bezier(0.2, 0, 0, 1)',
       },
       transitionDuration: {
+        '80':  '80ms',
+        '120': '120ms',
+        '150': '150ms',
         '180': '180ms',
         '200': '200ms',
         '250': '250ms',
+        '280': '280ms',
         '300': '300ms',
+        '350': '350ms',
+        '400': '400ms',
+        '500': '500ms',
+        '600': '600ms',
       },
       keyframes: {
+        /* Entrance animations */
         'slide-up': {
-          '0%':   { opacity: '0', transform: 'translateY(12px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%':   { opacity: '0', transform: 'translateY(16px) scale(0.98)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
         'slide-down': {
-          '0%':   { opacity: '0', transform: 'translateY(-10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%':   { opacity: '0', transform: 'translateY(-12px) scale(0.98)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        'slide-left': {
+          '0%':   { opacity: '0', transform: 'translateX(20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+        'slide-right': {
+          '0%':   { opacity: '0', transform: 'translateX(-20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
         },
         'fade-in': {
           '0%':   { opacity: '0' },
           '100%': { opacity: '1' },
         },
+        'fade-out': {
+          '0%':   { opacity: '1' },
+          '100%': { opacity: '0' },
+        },
         'scale-in': {
-          '0%':   { opacity: '0', transform: 'scale(0.96)' },
+          '0%':   { opacity: '0', transform: 'scale(0.88)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        'scale-in-spring': {
+          '0%':   { opacity: '0', transform: 'scale(0.82)' },
+          '70%':  { opacity: '1', transform: 'scale(1.04)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        /* Sheet and modal entrance */
+        'sheet-up': {
+          '0%':   { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+        'sheet-down': {
+          '0%':   { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(100%)' },
+        },
+        /* Micro-interactions */
+        'press-down': {
+          '0%':   { transform: 'scale(1)' },
+          '50%':  { transform: 'scale(0.97)' },
+          '100%': { transform: 'scale(1)' },
+        },
+        'bounce-in': {
+          '0%':   { transform: 'scale(0)', opacity: '0' },
+          '60%':  { transform: 'scale(1.12)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        /* Ripple */
+        'ripple': {
+          '0%':   { transform: 'scale(0)', opacity: '0.35' },
+          '100%': { transform: 'scale(4)', opacity: '0' },
+        },
+        /* Shimmer loading */
+        'shimmer': {
+          '0%':   { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+        /* Pulse for live indicator */
+        'pulse-ring': {
+          '0%':   { transform: 'scale(1)',    opacity: '0.6' },
+          '100%': { transform: 'scale(1.6)', opacity: '0' },
+        },
+        /* Tab indicator slide */
+        'tab-select': {
+          '0%':   { transform: 'scaleX(0.5)', opacity: '0.4' },
+          '100%': { transform: 'scaleX(1)',   opacity: '1' },
+        },
+        /* Filter pill pop */
+        'pill-pop': {
+          '0%':   { transform: 'scale(0.92)', opacity: '0' },
+          '60%':  { transform: 'scale(1.04)' },
+          '100%': { transform: 'scale(1)',    opacity: '1' },
+        },
+        /* Spin for refresh */
+        'spin': {
+          '0%':   { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
+        },
+        /* Notification badge pop */
+        'badge-pop': {
+          '0%':   { transform: 'scale(0)', opacity: '0' },
+          '60%':  { transform: 'scale(1.3)' },
+          '100%': { transform: 'scale(1)',  opacity: '1' },
+        },
+        /* Deleted amber glow */
+        'amber-glow': {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(217, 119, 6, 0)' },
+          '50%':       { boxShadow: '0 0 0 4px rgba(217, 119, 6, 0.12)' },
+        },
+        /* Haptic visual echo */
+        'haptic-pulse': {
+          '0%':   { transform: 'scale(1)' },
+          '30%':  { transform: 'scale(0.97)' },
+          '60%':  { transform: 'scale(1.01)' },
+          '100%': { transform: 'scale(1)' },
+        },
+        /* Scroll reveal */
+        'reveal-up': {
+          '0%':   { opacity: '0', transform: 'translateY(24px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        /* Toggle thumb spring */
+        'toggle-on': {
+          '0%':   { transform: 'translateX(0)' },
+          '60%':  { transform: 'translateX(22px) scale(0.9)' },
+          '100%': { transform: 'translateX(20px) scale(1)' },
+        },
+        'toggle-off': {
+          '0%':   { transform: 'translateX(20px)' },
+          '60%':  { transform: 'translateX(-2px) scale(0.9)' },
+          '100%': { transform: 'translateX(0) scale(1)' },
         },
       },
       animation: {
-        'slide-up':   'slide-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both',
-        'slide-down': 'slide-down 240ms cubic-bezier(0.16, 1, 0.3, 1) both',
-        'fade-in':    'fade-in 200ms ease-in-out both',
-        'scale-in':   'scale-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'slide-up':       'slide-up 300ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'slide-down':     'slide-down 260ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'slide-left':     'slide-left 280ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'slide-right':    'slide-right 280ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'fade-in':        'fade-in 220ms ease-in-out both',
+        'fade-out':       'fade-out 180ms ease-in-out both',
+        'scale-in':       'scale-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'scale-in-spring':'scale-in-spring 380ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'sheet-up':       'sheet-up 340ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'sheet-down':     'sheet-down 260ms cubic-bezier(0.4, 0, 1, 1) both',
+        'press-down':     'press-down 160ms ease-in-out both',
+        'bounce-in':      'bounce-in 400ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'ripple':         'ripple 600ms cubic-bezier(0.4, 0, 0.2, 1) both',
+        'shimmer':        'shimmer 1.8s linear infinite',
+        'pulse-ring':     'pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'tab-select':     'tab-select 220ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'pill-pop':       'pill-pop 260ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'spin':           'spin 0.7s linear infinite',
+        'badge-pop':      'badge-pop 300ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'amber-glow':     'amber-glow 2.4s ease-in-out infinite',
+        'haptic-pulse':   'haptic-pulse 180ms ease-in-out both',
+        'reveal-up':      'reveal-up 360ms cubic-bezier(0.16, 1, 0.3, 1) both',
+        'toggle-on':      'toggle-on 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
+        'toggle-off':     'toggle-off 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
       },
       boxShadow: {
-        'xs':      '0 1px 2px rgba(17, 24, 39, 0.04)',
-        'card':    '0 1px 3px rgba(17, 24, 39, 0.06), 0 1px 2px rgba(17, 24, 39, 0.04)',
-        'card-lg': '0 8px 24px -4px rgba(17, 24, 39, 0.09), 0 4px 8px -2px rgba(17, 24, 39, 0.05)',
-        'blue-sm': '0 2px 6px rgba(44, 107, 237, 0.18), 0 1px 2px rgba(17, 24, 39, 0.04)',
-        'blue-md': '0 4px 14px rgba(44, 107, 237, 0.22), 0 2px 4px rgba(17, 24, 39, 0.04)',
+        'xs':          '0 1px 2px rgba(0, 0, 0, 0.04)',
+        'sm':          '0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+        'md':          '0 4px 12px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.04)',
+        'lg':          '0 8px 24px rgba(0, 0, 0, 0.09), 0 4px 8px rgba(0, 0, 0, 0.05)',
+        'xl':          '0 16px 40px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.06)',
+        'card':        '0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+        'card-lg':     '0 8px 24px rgba(0, 0, 0, 0.09), 0 4px 8px rgba(0, 0, 0, 0.05)',
+        'blue-sm':     '0 2px 8px rgba(44, 107, 237, 0.22), 0 1px 2px rgba(44, 107, 237, 0.1)',
+        'blue-md':     '0 4px 16px rgba(44, 107, 237, 0.28), 0 2px 4px rgba(44, 107, 237, 0.12)',
+        'blue-lg':     '0 8px 28px rgba(44, 107, 237, 0.32), 0 4px 8px rgba(44, 107, 237, 0.14)',
+        'amber-sm':    '0 2px 8px rgba(217, 119, 6, 0.14), 0 1px 2px rgba(217, 119, 6, 0.08)',
+        'inner-focus': 'inset 0 0 0 2px var(--md-sys-color-primary)',
+        'tonal-1':     '0 1px 2px rgba(0, 0, 0, 0.03)',
+        'tonal-2':     '0 1px 4px rgba(0, 0, 0, 0.06)',
+        'tonal-3':     '0 2px 8px rgba(0, 0, 0, 0.08)',
+        'tonal-4':     '0 4px 16px rgba(0, 0, 0, 0.10)',
+        'tonal-5':     '0 8px 28px rgba(0, 0, 0, 0.12)',
+        /* Dark mode shadows */
+        'dark-tonal-1': '0 1px 2px rgba(0, 0, 0, 0.2)',
+        'dark-tonal-2': '0 1px 4px rgba(0, 0, 0, 0.28)',
+        'dark-tonal-3': '0 2px 8px rgba(0, 0, 0, 0.36)',
+        'dark-tonal-4': '0 4px 16px rgba(0, 0, 0, 0.44)',
+        'dark-tonal-5': '0 8px 28px rgba(0, 0, 0, 0.52)',
+      },
+      backdropBlur: {
+        'xs': '4px',
+        'sm': '8px',
+        'md': '12px',
+        'lg': '16px',
+        'xl': '20px',
       },
     },
   },

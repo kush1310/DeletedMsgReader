@@ -2,116 +2,163 @@
  * PrivacySettingsPage.tsx
  *
  * Privacy and transparent data practices sub-page for NotiCatch.
- * Styled to precisely match Anthropic Claude's mobile Privacy screen.
+ * Styled with Material 3 semantic tokens, standalone theme support, and haptics.
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Lock } from 'lucide-react';
+import { TopAppBar, IconButton } from '@/components/navigation';
 import { ToggleSwitch, LegalDocumentModal } from '@/components/common';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDocument } from '@/data/legalContent';
+import { HapticService } from '@/services/HapticService';
 
 export function PrivacySettingsPage() {
   const navigate = useNavigate();
 
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocument | null>(null);
-  const [modelTraining, setModelTraining] = useState(
-    () => localStorage.getItem('privacy_model_training') !== 'false'
+  const [localAnalytics, setLocalAnalytics] = useState(
+    () => localStorage.getItem('privacy_local_analytics') === 'true'
   );
 
-  function handleToggleModelTraining(val: boolean): void {
-    setModelTraining(val);
-    localStorage.setItem('privacy_model_training', String(val));
+  function handleToggleLocalAnalytics(val: boolean): void {
+    HapticService.selection();
+    setLocalAnalytics(val);
+    localStorage.setItem('privacy_local_analytics', String(val));
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FAF9F5] text-content-primary">
+    <div
+      className="flex flex-col min-h-screen"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
       {/* Top App Bar */}
-      <header className="fixed top-0 left-0 right-0 z-30 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-[#E8E4D8] pt-safe">
-        <div className="flex items-center justify-between px-4 h-14">
-          <button
-            type="button"
+      <TopAppBar
+        title="Privacy & Data"
+        subtitle="On-Device Air-Gap Architecture"
+        leading={
+          <IconButton
             id="privacy-back-button"
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-content-primary hover:bg-surface-850 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" strokeWidth={2} />
-          </button>
-          <h1 className="text-lg font-bold text-content-primary tracking-tight">
-            Privacy
-          </h1>
-          <div className="w-9" />
-        </div>
-      </header>
+            icon={<ArrowLeft className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} strokeWidth={2} />}
+            label="Back"
+            onClick={() => {
+              HapticService.navigate();
+              navigate(-1);
+            }}
+          />
+        }
+      />
 
       {/* Main Content */}
       <main className="flex-1 pt-20 pb-12 px-6 max-w-lg mx-auto w-full space-y-6 animate-slide-up">
         {/* Section 1: Data Privacy */}
-        <section className="space-y-3">
-          <h2 className="text-base font-bold text-content-primary">
-            Data Privacy
-          </h2>
-          <p className="text-sm font-medium text-content-primary leading-relaxed">
-            Anthropic believes in transparent data practices
-          </p>
-          <p className="text-xs text-content-muted leading-relaxed font-medium">
-            Keeping your data safe is a priority. Learn how your information is protected when using Anthropic products, and visit our{' '}
-            <button
-              type="button"
-              onClick={() => setActiveLegalDoc(TERMS_OF_SERVICE)}
-              className="text-accent underline font-semibold hover:opacity-80"
+        <section
+          className="p-5 rounded-2xl border shadow-xs space-y-3"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border"
+              style={{
+                background: 'var(--md-sys-color-primary-container)',
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                color: 'var(--md-sys-color-primary)',
+              }}
             >
-              Privacy Center
-            </button>{' '}
-            and{' '}
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <h2 className="text-base font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+              100% Air-Gapped Privacy
+            </h2>
+          </div>
+          <p className="text-sm font-medium leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+            NotiCatch operates with zero internet permissions.
+          </p>
+          <p className="text-xs leading-relaxed font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+            All WhatsApp notifications and recovered deleted messages are saved solely to your device's encrypted Room SQLite database. No external servers or cloud services are contacted.
+          </p>
+          <div className="pt-2 flex items-center gap-4 text-xs font-semibold">
             <button
               type="button"
-              onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
-              className="text-accent underline font-semibold hover:opacity-80"
+              onClick={() => {
+                HapticService.tap();
+                setActiveLegalDoc(PRIVACY_POLICY);
+              }}
+              style={{ color: 'var(--md-sys-color-primary)' }}
+              className="underline"
             >
               Privacy Policy
-            </button>{' '}
-            for more details.
-          </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                HapticService.tap();
+                setActiveLegalDoc(TERMS_OF_SERVICE);
+              }}
+              style={{ color: 'var(--md-sys-color-primary)' }}
+              className="underline"
+            >
+              Terms of Service
+            </button>
+          </div>
         </section>
 
-        <div className="border-t border-[#E8E4D8]" />
-
-        {/* Section 2: Help improve our AI models */}
-        <section className="space-y-2">
+        {/* Section 2: Local Diagnostic Metrics */}
+        <section
+          className="p-5 rounded-2xl border shadow-xs space-y-3"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
           <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <h2 className="text-sm font-bold text-content-primary">
-                Help improve our AI models
+            <div className="space-y-1 min-w-0">
+              <h2 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                On-device diagnostics logging
               </h2>
-              <p className="text-xs text-content-muted leading-relaxed font-medium">
-                Allow the use of your chats and coding sessions to train and improve Anthropic AI models.
+              <p className="text-xs leading-relaxed font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                Keep an on-device audit log of notification parser performance and storage health.
               </p>
-              <button
-                type="button"
-                onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
-                className="text-xs text-accent underline font-semibold hover:opacity-80 block pt-0.5"
-              >
-                Learn More
-              </button>
             </div>
             <ToggleSwitch
-              id="toggle-model-training"
-              checked={modelTraining}
-              onChange={handleToggleModelTraining}
+              id="toggle-local-analytics"
+              checked={localAnalytics}
+              onChange={handleToggleLocalAnalytics}
+              label="On-device diagnostics logging"
             />
           </div>
         </section>
+
+        {/* Section 3: Panic Wipe Notice */}
+        <section
+          className="p-4 rounded-2xl border space-y-1.5"
+          style={{
+            background: 'var(--md-sys-color-surface-container)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
+          <div className="flex items-center gap-1.5 text-2xs font-semibold" style={{ color: 'var(--md-sys-color-primary)' }}>
+            <Lock className="w-3.5 h-3.5" />
+            <span>Emergency Erasure</span>
+          </div>
+          <p className="text-xs leading-relaxed font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+            You can permanently wipe all stored messages, encryption keys, and preferences anytime via the Panic Wipe button in Settings.
+          </p>
+        </section>
       </main>
 
-      {/* Offline Legal Document Modal Viewer */}
-      {activeLegalDoc && (
-        <LegalDocumentModal
-          isOpen={true}
-          document={activeLegalDoc}
-          onClose={() => setActiveLegalDoc(null)}
-        />
-      )}
+      {/* Legal Document Modal */}
+      <LegalDocumentModal
+        isOpen={activeLegalDoc !== null}
+        document={activeLegalDoc}
+        onClose={() => setActiveLegalDoc(null)}
+      />
     </div>
   );
 }

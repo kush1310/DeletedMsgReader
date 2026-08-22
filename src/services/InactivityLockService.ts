@@ -38,7 +38,10 @@ class InactivityLockManager {
    */
   public recordUserActivity(): void {
     this.lastActivityTimestamp = Date.now();
-    sessionStorage.setItem('session_last_active', String(this.lastActivityTimestamp));
+    try {
+      sessionStorage.setItem('session_last_active', String(this.lastActivityTimestamp));
+      localStorage.setItem('noticatch_last_active', String(this.lastActivityTimestamp));
+    } catch {}
   }
 
   /**
@@ -71,12 +74,12 @@ class InactivityLockManager {
       }
     }).catch(() => {});
 
-    /* Heartbeat interval checking every 1000ms */
+    /* Heartbeat interval checking every 2000ms */
     if (!this.heartbeatTimerId) {
       this.heartbeatTimerId = setInterval(() => {
         const elapsedSinceActive = Date.now() - this.lastActivityTimestamp;
         this.evaluateInactivity(elapsedSinceActive);
-      }, 1000);
+      }, 2000);
     }
   }
 
@@ -84,7 +87,7 @@ class InactivityLockManager {
    * Compares elapsed time against persisted settings timeout.
    */
   private async evaluateInactivity(elapsedMs: number): Promise<void> {
-    const sessionStart = sessionStorage.getItem('session_start');
+    const sessionStart = sessionStorage.getItem('session_start') || localStorage.getItem('noticatch_session_start');
     if (!sessionStart) return; /* Already locked or logged out */
 
     const settings = await loadAppSettings();
@@ -100,8 +103,12 @@ class InactivityLockManager {
    * Invalidates active session tokens and notifies all registered guards.
    */
   public triggerLock(): void {
-    sessionStorage.removeItem('session_start');
-    sessionStorage.removeItem('session_last_active');
+    try {
+      sessionStorage.removeItem('session_start');
+      sessionStorage.removeItem('session_last_active');
+      localStorage.removeItem('noticatch_session_start');
+      localStorage.removeItem('noticatch_last_active');
+    } catch {}
     this.lockListeners.forEach(listener => {
       try {
         listener();

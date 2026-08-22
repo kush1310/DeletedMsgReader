@@ -60,7 +60,15 @@ function SessionGuard() {
 
     if (AUTH_EXEMPT_ROUTES.has(location.pathname)) return;
 
-    const sessionStart = sessionStorage.getItem('session_start');
+    let sessionStart = sessionStorage.getItem('session_start');
+    if (!sessionStart) {
+      const persisted = localStorage.getItem('noticatch_session_start');
+      if (persisted) {
+        sessionStart = persisted;
+        sessionStorage.setItem('session_start', persisted);
+      }
+    }
+
     if (!sessionStart) {
       navigate('/login', { replace: true });
     }

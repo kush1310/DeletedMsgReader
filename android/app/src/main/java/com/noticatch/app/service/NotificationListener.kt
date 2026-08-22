@@ -200,14 +200,14 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 4. Standard message insertion with strict sliding-window deduplication */
+        /* 4. Standard message insertion with strict sliding-window deduplication (5-minute window) */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
 
-            /* Deduplication check: Match text & conversation within a ±15 second window */
-            val minTime = parsed.timestamp - 15000L // -15 seconds
-            val maxTime = parsed.timestamp + 15000L // +15 seconds
-            val duplicate = database.messageDao().findDuplicate(conversation.id, text, minTime, maxTime)
+            /* Deduplication check: Match text & sender within a ±5 minute window */
+            val minTime = parsed.timestamp - 300000L // -5 minutes
+            val maxTime = parsed.timestamp + 300000L // +5 minutes
+            val duplicate = database.messageDao().findDuplicateWithSender(conversation.id, parsed.senderName, text, minTime, maxTime)
 
             if (duplicate != null) {
                 Log.d(TAG, "Skipped duplicate notification message: '${text.take(20)}...' for chat '$cleanTitle'")

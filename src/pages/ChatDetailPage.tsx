@@ -3,14 +3,13 @@
  *
  * Full conversation timeline view for a single WhatsApp contact or group.
  *
- * Visual system: Signal Android Clean Light Aesthetic
- * - White top app bar with back navigation, circular initials avatar, title,
- *   header search toggle, and thread options action sheet.
- * - Unified full-screen message timeline (eliminates white-gap container bugs).
- * - Received messages: crisp white speech bubbles with hairline neutral border.
+ * Visual system: NotiCatch Material 3 Expressive
+ * - Top app bar with back navigation, circular avatar, title, search toggle, and thread options.
+ * - Unified full-screen message timeline with zero theme collision.
+ * - Received messages: crisp tonal speech bubbles with semantic tokens.
  * - Deleted messages: prominent amber-colored recovered cards with deleted badge.
- * - Bottom utility strip: dedicated Deleted Filter toggle and PDF/CSV Export buttons
- *   (redundant bottom search bar removed in favor of top-bar search).
+ * - Bottom utility strip: dedicated Deleted Filter toggle and PDF/CSV Export buttons.
+ * - Full haptic feedback integration for tap, search, and navigation.
  */
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -38,31 +37,29 @@ import {
   exportChatAsPDFNative,
   exportChatAsCSVNative,
 } from '@/services/NativeBridgeService';
+import { HapticService } from '@/services/HapticService';
 import type { Message, Conversation } from '@/types';
 
-function avatarBgColor(name: string): string {
-  const palette = [
-    '#2C6BED', '#059669', '#D97706', '#DC2626',
-    '#7C3AED', '#0891B2', '#4F46E5', '#BE185D',
-  ];
-  const index = (name.charCodeAt(0) || 0) % palette.length;
-  return palette[index];
+function SectionDivider({ label }: { readonly label: string }) {
+  return (
+    <div className="flex items-center justify-center my-3">
+      <div
+        className="px-3 py-1 rounded-full text-2xs font-semibold shadow-xs border"
+        style={{
+          background: 'var(--md-sys-color-surface-container)',
+          color: 'var(--md-sys-color-on-surface-variant)',
+          borderColor: 'var(--md-sys-color-outline-variant)',
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
 }
 
 interface DateGroup {
   readonly dateLabel: string;
   readonly messages:  readonly Message[];
-}
-
-function SectionDivider({ label }: { readonly label: string }) {
-  return (
-    <div className="flex items-center justify-center my-3">
-      <div className="px-3 py-1 rounded-full text-2xs font-semibold shadow-xs border border-[#E5E7EB]"
-        style={{ background: '#F3F4F6', color: '#6B7280' }}>
-        {label}
-      </div>
-    </div>
-  );
 }
 
 export function ChatDetailPage() {
@@ -176,24 +173,37 @@ export function ChatDetailPage() {
   }
 
   function scrollToBottom() {
+    HapticService.tap();
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  /* ============================================================
-     Loading state
-     ============================================================ */
+  /* Loading state */
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-10 flex flex-col bg-white text-[#111827]">
-        <header className="fixed top-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E5E7EB] pt-safe">
+      <div
+        className="fixed inset-0 z-10 flex flex-col"
+        style={{
+          background: 'var(--md-sys-color-background)',
+          color: 'var(--md-sys-color-on-surface)',
+        }}
+      >
+        <header
+          className="fixed top-0 left-0 right-0 z-30 border-b pt-safe"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
           <div className="flex items-center px-2 h-14">
             <IconButton
               id="chat-detail-back-button"
-              icon={<ArrowLeft className="w-5 h-5 text-[#111827]" />}
+              icon={<ArrowLeft className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} />}
               label="Back to conversations"
-              onClick={() => navigate('/chats')}
+              onClick={() => { HapticService.navigate(); navigate('/chats'); }}
             />
-            <span className="ml-2 text-sm font-bold text-[#111827]">Loading conversation...</span>
+            <span className="ml-2 text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+              Loading conversation...
+            </span>
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center pt-14">
@@ -203,34 +213,45 @@ export function ChatDetailPage() {
     );
   }
 
-  /* ============================================================
-     Conversation not found
-     ============================================================ */
+  /* Conversation not found */
   if (!conversation) {
     return (
-      <div className="fixed inset-0 z-10 flex flex-col bg-white text-[#111827]">
-        <header className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-[#E5E7EB] pt-safe">
+      <div
+        className="fixed inset-0 z-10 flex flex-col"
+        style={{
+          background: 'var(--md-sys-color-background)',
+          color: 'var(--md-sys-color-on-surface)',
+        }}
+      >
+        <header
+          className="fixed top-0 left-0 right-0 z-30 border-b pt-safe"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
           <div className="flex items-center px-2 h-14">
             <IconButton
               id="chat-detail-back-button"
-              icon={<ArrowLeft className="w-5 h-5 text-[#111827]" />}
+              icon={<ArrowLeft className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} />}
               label="Back to conversations"
-              onClick={() => navigate('/chats')}
+              onClick={() => { HapticService.navigate(); navigate('/chats'); }}
             />
-            <span className="ml-2 text-sm font-bold text-[#111827]">Conversation Not Found</span>
+            <span className="ml-2 text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+              Conversation Not Found
+            </span>
           </div>
         </header>
         <div className="flex-1 flex items-center justify-center pt-14 px-4">
           <EmptyState
-            icon={<Info className="w-8 h-8 text-[#9CA3AF]" />}
+            icon={<Info className="w-8 h-8" style={{ color: 'var(--md-sys-color-on-surface-muted)' }} />}
             title="Conversation Not Found"
             description="The requested chat record does not exist in local storage."
             action={
               <button
                 type="button"
-                onClick={() => navigate('/chats')}
-                className="w-full py-2.5 px-4 rounded-xl text-white font-bold text-xs"
-                style={{ background: '#2C6BED' }}
+                onClick={() => { HapticService.navigate(); navigate('/chats'); }}
+                className="btn-primary w-full"
               >
                 Return to Chats
               </button>
@@ -247,34 +268,52 @@ export function ChatDetailPage() {
     .map(w => w[0]?.toUpperCase() ?? '')
     .join('');
 
-  /* ============================================================
-     Main chat timeline view — Signal Clean White Aesthetic
-     ============================================================ */
   return (
-    <div className="fixed inset-0 z-10 flex flex-col bg-white text-[#111827] overflow-hidden select-none">
-
-      {/* Clean Top Bar — Signal Chat Screen style */}
-      <header className="fixed top-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E5E7EB] pt-safe">
+    <div
+      className="fixed inset-0 z-10 flex flex-col overflow-hidden select-none"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
+      {/* Clean Top Bar */}
+      <header
+        className="fixed top-0 left-0 right-0 z-30 border-b pt-safe"
+        style={{
+          background: 'var(--md-sys-color-surface)',
+          borderColor: 'var(--md-sys-color-outline-variant)',
+          boxShadow: 'var(--md-elevation-1)',
+        }}
+      >
         <div className="flex items-center justify-between px-2 h-14">
           <div className="flex items-center gap-2 min-w-0">
             <IconButton
               id="chat-detail-back-button"
-              icon={<ArrowLeft className="w-5 h-5 text-[#111827]" />}
+              icon={<ArrowLeft className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} />}
               label="Back to conversations"
-              onClick={() => navigate('/chats')}
+              onClick={() => { HapticService.navigate(); navigate('/chats'); }}
             />
             {/* Avatar circle */}
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-xs"
-              style={{ background: avatarBgColor(conversation.chatTitle) }}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-xs"
+              style={{
+                background: 'var(--md-sys-color-primary)',
+                color: 'var(--md-sys-color-on-primary)',
+              }}
             >
               {initials}
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm font-bold text-[#111827] truncate max-w-[160px] sm:max-w-xs leading-tight">
+              <h1
+                className="text-sm font-bold truncate max-w-[160px] sm:max-w-xs leading-tight"
+                style={{ color: 'var(--md-sys-color-on-surface)' }}
+              >
                 {conversation.chatTitle}
               </h1>
-              <p className="text-2xs text-[#6B7280] font-medium leading-tight">
+              <p
+                className="text-2xs font-medium leading-tight"
+                style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+              >
                 {conversation.isGroup ? 'Group Conversation' : 'Direct Message'}
               </p>
             </div>
@@ -285,15 +324,26 @@ export function ChatDetailPage() {
             {deletedMessages.length > 0 && (
               <button
                 type="button"
-                onClick={() => setShowDeletedOnly(prev => !prev)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-bold border transition-all"
+                onClick={() => {
+                  HapticService.selection();
+                  setShowDeletedOnly(prev => !prev);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-bold border transition-all duration-180"
                 style={
                   showDeletedOnly
-                    ? { background: '#FFF4E5', color: '#92400E', borderColor: '#FED7AA' }
-                    : { background: '#F3F4F6', color: '#4B5563', borderColor: '#E5E7EB' }
+                    ? {
+                        background: 'var(--md-sys-color-tertiary-container)',
+                        color: 'var(--md-sys-color-on-tertiary-container)',
+                        borderColor: 'var(--md-sys-color-tertiary-border)',
+                      }
+                    : {
+                        background: 'var(--md-sys-color-surface-container)',
+                        color: 'var(--md-sys-color-on-surface-variant)',
+                        borderColor: 'var(--md-sys-color-outline-variant)',
+                      }
                 }
               >
-                <Trash2 className="w-3 h-3 text-[#D97706]" strokeWidth={2} />
+                <Trash2 className="w-3 h-3" style={{ color: 'var(--md-sys-color-tertiary)' }} strokeWidth={2} />
                 <span>{deletedMessages.length} Deleted</span>
               </button>
             )}
@@ -301,20 +351,24 @@ export function ChatDetailPage() {
               id="chat-search-toggle-button"
               icon={
                 searchOpen
-                  ? <X className="w-5 h-5 text-[#111827]" strokeWidth={2.2} />
-                  : <Search className="w-5 h-5 text-[#111827]" strokeWidth={2.2} />
+                  ? <X className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} strokeWidth={2.2} />
+                  : <Search className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} strokeWidth={2.2} />
               }
               label={searchOpen ? 'Close search' : 'Search messages'}
               onClick={() => {
+                HapticService.tap();
                 setSearchOpen(!searchOpen);
                 if (searchOpen) setSearchQuery('');
               }}
             />
             <IconButton
               id="chat-info-toggle-button"
-              icon={<MoreVertical className="w-5 h-5 text-[#111827]" strokeWidth={2.2} />}
+              icon={<MoreVertical className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} strokeWidth={2.2} />}
               label="Thread Options"
-              onClick={() => setShowThreadInfo(!showThreadInfo)}
+              onClick={() => {
+                HapticService.tap();
+                setShowThreadInfo(!showThreadInfo);
+              }}
             />
           </div>
         </div>
@@ -322,7 +376,13 @@ export function ChatDetailPage() {
 
       {/* In-Thread Search Bar */}
       {searchOpen && (
-        <div className="fixed top-14 left-0 right-0 z-30 border-b border-[#E5E7EB] bg-white px-4 py-2.5 shadow-xs animate-slide-down">
+        <div
+          className="fixed top-14 left-0 right-0 z-30 border-b px-4 py-2.5 shadow-xs animate-slide-down"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
           <SearchInput
             id="chat-detail-search-input"
             value={searchQuery}
@@ -336,48 +396,61 @@ export function ChatDetailPage() {
       {/* Thread Options Action Sheet */}
       {showThreadInfo && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-fade-in"
+          style={{ backgroundColor: 'var(--md-sys-color-scrim)' }}
           onClick={() => setShowThreadInfo(false)}
         >
           <div
-            className="w-full max-w-md p-6 space-y-4 shadow-xl rounded-3xl border border-[#E5E7EB] bg-white animate-scale-in"
+            className="w-full max-w-md p-6 space-y-4 shadow-xl rounded-3xl border animate-scale-in"
+            style={{
+              background: 'var(--md-sys-color-surface-container-low)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-5)',
+            }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]">
-              <h3 className="text-base font-bold text-[#111827]">Thread Details</h3>
+            <div
+              className="flex items-center justify-between pb-3 border-b"
+              style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+            >
+              <h3 className="text-base font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Thread Details</h3>
               <button
                 type="button"
-                onClick={() => setShowThreadInfo(false)}
-                className="w-7 h-7 rounded-full flex items-center justify-center bg-[#F3F4F6] text-[#6B7280] hover:text-[#111827] transition-colors"
+                onClick={() => { HapticService.tap(); setShowThreadInfo(false); }}
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                style={{
+                  background: 'var(--md-sys-color-surface-container-highest)',
+                  color: 'var(--md-sys-color-on-surface-variant)',
+                }}
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2 text-xs text-[#6B7280] font-medium">
+            <div className="space-y-2 text-xs font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
               <div className="flex justify-between">
                 <span>Total Captured Messages</span>
-                <span className="font-bold text-[#111827]">{allMessages.length}</span>
+                <span className="font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>{allMessages.length}</span>
               </div>
               <div className="flex justify-between">
                 <span>Deleted by Sender</span>
-                <span className="font-bold" style={{ color: '#D97706' }}>{deletedMessages.length}</span>
+                <span className="font-bold" style={{ color: 'var(--md-sys-color-tertiary)' }}>{deletedMessages.length}</span>
               </div>
               <div className="flex justify-between">
                 <span>Storage Mode</span>
-                <span className="font-bold text-[#111827]">On-Device Room SQLite WAL</span>
+                <span className="font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>On-Device Room SQLite WAL</span>
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-[#E5E7EB]">
+            <div className="flex gap-2 pt-2 border-t" style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}>
               <button
                 type="button"
                 onClick={async () => {
+                  HapticService.impact();
                   setShowThreadInfo(false);
                   await exportChatAsPDFNative(conversation.id);
                 }}
-                className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-colors flex items-center justify-center gap-2"
-                style={{ background: '#2C6BED' }}
+                className="btn-primary flex-1 text-xs font-bold flex items-center justify-center gap-2"
               >
                 <FileText className="w-4 h-4" />
                 Export PDF
@@ -385,10 +458,11 @@ export function ChatDetailPage() {
               <button
                 type="button"
                 onClick={async () => {
+                  HapticService.impact();
                   setShowThreadInfo(false);
                   await exportChatAsCSVNative(conversation.id);
                 }}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 border border-[#E5E7EB] bg-[#F3F4F6] text-[#111827]"
+                className="btn-secondary flex-1 text-xs font-bold flex items-center justify-center gap-2"
               >
                 <Share2 className="w-4 h-4" />
                 Export CSV
@@ -404,24 +478,39 @@ export function ChatDetailPage() {
           type="button"
           id="scroll-to-bottom-button"
           onClick={scrollToBottom}
-          className="fixed bottom-20 right-4 z-30 w-9 h-9 rounded-full flex items-center justify-center shadow-md border border-[#E5E7EB] bg-white text-[#6B7280] hover:text-[#111827]"
+          className="fixed bottom-20 right-4 z-30 w-10 h-10 rounded-full flex items-center justify-center shadow-lg border transition-all active:scale-90"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+            color: 'var(--md-sys-color-primary)',
+          }}
+          aria-label="Scroll to bottom"
         >
           <ArrowDown className="w-4 h-4" strokeWidth={2.2} />
         </button>
       )}
 
-      {/* ---- Scrollable Message Timeline ---- */}
+      {/* Scrollable Message Timeline */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
         className={`flex-1 overflow-y-auto px-4 space-y-3 ${searchOpen ? 'pt-28' : 'pt-16'} pb-24`}
-        style={{ background: '#F8F9FA' }}
+        style={{ background: 'var(--md-sys-color-background)' }}
       >
         {/* Vault security pill */}
         <div className="flex items-center justify-center my-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#E5E7EB] bg-white shadow-xs">
-            <Lock className="w-3 h-3 text-[#2C6BED]" strokeWidth={2} />
-            <span className="text-2xs text-[#6B7280] font-semibold">
+          <div
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full border shadow-xs"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+            }}
+          >
+            <Lock className="w-3 h-3" style={{ color: 'var(--md-sys-color-primary)' }} strokeWidth={2} />
+            <span
+              className="text-2xs font-semibold"
+              style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+            >
               100% Offline Vault · Zero Network Transfer
             </span>
           </div>
@@ -430,7 +519,7 @@ export function ChatDetailPage() {
         {groupedByDate.length === 0 ? (
           <div className="py-12">
             <EmptyState
-              icon={<Info className="w-8 h-8 text-[#9CA3AF]" />}
+              icon={<Info className="w-8 h-8" style={{ color: 'var(--md-sys-color-on-surface-muted)' }} />}
               title={showDeletedOnly ? 'No Deleted Messages' : 'No Messages Captured'}
               description={
                 showDeletedOnly
@@ -453,18 +542,35 @@ export function ChatDetailPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* ---- Read-Only Utility Bar (Clean action strip without redundant search input) ---- */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#E5E7EB] bg-white pb-safe shadow-xs">
+      {/* Read-Only Utility Bar */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-30 border-t pb-safe shadow-xs"
+        style={{
+          background: 'var(--md-sys-color-surface)',
+          borderColor: 'var(--md-sys-color-outline-variant)',
+        }}
+      >
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 max-w-lg mx-auto">
           {/* Deleted-only toggle filter */}
           <button
             type="button"
-            onClick={() => setShowDeletedOnly(prev => !prev)}
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold border transition-all"
+            onClick={() => {
+              HapticService.selection();
+              setShowDeletedOnly(prev => !prev);
+            }}
+            className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold border transition-all duration-180 min-h-[44px]"
             style={
               showDeletedOnly
-                ? { background: '#FFF4E5', color: '#92400E', borderColor: '#FED7AA' }
-                : { background: '#F3F4F6', color: '#4B5563', borderColor: '#E5E7EB' }
+                ? {
+                    background: 'var(--md-sys-color-tertiary-container)',
+                    color: 'var(--md-sys-color-on-tertiary-container)',
+                    borderColor: 'var(--md-sys-color-tertiary-border)',
+                  }
+                : {
+                    background: 'var(--md-sys-color-surface-container)',
+                    color: 'var(--md-sys-color-on-surface-variant)',
+                    borderColor: 'var(--md-sys-color-outline-variant)',
+                  }
             }
           >
             <Filter className="w-3.5 h-3.5" strokeWidth={2} />
@@ -474,9 +580,16 @@ export function ChatDetailPage() {
           {/* Export shortcut button */}
           <button
             type="button"
-            onClick={() => setShowThreadInfo(true)}
-            className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold border border-[#DBEAFE] text-[#2C6BED] transition-colors"
-            style={{ background: '#EEF2FF' }}
+            onClick={() => {
+              HapticService.tap();
+              setShowThreadInfo(true);
+            }}
+            className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold border transition-colors min-h-[44px]"
+            style={{
+              background: 'var(--md-sys-color-primary-container)',
+              color: 'var(--md-sys-color-on-primary-container)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+            }}
             title="Export conversation dossier"
           >
             <Share2 className="w-3.5 h-3.5" strokeWidth={2} />

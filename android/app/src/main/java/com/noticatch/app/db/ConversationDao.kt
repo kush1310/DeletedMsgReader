@@ -10,7 +10,7 @@ import androidx.room.Update
  * ConversationDao
  *
  * Data Access Object for the conversations table.
- * All queries are parameterized — no raw string concatenation.
+ * All queries are 100% parameterized — zero raw string concatenation.
  */
 @Dao
 interface ConversationDao {
@@ -21,11 +21,17 @@ interface ConversationDao {
     @Update
     suspend fun update(entity: ConversationEntity)
 
+    @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
+    suspend fun findById(id: String): ConversationEntity?
+
     @Query("SELECT * FROM conversations WHERE conversationKey = :key LIMIT 1")
     suspend fun findByKey(key: String): ConversationEntity?
 
     @Query("SELECT * FROM conversations WHERE LOWER(TRIM(chatTitle)) = LOWER(TRIM(:title)) LIMIT 1")
     suspend fun findByTitle(title: String): ConversationEntity?
+
+    @Query("SELECT * FROM conversations WHERE LOWER(TRIM(chatTitle)) = LOWER(TRIM(:title))")
+    suspend fun findAllByTitle(title: String): List<ConversationEntity>
 
     @Query("SELECT * FROM conversations ORDER BY lastMessageTimestamp DESC")
     suspend fun getAll(): List<ConversationEntity>

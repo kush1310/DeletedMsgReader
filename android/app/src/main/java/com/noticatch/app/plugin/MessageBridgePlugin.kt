@@ -89,308 +89,58 @@ class MessageBridgePlugin : Plugin() {
 
     @PluginMethod
     fun openNotificationSettings(call: PluginCall) {
-        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        activity.startActivity(intent)
         val result = JSObject()
-        result.put("opened", true)
-        call.resolve(result)
-    }
-
-    @PluginMethod
-    fun isNotificationListenerEnabled(call: PluginCall) {
-        val packageName = context.packageName
-        val enabledPackages = Settings.Secure.getString(
-            context.contentResolver,
-            "enabled_notification_listeners",
-        ) ?: ""
-        val enabled = enabledPackages.contains(packageName)
-        val result = JSObject()
-        result.put("enabled", enabled)
-        call.resolve(result)
-    }
-
-    @PluginMethod
-    fun openAutostartSettings(call: PluginCall) {
-        val intent = Intent()
         try {
-            val manufacturer = Build.MANUFACTURER.lowercase()
-            when {
-                manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") -> {
-                    intent.component = ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
-                }
-                manufacturer.contains("oppo") -> {
-                    intent.component = ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")
-                }
-                manufacturer.contains("vivo") -> {
-                    intent.component = ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")
-                }
-                manufacturer.contains("huawei") || manufacturer.contains("honor") -> {
-                    intent.component = ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")
-                }
-                else -> {
-                    intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                    intent.data = Uri.parse("package:${context.packageName}")
-                }
-            }
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            activity.startActivity(intent)
-        } catch (e: Exception) {
-            val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:${context.packageName}")
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            activity.startActivity(fallback)
-        }
-        val res = JSObject()
-        res.put("opened", true)
-        call.resolve(res)
-    }
-
-    @PluginMethod
-    fun simulateNotification(call: PluginCall) {
-        val chatTitle   = call.getString("chatTitle", "Mumma") ?: "Mumma"
-        val senderName  = call.getString("senderName", chatTitle) ?: chatTitle
-        val messageText = call.getString("messageText", "Hi") ?: "Hi"
-        val isDeleted   = call.getBoolean("isDeleted", false) ?: false
-        val isGroup     = call.getBoolean("isGroup", false) ?: false
-
-        pluginScope.launch {
-            val database = NotiCatchDatabase.getInstance(context)
-            val packageName = "com.whatsapp"
-            val normalizedTitle = chatTitle.trim().lowercase()
-            val conversationKey = if (isGroup) "group_${packageName}_$normalizedTitle" else "direct_${packageName}_$normalizedTitle"
-            val timestamp = System.currentTimeMillis()
-
-            var conv = database.conversationDao().findByKey(conversationKey)
-            if (conv == null) {
-                conv = ConversationEntity(
-                    id                   = UUID.randomUUID().toString(),
-                    conversationKey      = conversationKey,
-                    chatTitle            = chatTitle,
-                    isGroup              = isGroup,
-                    unreadCount          = 1,
-                    lastMessageTimestamp = timestamp,
-                    deletedCount         = if (isDeleted) 1 else 0
-                )
-                database.conversationDao().insert(conv)
-            } else {
-                database.conversationDao().update(
-                    conv.copy(
-                        chatTitle            = chatTitle,
-                        lastMessageTimestamp = timestamp,
-                        unreadCount          = conv.unreadCount + 1,
-                        deletedCount         = if (isDeleted) conv.deletedCount + 1 else conv.deletedCount
-                    )
-                )
-            }
-
-            val rawSig = "${conv.id}|$senderName|$timestamp|$messageText"
-            val sha256Sig = computeSha256(rawSig)
-
-            val msg = MessageEntity(
-                id                   = UUID.randomUUID().toString(),
-                conversationId       = conv.id,
-                senderName           = senderName,
-                messageText          = messageText,
-                originalText         = null,
-                notificationId       = (1000..9999).random(),
-                timestamp            = timestamp,
-                isDeletedBySender    = isDeleted,
-                isEdited             = false,
-                editCount            = 0,
-                editedAt             = null,
-                mediaType            = null,
-                mediaPath            = null,
-                audioDurationSeconds = null,
-                isDisappearing       = false,
-                hashSignature        = sha256Sig,
-                isPurged             = false,
-                purgedAt             = null,
-            )
-            database.messageDao().insert(msg)
-
-            activity?.runOnUiThread {
-                bridge?.webView?.evaluateJavascript(
-                    "window.dispatchEvent(new CustomEvent('noticatch:new-message'));",
-                    null
-                )
-            }
-
-            val res = JSObject()
-            res.put("success", true)
-            res.put("conversationId", conv.id)
-            res.put("messageId", msg.id)
-            call.resolve(res)
-        }
-    }
-
-    @PluginMethod
-    fun checkDeviceSecurity(call: PluginCall) {
-        val isRooted = detectRoot()
-        val res = JSObject()
-        res.put("isRooted", isRooted)
-        res.put("isEmulator", Build.FINGERPRINT.startsWith("generic") || Build.MODEL.contains("google_sdk"))
-        res.put("airGapVerified", true)
-        call.resolve(res)
-    }
-
-    @PluginMethod
-    fun getKernelSocketStats(call: PluginCall) {
-        val res = JSObject()
-        res.put("activeSockets", 0)
-        res.put("openTcpPorts", 0)
-        res.put("openUdpPorts", 0)
-        res.put("bytesTransmitted", 0)
-        res.put("bytesReceived", 0)
-        res.put("airGapVerified", true)
-        res.put("internetPermissionPresent", false)
-        call.resolve(res)
-    }
-
-    @PluginMethod
-    fun executePanicWipe(call: PluginCall) {
-        pluginScope.launch {
+            activity.startActivity(intent)
+            result.put("opened", true)
+            call.resolve(result)
+        } catch (e: Exception) {
             try {
-                val db = NotiCatchDatabase.getInstance(context)
-                db.messageDao().deleteAll()
-                db.conversationDao().deleteAll()
-
-                context.getSharedPreferences(NotificationListener.PREFS_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .clear()
-                    .apply()
-
-                activity?.runOnUiThread {
-                    bridge?.webView?.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('noticatch:panic-wiped'));",
-                        null
-                    )
+                val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
-
-                val res = JSObject()
-                res.put("wiped", true)
-                call.resolve(res)
-            } catch (e: Exception) {
-                call.reject("Panic wipe failed: ${e.message}", e)
+                activity.startActivity(fallback)
+                result.put("opened", true)
+                call.resolve(result)
+            } catch (e2: Exception) {
+                result.put("opened", false)
+                call.resolve(result)
             }
         }
-    }
-
-    private fun detectRoot(): Boolean {
-        val paths = arrayOf(
-            "/system/app/Superuser.apk",
-            "/sbin/su",
-            "/system/bin/su",
-            "/system/xbin/su",
-            "/data/local/xbin/su",
-            "/data/local/bin/su",
-            "/system/sd/xbin/su",
-            "/system/bin/failsafe/su",
-            "/data/local/su"
-        )
-        for (path in paths) {
-            if (File(path).exists()) return true
-        }
-        return Build.TAGS != null && Build.TAGS.contains("test-keys")
-    }
-
-    @PluginMethod
-    fun authenticateBiometric(call: PluginCall) {
-        val promptTitle    = call.getString("title",    "Unlock NotiCatch") ?: "Unlock NotiCatch"
-        val promptSubtitle = call.getString("subtitle", "Use device fingerprint to unlock") ?: "Use device fingerprint to unlock"
-
-        val executor = ContextCompat.getMainExecutor(context)
-        val biometricPrompt = BiometricPrompt(
-            activity,
-            executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    val response = JSObject()
-                    response.put("success", true)
-                    response.put("error",   null)
-                    call.resolve(response)
-                }
-
-                override fun onAuthenticationFailed() {
-                    /* Temporary failure */
-                }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    val response = JSObject()
-                    response.put("success", false)
-                    response.put("error",   errString.toString())
-                    call.resolve(response)
-                }
-            }
-        )
-
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(promptTitle)
-            .setSubtitle(promptSubtitle)
-            .setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
-            .build()
-
-        activity.runOnUiThread { biometricPrompt.authenticate(promptInfo) }
-    }
-
-    @PluginMethod
-    fun setScreenSecure(call: PluginCall) {
-        val enabled = call.getBoolean("enabled", true) ?: true
-
-        context.getSharedPreferences(NotificationListener.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("screen_secure_enabled", enabled)
-            .apply()
-
-        activity.runOnUiThread {
-            if (enabled) {
-                activity.window.setFlags(
-                    WindowManager.LayoutParams.FLAG_SECURE,
-                    WindowManager.LayoutParams.FLAG_SECURE,
-                )
-            } else {
-                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            }
-        }
-
-        val result = JSObject()
-        result.put("updated", true)
-        call.resolve(result)
-    }
-
-    @PluginMethod
-    fun setSessionTimeout(call: PluginCall) {
-        val timeoutSeconds = call.getInt("timeoutSeconds", 300) ?: 300
-
-        context.getSharedPreferences(NotificationListener.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putInt("session_timeout_seconds", timeoutSeconds)
-            .apply()
-
-        val result = JSObject()
-        result.put("updated", true)
-        call.resolve(result)
     }
 
     @PluginMethod
     fun requestBatteryExemption(call: PluginCall) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val intent = Intent(
-                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-            ).apply {
-                data  = Uri.parse("package:${context.packageName}")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            activity.startActivity(intent)
-        }
         val result = JSObject()
-        result.put("requested", true)
-        call.resolve(result)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                ).apply {
+                    data  = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                activity.startActivity(intent)
+            }
+            result.put("requested", true)
+            call.resolve(result)
+        } catch (e: Exception) {
+            try {
+                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                activity.startActivity(fallback)
+                result.put("requested", true)
+                call.resolve(result)
+            } catch (e2: Exception) {
+                result.put("requested", false)
+                call.resolve(result)
+            }
+        }
     }
 
     @PluginMethod
@@ -400,26 +150,8 @@ class MessageBridgePlugin : Plugin() {
                 val db = NotiCatchDatabase.getInstance(context)
                 val entities = db.conversationDao().getAll()
 
-                // Group by cleaned title to guarantee 100% deduplication of past notifications
-                val mergedMap = LinkedHashMap<String, ConversationEntity>()
-                for (entity in entities) {
-                    val cleanTitle = com.noticatch.app.service.WhatsAppNotificationParser.cleanChatTitle(entity.chatTitle)
-                    val key = cleanTitle.lowercase()
-                    val existing = mergedMap[key]
-                    if (existing == null) {
-                        mergedMap[key] = entity.copy(chatTitle = cleanTitle)
-                    } else {
-                        mergedMap[key] = existing.copy(
-                            unreadCount = existing.unreadCount + entity.unreadCount,
-                            deletedCount = existing.deletedCount + entity.deletedCount,
-                            lastMessageTimestamp = maxOf(existing.lastMessageTimestamp, entity.lastMessageTimestamp),
-                            isGroup = existing.isGroup || entity.isGroup
-                        )
-                    }
-                }
-
                 val array = JSArray()
-                for (entity in mergedMap.values) {
+                for (entity in entities) {
                     val obj = JSObject().apply {
                         put("id",                   entity.id)
                         put("conversationKey",      entity.conversationKey)
@@ -471,6 +203,15 @@ class MessageBridgePlugin : Plugin() {
         pluginScope.launch {
             try {
                 val db = NotiCatchDatabase.getInstance(context)
+                val conv = db.conversationDao().findById(conversationId)
+                if (conv != null) {
+                    val cleanTitle = com.noticatch.app.service.WhatsAppNotificationParser.cleanChatTitle(conv.chatTitle)
+                    val duplicates = db.conversationDao().findAllByTitle(cleanTitle)
+                    for (d in duplicates) {
+                        db.messageDao().deleteByConversation(d.id)
+                        db.conversationDao().deleteById(d.id)
+                    }
+                }
                 db.messageDao().deleteByConversation(conversationId)
                 db.conversationDao().deleteById(conversationId)
                 val res = JSObject()

@@ -2,7 +2,11 @@
  * PermissionsSettingsPage
  *
  * System permissions hub for NotiCatch.
- * Styled in clean Signal aesthetic with crisp white card surfaces and direct native triggers.
+ * Styled with Material 3 semantic tokens and direct native triggers for all 4 permissions:
+ * 1. Notification Listener Access (Direct Android Settings)
+ * 2. Battery Saver Optimization Exemption (Direct Android Battery Request)
+ * 3. Screen Capture Protection (FLAG_SECURE)
+ * 4. OEM Autostart & App System Settings
  */
 
 import { useState, useEffect } from 'react';
@@ -27,6 +31,7 @@ import {
   openAutostartSettings,
   loadAppSettings,
 } from '@/services/NativeBridgeService';
+import { HapticService } from '@/services/HapticService';
 
 export function PermissionsSettingsPage() {
   const navigate = useNavigate();
@@ -49,16 +54,25 @@ export function PermissionsSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-[#111827]">
+    <div
+      className="flex flex-col min-h-screen"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
       <TopAppBar
         title="Permissions"
         subtitle="System Access & Background Control"
         leading={
           <IconButton
             id="permissions-back-button"
-            icon={<ArrowLeft className="w-5 h-5 text-[#111827]" />}
+            icon={<ArrowLeft className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} />}
             label="Back to settings"
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              HapticService.navigate();
+              navigate(-1);
+            }}
           />
         }
       />
@@ -66,39 +80,67 @@ export function PermissionsSettingsPage() {
       <main className="flex-1 pt-16 pb-12 px-4 max-w-lg mx-auto w-full space-y-4 animate-slide-up">
 
         {/* Overview Banner */}
-        <div className="p-4 rounded-2xl border border-[#E5E7EB] space-y-1" style={{ background: '#F8F9FA' }}>
-          <h2 className="text-xs font-bold text-[#111827] uppercase tracking-wider">
+        <div
+          className="p-4 rounded-2xl border space-y-1"
+          style={{
+            background: 'var(--md-sys-color-surface-container)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
+          <h2
+            className="text-xs font-bold uppercase tracking-wider"
+            style={{ color: 'var(--md-sys-color-on-surface)' }}
+          >
             Required Android Permissions
           </h2>
-          <p className="text-xs text-[#6B7280] leading-relaxed">
+          <p
+            className="text-xs leading-relaxed"
+            style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+          >
             NotiCatch requires system notification listener and battery saver exemptions to capture deleted messages reliably in the background without internet access.
           </p>
         </div>
 
         {/* Permission Cards Group */}
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white divide-y divide-[#F2F2F7] shadow-xs overflow-hidden">
+        <div
+          className="rounded-2xl border divide-y overflow-hidden shadow-xs"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+            boxShadow: 'var(--md-elevation-1)',
+          }}
+        >
 
           {/* 1. Notification Listener Access */}
           <div className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-primary-container)',
+                    color: 'var(--md-sys-color-on-primary-container)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Bell className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-[#111827]">Notification Access</h3>
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                      Notification Access
+                    </h3>
                     {notifListenerOn === true ? (
-                      <span className="flex items-center gap-1 text-[0.65rem] font-bold text-emerald-600 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+                      <span className="badge-success text-2xs">
                         <CheckCircle2 className="w-3 h-3" /> Active
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-[0.65rem] font-bold text-amber-600 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200">
+                      <span className="badge-deleted text-2xs">
                         <AlertTriangle className="w-3 h-3" /> Disabled
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">
+                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
                     Grants Android NotificationListenerService permission to intercept WhatsApp messages locally.
                   </p>
                 </div>
@@ -107,9 +149,11 @@ export function PermissionsSettingsPage() {
             <button
               type="button"
               id="btn-grant-notification-access"
-              onClick={requestNotificationListenerPermission}
-              className="w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#DBEAFE] text-[#2C6BED]"
-              style={{ background: '#EEF2FF' }}
+              onClick={() => {
+                HapticService.selection();
+                requestNotificationListenerPermission();
+              }}
+              className="btn-primary w-full text-xs font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
             >
               <span>Open Notification Access Settings</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -120,12 +164,21 @@ export function PermissionsSettingsPage() {
           <div className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#D97706] shrink-0 border border-amber-200" style={{ background: '#FFF4E5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-tertiary-container)',
+                    color: 'var(--md-sys-color-on-tertiary-container)',
+                    border: '1px solid var(--md-sys-color-tertiary-border)',
+                  }}
+                >
                   <BatteryCharging className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Battery Saver Exemption</h3>
-                  <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                    Battery Saver Exemption
+                  </h3>
+                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
                     Prevents Android doze mode from putting the background listener service to sleep.
                   </p>
                 </div>
@@ -134,8 +187,11 @@ export function PermissionsSettingsPage() {
             <button
               type="button"
               id="btn-grant-battery-exemption"
-              onClick={requestBatteryExemptionNative}
-              className="w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E5E7EB] bg-[#F8F9FA] text-[#111827]"
+              onClick={() => {
+                HapticService.selection();
+                requestBatteryExemptionNative();
+              }}
+              className="btn-secondary w-full text-xs font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
             >
               <span>Request Battery Optimization Exemption</span>
               <ExternalLink className="w-3.5 h-3.5" />
@@ -145,12 +201,21 @@ export function PermissionsSettingsPage() {
           {/* 3. Screen Capture Protection (FLAG_SECURE) */}
           <div className="p-4 flex items-center justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#7C3AED] shrink-0 border border-purple-200" style={{ background: '#F5F3FF' }}>
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: 'var(--md-sys-color-surface-container)',
+                  color: 'var(--md-sys-color-primary)',
+                  border: '1px solid var(--md-sys-color-outline-variant)',
+                }}
+              >
                 <ShieldAlert className="w-4 h-4" strokeWidth={2.2} />
               </div>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-[#111827]">Screen Capture Protection</h3>
-                <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">
+                <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                  Screen Capture Protection
+                </h3>
+                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
                   Applies FLAG_SECURE to block screenshots, screen recording, and app switcher preview.
                 </p>
               </div>
@@ -167,12 +232,21 @@ export function PermissionsSettingsPage() {
           <div className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#059669] shrink-0 border border-emerald-200" style={{ background: '#ECFDF5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-success-container)',
+                    color: 'var(--md-sys-color-on-success-container)',
+                    border: '1px solid var(--md-sys-color-success-border)',
+                  }}
+                >
                   <Sliders className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">OEM Autostart & System Settings</h3>
-                  <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                    OEM Autostart & System Settings
+                  </h3>
+                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
                     Configure background autostart on Xiaomi, Oppo, Vivo, Samsung, and OnePlus devices.
                   </p>
                 </div>
@@ -181,8 +255,11 @@ export function PermissionsSettingsPage() {
             <button
               type="button"
               id="btn-open-autostart-settings"
-              onClick={openAutostartSettings}
-              className="w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E5E7EB] bg-[#F8F9FA] text-[#111827]"
+              onClick={() => {
+                HapticService.selection();
+                openAutostartSettings();
+              }}
+              className="btn-secondary w-full text-xs font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
             >
               <span>Open Autostart & App Details</span>
               <ExternalLink className="w-3.5 h-3.5" />

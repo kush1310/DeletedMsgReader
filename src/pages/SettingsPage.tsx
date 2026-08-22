@@ -11,7 +11,7 @@
  * - Panic Wipe / Instant Erase danger zone.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield,
@@ -33,6 +33,7 @@ import {
   HardDrive,
   Clock,
   Fingerprint,
+  Vibrate,
 } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
 import { ToggleSwitch, ConfirmationModal } from '@/components/common';
@@ -51,6 +52,7 @@ import {
   getConversations,
   getDeletedMessages,
 } from '@/services/NativeBridgeService';
+import { HapticService, type HapticIntensityLevel } from '@/services/HapticService';
 import type { AppSettings } from '@/types';
 
 const TIMEOUT_OPTIONS: Array<{ label: string; value: number }> = [
@@ -75,11 +77,33 @@ export function SettingsPage() {
   const [storageBytes,         setStorageBytes]         = useState<number | null>(null);
   const [messageCount,         setMessageCount]         = useState<number | null>(null);
   const [toastMessage,         setToastMessage]         = useState<string | null>(null);
+  const [hapticLevel,          setHapticLevel]          = useState<HapticIntensityLevel>(HapticService.level);
 
   function showToast(msg: string) {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   }
+
+  /**
+   * handleHapticLevelChange
+   *
+   * Updates the HapticService intensity level and persists to localStorage.
+   * Fires a sliderChange pulse at each integer threshold for tactile feedback.
+   *
+   * @param newLevel - New HapticIntensityLevel (0–4) from the slider.
+   */
+  const handleHapticLevelChange = useCallback((newLevel: HapticIntensityLevel) => {
+    setHapticLevel(newLevel);
+    HapticService.setLevel(newLevel);
+  }, []);
+
+  const HAPTIC_LEVEL_LABELS: Record<HapticIntensityLevel, string> = {
+    0: 'Silent',
+    1: 'Light',
+    2: 'Standard',
+    3: 'Strong',
+    4: 'Maximum',
+  };
 
   useEffect(() => {
     loadAppSettings().then(data => {
@@ -155,7 +179,13 @@ export function SettingsPage() {
     TIMEOUT_OPTIONS.find(o => o.value === autoLockTimeout)?.label ?? '5 minutes';
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-[#111827]">
+    <div
+      className="flex flex-col min-h-screen"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
       <TopAppBar
         title="Settings"
         subtitle="NotiCatch Vault & System Controls"
@@ -163,8 +193,13 @@ export function SettingsPage() {
 
       {/* Action Toast */}
       {toastMessage && (
-        <div className="fixed top-16 left-4 right-4 z-50 p-2.5 rounded-xl text-white text-xs font-bold text-center shadow-md animate-slide-down"
-          style={{ background: '#2C6BED' }}>
+        <div
+          className="fixed top-16 left-4 right-4 z-50 p-3 rounded-2xl text-xs font-bold text-center shadow-lg animate-slide-down"
+          style={{
+            background: 'var(--md-sys-color-primary)',
+            color: 'var(--md-sys-color-on-primary)',
+          }}
+        >
           {toastMessage}
         </div>
       )}
@@ -175,23 +210,38 @@ export function SettingsPage() {
             GROUP 1: VAULT SECURITY
             ======================================================== */}
         <section className="space-y-2">
-          <h2 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider px-1">
-            Vault Security
-          </h2>
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white divide-y divide-[#F2F2F7] shadow-xs overflow-hidden">
+          <h2 className="settings-section-header">Vault Security</h2>
+          <div
+            className="rounded-2xl border overflow-hidden"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-1)',
+            }}
+          >
 
             {/* Device Screen Lock Status */}
-            <div className="p-4 flex items-center justify-between gap-3">
+            <div
+              className="p-4 flex items-center justify-between gap-3 border-b"
+              style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+            >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-primary-container)',
+                    color: 'var(--md-sys-color-on-primary-container)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Fingerprint className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Device Screen Lock</h3>
-                  <p className="text-xs text-[#6B7280]">Protected by your device PIN, pattern, or biometrics</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Device Screen Lock</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Protected by your device PIN, pattern, or biometrics</p>
                 </div>
               </div>
-              <span className="flex items-center gap-1 text-[0.65rem] font-bold text-emerald-600 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+              <span className="badge-success text-2xs">
                 <CheckCircle2 className="w-3 h-3" /> Protected
               </span>
             </div>
@@ -200,33 +250,54 @@ export function SettingsPage() {
             <button
               type="button"
               id="row-inactivity-autolock"
-              onClick={() => setShowAutoLockModal(true)}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.selection(); setShowAutoLockModal(true); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#7C3AED] shrink-0 border border-purple-200" style={{ background: '#F5F3FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-surface-container)',
+                    color: 'var(--md-sys-color-primary)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Clock className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Inactivity Auto-Lock</h3>
-                  <p className="text-xs text-[#6B7280]">Locks vault when inactive for {currentTimeoutLabel}</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Inactivity Auto-Lock</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Locks vault when inactive for {currentTimeoutLabel}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0 text-[#6B7280]">
-                <span className="text-xs font-semibold text-[#2C6BED]">{currentTimeoutLabel}</span>
-                <ChevronRight className="w-4 h-4" />
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-xs font-bold" style={{ color: 'var(--md-sys-color-primary)' }}>{currentTimeoutLabel}</span>
+                <ChevronRight className="w-4 h-4" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
               </div>
             </button>
 
             {/* Screen Capture Protection (FLAG_SECURE) */}
-            <div className="p-4 flex items-center justify-between gap-3">
+            <div
+              className="p-4 flex items-center justify-between gap-3"
+              style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+            >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#059669] shrink-0 border border-emerald-200" style={{ background: '#ECFDF5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-success-container)',
+                    color: 'var(--md-sys-color-on-success-container)',
+                    border: '1px solid var(--md-sys-color-success-border)',
+                  }}
+                >
                   <EyeOff className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Screen Capture Protection</h3>
-                  <p className="text-xs text-[#6B7280]">Blocks screenshots, recordings, and app preview</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Screen Capture Protection</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Blocks screenshots, recordings, and app preview</p>
                 </div>
               </div>
               <ToggleSwitch
@@ -243,69 +314,106 @@ export function SettingsPage() {
             GROUP 2: INTERCEPTION STATUS & PERMISSIONS
             ======================================================== */}
         <section className="space-y-2">
-          <h2 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider px-1">
-            Interception & Background Capture
-          </h2>
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white divide-y divide-[#F2F2F7] shadow-xs overflow-hidden">
+          <h2 className="settings-section-header">Interception & Background Capture</h2>
+          <div
+            className="rounded-2xl border overflow-hidden"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-1)',
+            }}
+          >
 
             {/* Notification Listener Access — DIRECT TRIGGER */}
             <button
               type="button"
               id="row-notification-listener-direct"
-              onClick={requestNotificationListenerPermission}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.selection(); requestNotificationListenerPermission(); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-primary-container)',
+                    color: 'var(--md-sys-color-on-primary-container)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Bell className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-[#111827]">Notification Listener Service</h3>
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Notification Listener Service</h3>
                     {notifListenerOn === true ? (
-                      <span className="flex items-center gap-1 text-[0.65rem] font-bold text-emerald-600 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+                      <span className="badge-success text-2xs">
                         <CheckCircle2 className="w-3 h-3" /> Active
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-[0.65rem] font-bold text-amber-600 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200">
+                      <span className="badge-deleted text-2xs">
                         <AlertTriangle className="w-3 h-3" /> Action Required
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#6B7280]">Tap to open Android Notification Access settings</p>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Tap to open Android Notification Access settings</p>
                 </div>
               </div>
-              <ExternalLink className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ExternalLink className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* Battery Saver Optimization — DIRECT TRIGGER */}
             <button
               type="button"
               id="row-battery-exemption-direct"
-              onClick={requestBatteryExemptionNative}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.selection(); requestBatteryExemptionNative(); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#D97706] shrink-0 border border-amber-200" style={{ background: '#FFF4E5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-tertiary-container)',
+                    color: 'var(--md-sys-color-on-tertiary-container)',
+                    border: '1px solid var(--md-sys-color-tertiary-border)',
+                  }}
+                >
                   <BatteryCharging className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Battery Optimization Exemption</h3>
-                  <p className="text-xs text-[#6B7280]">Tap to exempt NotiCatch from Android background sleep</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Battery Optimization Exemption</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Tap to exempt NotiCatch from Android background sleep</p>
                 </div>
               </div>
-              <ExternalLink className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ExternalLink className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* Noise / Spam Filter */}
-            <div className="p-4 flex items-center justify-between gap-3">
+            <div
+              className="p-4 flex items-center justify-between gap-3 border-b"
+              style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+            >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-primary-container)',
+                    color: 'var(--md-sys-color-on-primary-container)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Filter className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Noise / Spam Filter</h3>
-                  <p className="text-xs text-[#6B7280]">Hides system alerts, OTPs, and irrelevant messages</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Noise / Spam Filter</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Hides system alerts, OTPs, and irrelevant messages</p>
                 </div>
               </div>
               <ToggleSwitch
@@ -320,20 +428,125 @@ export function SettingsPage() {
             <button
               type="button"
               id="row-permissions-subpage"
-              onClick={() => navigate('/settings/permissions')}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.navigate(); navigate('/settings/permissions'); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left min-h-[56px] transition-colors touch-manipulation"
+              style={{ background: 'var(--md-sys-color-surface)' }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#4B5563] shrink-0 border border-[#E5E7EB]" style={{ background: '#F3F4F6' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-surface-container)',
+                    color: 'var(--md-sys-color-on-surface-variant)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Shield className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Permissions Management</h3>
-                  <p className="text-xs text-[#6B7280]">View all 4 background system access controls</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Permissions Management</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>View all 4 background system access controls</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
+          </div>
+        </section>
+
+        {/* ========================================================
+            GROUP 2B: HAPTIC FEEDBACK INTENSITY
+            ======================================================== */}
+        <section className="space-y-2">
+          <h2 className="settings-section-header">Haptic Feedback</h2>
+          <div
+            className="rounded-2xl border overflow-hidden p-4"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-1)',
+            }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: 'var(--md-sys-color-surface-container)',
+                  color: 'var(--md-sys-color-primary)',
+                  border: '1px solid var(--md-sys-color-outline-variant)',
+                }}
+              >
+                <Vibrate className="w-4 h-4" strokeWidth={2.2} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Haptic Intensity</h3>
+                  <span
+                    className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                    style={{
+                      background: 'var(--md-sys-color-primary-container)',
+                      color: 'var(--md-sys-color-on-primary-container)',
+                    }}
+                  >
+                    {HAPTIC_LEVEL_LABELS[hapticLevel]}
+                  </span>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Controls vibration intensity across all interactions
+                </p>
+              </div>
+            </div>
+
+            {/* Slider — 0 to 4 */}
+            <input
+              id="haptic-intensity-slider"
+              type="range"
+              min={0}
+              max={4}
+              step={1}
+              value={hapticLevel}
+              onChange={(event) => handleHapticLevelChange(parseInt(event.target.value, 10) as HapticIntensityLevel)}
+              className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+              style={{
+                background: `linear-gradient(to right, var(--md-sys-color-primary) ${hapticLevel * 25}%, var(--md-sys-color-outline-variant) ${hapticLevel * 25}%)`,
+                accentColor: 'var(--md-sys-color-primary)',
+              }}
+              aria-label="Haptic feedback intensity level"
+            />
+
+            {/* Level labels */}
+            <div className="flex justify-between mt-2 px-0.5">
+              {([0, 1, 2, 3, 4] as HapticIntensityLevel[]).map(level => (
+                <button
+                  key={level}
+                  type="button"
+                  id={`haptic-level-btn-${level}`}
+                  onClick={() => handleHapticLevelChange(level)}
+                  className="flex flex-col items-center gap-0.5 min-w-0"
+                  aria-pressed={hapticLevel === level}
+                >
+                  <div
+                    className="w-1 h-1 rounded-full transition-all duration-180"
+                    style={{
+                      background: hapticLevel >= level
+                        ? 'var(--md-sys-color-primary)'
+                        : 'var(--md-sys-color-outline)',
+                      transform: hapticLevel === level ? 'scale(1.5)' : 'scale(1)',
+                    }}
+                  />
+                  <span
+                    className="text-2xs font-semibold transition-colors duration-180"
+                    style={{
+                      color: hapticLevel === level
+                        ? 'var(--md-sys-color-primary)'
+                        : 'var(--md-sys-color-on-surface-muted)',
+                      fontWeight: hapticLevel === level ? 700 : 500,
+                    }}
+                  >
+                    {HAPTIC_LEVEL_LABELS[level]}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -341,25 +554,45 @@ export function SettingsPage() {
             GROUP 3: DATA & EXPORT
             ======================================================== */}
         <section className="space-y-2">
-          <h2 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider px-1">
-            Data Storage & Export
-          </h2>
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white divide-y divide-[#F2F2F7] shadow-xs overflow-hidden">
+          <h2 className="settings-section-header">Data Storage & Export</h2>
+          <div
+            className="rounded-2xl border overflow-hidden"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-1)',
+            }}
+          >
 
             {/* Storage Statistics */}
-            <div className="p-4 flex items-center justify-between gap-3">
+            <div
+              className="p-4 flex items-center justify-between gap-3 border-b"
+              style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+            >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#D97706] shrink-0 border border-amber-200" style={{ background: '#FFF4E5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-tertiary-container)',
+                    color: 'var(--md-sys-color-on-tertiary-container)',
+                    border: '1px solid var(--md-sys-color-tertiary-border)',
+                  }}
+                >
                   <HardDrive className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Storage Statistics</h3>
-                  <p className="text-xs text-[#6B7280]">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Storage Statistics</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
                     {messageCount !== null ? `${messageCount} messages archived` : 'Local Room SQLite WAL'}
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-mono font-bold text-[#6B7280]">{formatBytes(storageBytes)}</span>
+              <span
+                className="text-xs font-mono font-bold"
+                style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+              >
+                {formatBytes(storageBytes)}
+              </span>
             </div>
 
             {/* Export All as PDF */}
@@ -367,21 +600,33 @@ export function SettingsPage() {
               type="button"
               id="row-export-pdf"
               onClick={async () => {
+                HapticService.impact();
                 await exportChatAsPDFNative('all', 'All Conversations');
                 showToast('PDF export dossier generated');
               }}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#DC2626] shrink-0 border border-red-200" style={{ background: '#FEF2F2' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-error-container)',
+                    color: 'var(--md-sys-color-on-error-container)',
+                    border: '1px solid var(--md-sys-color-error-border)',
+                  }}
+                >
                   <FileText className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Export All as PDF</h3>
-                  <p className="text-xs text-[#6B7280]">Generate offline document dossier of all conversations</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Export All as PDF</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Generate offline document dossier of all conversations</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* Export All as CSV */}
@@ -389,21 +634,30 @@ export function SettingsPage() {
               type="button"
               id="row-export-csv"
               onClick={async () => {
+                HapticService.impact();
                 await exportChatAsCSVNative('all', 'All Conversations');
                 showToast('CSV database backup exported');
               }}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              className="w-full p-4 flex items-center justify-between gap-3 min-h-[56px] transition-colors touch-manipulation"
+              style={{ background: 'var(--md-sys-color-surface)' }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#059669] shrink-0 border border-emerald-200" style={{ background: '#ECFDF5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-success-container)',
+                    color: 'var(--md-sys-color-on-success-container)',
+                    border: '1px solid var(--md-sys-color-success-border)',
+                  }}
+                >
                   <Share2 className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Export All as CSV</h3>
-                  <p className="text-xs text-[#6B7280]">Export tabular spreadsheet backup with SHA-256 signatures</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Export All as CSV</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Export tabular spreadsheet backup with SHA-256 signatures</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
           </div>
         </section>
@@ -412,47 +666,74 @@ export function SettingsPage() {
             GROUP 4: SUPPORT & LEGAL
             ======================================================== */}
         <section className="space-y-2">
-          <h2 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider px-1">
-            Support & Legal
-          </h2>
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white divide-y divide-[#F2F2F7] shadow-xs overflow-hidden">
+          <h2 className="settings-section-header">Support & Legal</h2>
+          <div
+            className="rounded-2xl border overflow-hidden"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-1)',
+            }}
+          >
 
-            {/* Help & Diagnostics */}
+            {/* Help & Support */}
             <button
               type="button"
               id="row-help-support"
-              onClick={() => navigate('/feedback')}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.navigate(); navigate('/feedback'); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-primary-container)',
+                    color: 'var(--md-sys-color-on-primary-container)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <HelpCircle className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Help & Support</h3>
-                  <p className="text-xs text-[#6B7280]">Diagnostic payload and feedback submission</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Help & Support</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Diagnostic payload and feedback submission</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* Contact Developer */}
             <button
               type="button"
               id="row-contact-developer"
-              onClick={() => navigate('/contact')}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.navigate(); navigate('/contact'); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#D97706] shrink-0 border border-amber-200" style={{ background: '#FFF4E5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-tertiary-container)',
+                    color: 'var(--md-sys-color-on-tertiary-container)',
+                    border: '1px solid var(--md-sys-color-tertiary-border)',
+                  }}
+                >
                   <Mail className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Contact Developer</h3>
-                  <p className="text-xs text-[#6B7280]">kushshah.ce@gmail.com</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Contact Developer</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>kushshah.ce@gmail.com</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* GitHub Repository */}
@@ -461,71 +742,120 @@ export function SettingsPage() {
               href="https://github.com/kush1310/DeletedMsgReader"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => HapticService.tap()}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                display: 'flex',
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#111827] shrink-0 border border-[#E5E7EB]" style={{ background: '#F3F4F6' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-surface-container-highest)',
+                    color: 'var(--md-sys-color-on-surface)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Github className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">GitHub Repository</h3>
-                  <p className="text-xs text-[#6B7280]">Source code, releases, and issue tracker</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>GitHub Repository</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Source code, releases, and issue tracker</p>
                 </div>
               </div>
-              <ExternalLink className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ExternalLink className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </a>
 
             {/* Privacy Policy */}
             <button
               type="button"
               id="row-privacy-policy"
-              onClick={() => setActiveLegalDoc(PRIVACY_POLICY)}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.tap(); setActiveLegalDoc(PRIVACY_POLICY); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#059669] shrink-0 border border-emerald-200" style={{ background: '#ECFDF5' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-success-container)',
+                    color: 'var(--md-sys-color-on-success-container)',
+                    border: '1px solid var(--md-sys-color-success-border)',
+                  }}
+                >
                   <Shield className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Privacy Policy</h3>
-                  <p className="text-xs text-[#6B7280]">100% offline, zero-network architecture guarantees</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Privacy Policy</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>100% offline, zero-network architecture guarantees</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* Terms of Service */}
             <button
               type="button"
               id="row-terms-of-service"
-              onClick={() => setActiveLegalDoc(TERMS_OF_SERVICE)}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-[#F8F9FA] transition-colors"
+              onClick={() => { HapticService.tap(); setActiveLegalDoc(TERMS_OF_SERVICE); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-outline-variant)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#7C3AED] shrink-0 border border-purple-200" style={{ background: '#F5F3FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-surface-container)',
+                    color: 'var(--md-sys-color-on-surface-variant)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <FileText className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">Terms of Service</h3>
-                  <p className="text-xs text-[#6B7280]">Usage guidelines and personal backup license</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Terms of Service</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Usage guidelines and personal backup license</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
             </button>
 
             {/* App Version */}
             <div className="p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[#2C6BED] shrink-0 border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-primary-container)',
+                    color: 'var(--md-sys-color-on-primary-container)',
+                    border: '1px solid var(--md-sys-color-outline-variant)',
+                  }}
+                >
                   <Shield className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#111827]">App Version</h3>
-                  <p className="text-xs text-[#6B7280]">Production release build</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>App Version</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Production release build</p>
                 </div>
               </div>
-              <span className="text-xs font-mono font-bold text-[#2C6BED] px-2.5 py-1 rounded-full border border-[#DBEAFE]" style={{ background: '#EEF2FF' }}>
-                v1.6.3
+              <span
+                className="text-xs font-mono font-bold px-2.5 py-1 rounded-full border"
+                style={{
+                  background: 'var(--md-sys-color-primary-container)',
+                  color: 'var(--md-sys-color-on-primary-container)',
+                  borderColor: 'var(--md-sys-color-outline-variant)',
+                }}
+              >
+                v2.0.1
               </span>
             </div>
           </div>
@@ -535,47 +865,76 @@ export function SettingsPage() {
             DANGER ZONE: LOCK & PANIC WIPE
             ======================================================== */}
         <section className="space-y-2">
-          <h2 className="text-xs font-bold text-rose-600 uppercase tracking-wider px-1">
+          <h2
+            className="text-xs font-bold uppercase tracking-wider px-1"
+            style={{ color: 'var(--md-sys-color-error)' }}
+          >
             Danger Zone
           </h2>
-          <div className="rounded-2xl border border-rose-200 bg-white divide-y divide-rose-100 shadow-xs overflow-hidden">
+          <div
+            className="rounded-2xl border overflow-hidden"
+            style={{
+              background: 'var(--md-sys-color-surface)',
+              borderColor: 'var(--md-sys-color-error-border)',
+              boxShadow: 'var(--md-elevation-1)',
+            }}
+          >
 
             {/* Lock Vault Now */}
             <button
               type="button"
               id="btn-lock-vault-now"
-              onClick={handleLockNow}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-rose-50/50 transition-colors"
+              onClick={() => { HapticService.warning(); handleLockNow(); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
+              style={{
+                borderColor: 'var(--md-sys-color-error-border)',
+                background: 'var(--md-sys-color-surface)',
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-rose-600 shrink-0 border border-rose-200" style={{ background: '#FFF1F2' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-error-container)',
+                    color: 'var(--md-sys-color-error)',
+                    border: '1px solid var(--md-sys-color-error-border)',
+                  }}
+                >
                   <Lock className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-rose-700">Lock Vault Now</h3>
-                  <p className="text-xs text-[#6B7280]">Immediately requires device screen pass to re-enter</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-error)' }}>Lock Vault Now</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Immediately requires device screen pass to re-enter</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-rose-400 shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-error)' }} />
             </button>
 
             {/* Panic Wipe / Erase All Data */}
             <button
               type="button"
               id="btn-panic-wipe-open"
-              onClick={() => setShowPanicModal(true)}
-              className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-rose-50/50 transition-colors"
+              onClick={() => { HapticService.warning(); setShowPanicModal(true); }}
+              className="w-full p-4 flex items-center justify-between gap-3 text-left min-h-[56px] transition-colors touch-manipulation"
+              style={{ background: 'var(--md-sys-color-surface)' }}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-rose-600 shrink-0 border border-rose-200" style={{ background: '#FFF1F2' }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'var(--md-sys-color-error-container)',
+                    color: 'var(--md-sys-color-error)',
+                    border: '1px solid var(--md-sys-color-error-border)',
+                  }}
+                >
                   <Trash2 className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-rose-700">Erase All Data (Panic Wipe)</h3>
-                  <p className="text-xs text-[#6B7280]">Permanently drops all database tables and resets app</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-error)' }}>Erase All Data (Panic Wipe)</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Permanently drops all database tables and resets app</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-rose-400 shrink-0" />
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-error)' }} />
             </button>
           </div>
         </section>
@@ -584,15 +943,33 @@ export function SettingsPage() {
       {/* Auto-Lock Picker Modal */}
       {showAutoLockModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-          onClick={() => setShowAutoLockModal(false)}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+          style={{ backgroundColor: 'var(--md-sys-color-scrim)' }}
+          onClick={() => { HapticService.tap(); setShowAutoLockModal(false); }}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-xl border border-[#E5E7EB] animate-slide-up"
-            onClick={e => e.stopPropagation()}
+            className="w-full max-w-sm p-6 shadow-xl animate-sheet-up"
+            style={{
+              background: 'var(--md-sys-color-surface-container-low)',
+              borderRadius: '28px 28px 0 0',
+              border: '1px solid var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-5)',
+            }}
+            onClick={(event) => event.stopPropagation()}
           >
-            <h3 className="text-base font-bold text-[#111827] mb-1">Inactivity Auto-Lock</h3>
-            <p className="text-xs text-[#6B7280] mb-4">Choose how long to wait before requiring device re-authentication.</p>
+            <div className="bottom-sheet-handle" />
+            <h3
+              className="text-base font-bold mb-1"
+              style={{ color: 'var(--md-sys-color-on-surface)' }}
+            >
+              Inactivity Auto-Lock
+            </h3>
+            <p
+              className="text-xs mb-4"
+              style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+            >
+              Choose how long to wait before requiring device re-authentication.
+            </p>
 
             <div className="space-y-2">
               {TIMEOUT_OPTIONS.map(opt => (
@@ -601,22 +978,34 @@ export function SettingsPage() {
                   type="button"
                   id={`autolock-opt-${opt.value}`}
                   onClick={() => handleSelectAutoLock(opt.value)}
-                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-between border transition-all ${
-                    autoLockTimeout === opt.value
-                      ? 'border-[#2C6BED] text-[#2C6BED] bg-[#EEF2FF]'
-                      : 'border-[#E5E7EB] text-[#111827] bg-[#F8F9FA] hover:bg-[#F3F4F6]'
-                  }`}
+                  className="w-full py-3 px-4 rounded-2xl text-xs font-bold flex items-center justify-between border transition-all touch-manipulation min-h-[48px]"
+                  style={{
+                    background: autoLockTimeout === opt.value
+                      ? 'var(--md-sys-color-primary-container)'
+                      : 'var(--md-sys-color-surface-container)',
+                    color: autoLockTimeout === opt.value
+                      ? 'var(--md-sys-color-on-primary-container)'
+                      : 'var(--md-sys-color-on-surface)',
+                    borderColor: autoLockTimeout === opt.value
+                      ? 'var(--md-sys-color-primary)'
+                      : 'var(--md-sys-color-outline-variant)',
+                  }}
                 >
                   <span>{opt.label}</span>
-                  {autoLockTimeout === opt.value && <CheckCircle2 className="w-4 h-4 text-[#2C6BED]" />}
+                  {autoLockTimeout === opt.value && (
+                    <CheckCircle2
+                      className="w-4 h-4"
+                      style={{ color: 'var(--md-sys-color-primary)' }}
+                    />
+                  )}
                 </button>
               ))}
             </div>
 
             <button
               type="button"
-              onClick={() => setShowAutoLockModal(false)}
-              className="w-full mt-4 py-2.5 rounded-xl border border-[#E5E7EB] text-xs font-bold text-[#6B7280]"
+              onClick={() => { HapticService.tap(); setShowAutoLockModal(false); }}
+              className="btn-secondary w-full mt-4"
             >
               Cancel
             </button>

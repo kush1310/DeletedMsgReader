@@ -1,124 +1,168 @@
 /**
  * NotificationsSettingsPage.tsx
  *
- * Notifications preferences sub-page for NotiCatch.
- * Styled to precisely match Anthropic Claude's mobile Notifications settings screen.
+ * Notification preferences sub-page for NotiCatch.
+ * Styled with Material 3 semantic tokens, standalone theme support, and haptics.
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, ClipboardList, Mail } from 'lucide-react';
+import { ArrowLeft, MessageSquare, ClipboardList, Bell } from 'lucide-react';
+import { TopAppBar, IconButton } from '@/components/navigation';
 import { ToggleSwitch } from '@/components/common';
+import { HapticService } from '@/services/HapticService';
 
 export function NotificationsSettingsPage() {
   const navigate = useNavigate();
 
-  const [chatResponses, setChatResponses] = useState(
-    () => localStorage.getItem('notif_chat_responses') !== 'false'
+  const [chatAlerts, setChatAlerts] = useState(
+    () => localStorage.getItem('notif_chat_alerts') !== 'false'
   );
-  const [dispatchMessages, setDispatchMessages] = useState(
-    () => localStorage.getItem('notif_dispatch_messages') === 'true'
+  const [deletedAlerts, setDeletedAlerts] = useState(
+    () => localStorage.getItem('notif_deleted_alerts') !== 'false'
   );
-  const [productUpdates, setProductUpdates] = useState(
-    () => localStorage.getItem('notif_product_updates') === 'true'
+  const [securitySummaries, setSecuritySummaries] = useState(
+    () => localStorage.getItem('notif_security_summaries') === 'true'
   );
 
-  function handleToggleChatResponses(val: boolean): void {
-    setChatResponses(val);
-    localStorage.setItem('notif_chat_responses', String(val));
+  function handleToggleChatAlerts(val: boolean): void {
+    HapticService.selection();
+    setChatAlerts(val);
+    localStorage.setItem('notif_chat_alerts', String(val));
   }
 
-  function handleToggleDispatch(val: boolean): void {
-    setDispatchMessages(val);
-    localStorage.setItem('notif_dispatch_messages', String(val));
+  function handleToggleDeletedAlerts(val: boolean): void {
+    HapticService.selection();
+    setDeletedAlerts(val);
+    localStorage.setItem('notif_deleted_alerts', String(val));
   }
 
-  function handleToggleUpdates(val: boolean): void {
-    setProductUpdates(val);
-    localStorage.setItem('notif_product_updates', String(val));
+  function handleToggleSecuritySummaries(val: boolean): void {
+    HapticService.selection();
+    setSecuritySummaries(val);
+    localStorage.setItem('notif_security_summaries', String(val));
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FAF9F5] text-content-primary">
-      {/* Top App Bar */}
-      <header className="fixed top-0 left-0 right-0 z-30 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-[#E8E4D8] pt-safe">
-        <div className="flex items-center justify-between px-4 h-14">
-          <button
-            type="button"
+    <div
+      className="flex flex-col min-h-screen"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
+      <TopAppBar
+        title="Notifications"
+        subtitle="Alerts & Notification Behavior"
+        leading={
+          <IconButton
             id="notifications-back-button"
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-content-primary hover:bg-surface-850 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" strokeWidth={2} />
-          </button>
-          <h1 className="text-lg font-bold text-content-primary tracking-tight">
-            Notifications
-          </h1>
-          <div className="w-9" />
-        </div>
-      </header>
+            icon={<ArrowLeft className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} strokeWidth={2} />}
+            label="Back"
+            onClick={() => {
+              HapticService.navigate();
+              navigate(-1);
+            }}
+          />
+        }
+      />
 
       {/* Main Content */}
-      <main className="flex-1 pt-20 pb-12 px-5 max-w-lg mx-auto w-full animate-slide-up">
-        <div className="card bg-white rounded-3xl p-4 shadow-card border border-[#E8E4D8] space-y-4">
-          {/* Chat responses */}
+      <main className="flex-1 pt-20 pb-12 px-4 max-w-lg mx-auto w-full space-y-4 animate-slide-up">
+        <div
+          className="rounded-3xl p-4 shadow-xs border divide-y"
+          style={{
+            background: 'var(--md-sys-color-surface)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
+          }}
+        >
+          {/* Incoming message alerts */}
           <div className="flex items-start justify-between gap-3 p-2">
-            <div className="flex items-start gap-3.5">
-              <MessageSquare className="w-5 h-5 text-content-secondary mt-0.5" strokeWidth={2} />
-              <div>
-                <h3 className="text-sm font-semibold text-content-primary">
-                  Chat responses
-                </h3>
+            <div className="flex items-start gap-3.5 min-w-0">
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border"
+                style={{
+                  background: 'var(--md-sys-color-primary-container)',
+                  borderColor: 'var(--md-sys-color-outline-variant)',
+                  color: 'var(--md-sys-color-primary)',
+                }}
+              >
+                <MessageSquare className="w-4 h-4" strokeWidth={2} />
               </div>
-            </div>
-            <ToggleSwitch
-              id="toggle-chat-responses"
-              checked={chatResponses}
-              onChange={handleToggleChatResponses}
-            />
-          </div>
-
-          <div className="border-t border-surface-700" />
-
-          {/* Dispatch messages */}
-          <div className="flex items-start justify-between gap-3 p-2">
-            <div className="flex items-start gap-3.5">
-              <ClipboardList className="w-5 h-5 text-content-secondary mt-0.5" strokeWidth={2} />
-              <div>
-                <h3 className="text-sm font-semibold text-content-primary">
-                  Dispatch messages
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                  Message capture alerts
                 </h3>
-                <p className="text-xs text-content-muted mt-0.5 leading-relaxed font-medium">
-                  Get notified when Claude messages you in Dispatch
+                <p className="text-xs mt-0.5 leading-relaxed font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Notify in shade when WhatsApp messages are saved
                 </p>
               </div>
             </div>
             <ToggleSwitch
-              id="toggle-dispatch-messages"
-              checked={dispatchMessages}
-              onChange={handleToggleDispatch}
+              id="toggle-chat-alerts"
+              checked={chatAlerts}
+              onChange={handleToggleChatAlerts}
+              label="Message capture alerts"
             />
           </div>
 
-          <div className="border-t border-surface-700" />
-
-          {/* Product updates */}
-          <div className="flex items-start justify-between gap-3 p-2">
-            <div className="flex items-start gap-3.5">
-              <Mail className="w-5 h-5 text-content-secondary mt-0.5" strokeWidth={2} />
-              <div>
-                <h3 className="text-sm font-semibold text-content-primary">
-                  Product updates
+          {/* Deleted message recovery alert */}
+          <div className="flex items-start justify-between gap-3 p-2 pt-4">
+            <div className="flex items-start gap-3.5 min-w-0">
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border"
+                style={{
+                  background: 'var(--md-sys-color-tertiary-container)',
+                  borderColor: 'var(--md-sys-color-tertiary-border)',
+                  color: 'var(--md-sys-color-tertiary)',
+                }}
+              >
+                <ClipboardList className="w-4 h-4" strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                  Deleted message notifications
                 </h3>
-                <p className="text-xs text-content-muted mt-0.5 leading-relaxed font-medium">
-                  Get notified about new features, tips, and occasional promotions
+                <p className="text-xs mt-0.5 leading-relaxed font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Immediate heads-up alert when a contact deletes a message
                 </p>
               </div>
             </div>
             <ToggleSwitch
-              id="toggle-product-updates"
-              checked={productUpdates}
-              onChange={handleToggleUpdates}
+              id="toggle-deleted-alerts"
+              checked={deletedAlerts}
+              onChange={handleToggleDeletedAlerts}
+              label="Deleted message notifications"
+            />
+          </div>
+
+          {/* Security status summaries */}
+          <div className="flex items-start justify-between gap-3 p-2 pt-4">
+            <div className="flex items-start gap-3.5 min-w-0">
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border"
+                style={{
+                  background: 'var(--md-sys-color-surface-container)',
+                  borderColor: 'var(--md-sys-color-outline-variant)',
+                  color: 'var(--md-sys-color-on-surface)',
+                }}
+              >
+                <Bell className="w-4 h-4" strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                  Air-gap security status
+                </h3>
+                <p className="text-xs mt-0.5 leading-relaxed font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Periodic offline integrity check confirmations
+                </p>
+              </div>
+            </div>
+            <ToggleSwitch
+              id="toggle-security-summaries"
+              checked={securitySummaries}
+              onChange={handleToggleSecuritySummaries}
+              label="Air-gap security status"
             />
           </div>
         </div>

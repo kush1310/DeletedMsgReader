@@ -3,12 +3,11 @@
  *
  * Lists all captured WhatsApp conversations sorted by most recent activity.
  *
- * Visual system: Signal Android Home Screen — pure white canvas, conversation
- * rows with circular initials avatars, Signal-blue unread badges, amber deleted
- * message counters, and a clean search + filter-pill header.
- *
- * Architecture: No hamburger button, no side drawer. Bottom navigation is the
- * sole primary navigation mechanism.
+ * Visual system: NotiCatch Material 3 Expressive
+ * - Pure tonal canvas with zero token collision between light/dark themes.
+ * - Conversation rows with circular initials avatars, primary unread badges,
+ *   amber deleted message counters, and haptic long-press action sheets.
+ * - Material 3 search and filter pills.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -39,6 +38,7 @@ import {
   isNativeAndroid,
 } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
+import { HapticService } from '@/services/HapticService';
 import type { Conversation } from '@/types';
 
 type ChatFilter = 'all' | 'deleted' | 'groups' | 'direct';
@@ -70,9 +70,7 @@ export function ChatsPage() {
   /**
    * verifyPermissionState
    *
-   * Checks whether the Android NotificationListenerService is currently
-   * enabled. Updates hasNotifAccess to drive the permission warning banner.
-   * On the web preview, always reports access as granted.
+   * Checks whether the Android NotificationListenerService is currently enabled.
    */
   const verifyPermissionState = useCallback(async (): Promise<void> => {
     if (!isNative) {
@@ -86,8 +84,7 @@ export function ChatsPage() {
   /**
    * loadData
    *
-   * Fetches all captured conversations from the on-device Room SQLite DB via
-   * NativeBridgeService. Updates state and records the sync timestamp.
+   * Fetches all captured conversations from the on-device Room SQLite DB.
    */
   const loadData = useCallback(async (): Promise<void> => {
     const data = await getConversations();
@@ -97,9 +94,11 @@ export function ChatsPage() {
   }, []);
 
   async function handleRefresh(): Promise<void> {
+    HapticService.tap();
     setIsRefreshing(true);
     await Promise.all([loadData(), verifyPermissionState()]);
     setIsRefreshing(false);
+    HapticService.success();
   }
 
   useEffect(() => {
@@ -134,15 +133,8 @@ export function ChatsPage() {
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
 
-  /**
-   * handleMarkAsRead
-   *
-   * Calls the NativeBridge to mark a conversation as read in the Room DB,
-   * then refreshes the conversation list.
-   *
-   * @param chat - The Conversation to mark as read.
-   */
   async function handleMarkAsRead(chat: Conversation) {
+    HapticService.selection();
     await markConversationAsReadNative(chat.id);
     setSelectedChat(null);
     await loadData();
@@ -151,6 +143,7 @@ export function ChatsPage() {
   }
 
   async function handleExportPDF(chat: Conversation) {
+    HapticService.impact();
     setSelectedChat(null);
     setActionFeedback('Generating PDF...');
     await exportChatAsPDFNative(chat.id);
@@ -159,6 +152,7 @@ export function ChatsPage() {
   }
 
   async function handleExportCSV(chat: Conversation) {
+    HapticService.impact();
     setSelectedChat(null);
     setActionFeedback('Generating CSV...');
     await exportChatAsCSVNative(chat.id);
@@ -167,6 +161,7 @@ export function ChatsPage() {
   }
 
   async function handleDeleteChat(chat: Conversation) {
+    HapticService.deleteAction();
     await deleteConversationNative(chat.id);
     setShowDeleteConfirm(false);
     setSelectedChat(null);
@@ -198,6 +193,7 @@ export function ChatsPage() {
   }, [conversations, activeFilter, searchQuery]);
 
   function handleConversationSelect(conversationId: string): void {
+    HapticService.navigate();
     navigate(`/chats/${conversationId}`);
   }
 
@@ -208,13 +204,25 @@ export function ChatsPage() {
 
   if (isLoading) {
     return (
-      <main className="flex flex-col h-screen overflow-hidden bg-white">
+      <main
+        className="flex flex-col h-screen overflow-hidden"
+        style={{
+          background: 'var(--md-sys-color-background)',
+          color: 'var(--md-sys-color-on-surface)',
+        }}
+      >
         <TopAppBar
           title="NotiCatch"
           subtitle="Loading conversations..."
           leading={
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#EEF2FF' }}>
-              <ShieldCheck className="w-4 h-4 text-[#2C6BED]" strokeWidth={2.2} />
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'var(--md-sys-color-primary-container)',
+                color: 'var(--md-sys-color-on-primary-container)',
+              }}
+            >
+              <ShieldCheck className="w-4 h-4" strokeWidth={2.2} />
             </div>
           }
         />
@@ -226,9 +234,14 @@ export function ChatsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
-
-      {/* Top Application Bar — Signal White Style */}
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
+      {/* Top Application Bar */}
       <TopAppBar
         title="NotiCatch"
         subtitle={
@@ -237,24 +250,34 @@ export function ChatsPage() {
             : undefined
         }
         leading={
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#EEF2FF' }}>
-            <ShieldCheck className="w-4 h-4 text-[#2C6BED]" strokeWidth={2.2} />
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'var(--md-sys-color-primary-container)',
+              color: 'var(--md-sys-color-primary)',
+            }}
+          >
+            <ShieldCheck className="w-4 h-4" strokeWidth={2.2} />
           </div>
         }
         trailing={
           <>
             <IconButton
               id="chats-search-button"
-              icon={<Search className="w-5 h-5" strokeWidth={2} />}
+              icon={<Search className="w-5 h-5" strokeWidth={2} style={{ color: 'var(--md-sys-color-on-surface)' }} />}
               label="Search conversations"
-              onClick={() => setSearchVisible(v => !v)}
+              onClick={() => {
+                HapticService.tap();
+                setSearchVisible(v => !v);
+              }}
             />
             <IconButton
               id="chats-refresh-button"
               icon={
                 <RefreshCw
-                  className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#2C6BED]' : ''}`}
+                  className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
                   strokeWidth={2.2}
+                  style={{ color: 'var(--md-sys-color-on-surface)' }}
                 />
               }
               label="Refresh conversation list"
@@ -267,13 +290,24 @@ export function ChatsPage() {
       {/* Notification Access Disabled Banner */}
       {hasNotifAccess === false && (
         <div className="pt-14 px-4 pb-2 z-20">
-          <div className="rounded-2xl p-3.5 border animate-slide-down space-y-2"
-            style={{ background: '#FFF4E5', borderColor: '#FED7AA' }}>
+          <div
+            className="rounded-2xl p-3.5 border animate-slide-down space-y-2"
+            style={{
+              background: 'var(--md-sys-color-warning-container)',
+              borderColor: 'var(--md-sys-color-warning-border)',
+            }}
+          >
             <div className="flex items-center gap-2.5">
-              <BellOff className="w-4 h-4 flex-shrink-0" style={{ color: '#D97706' }} strokeWidth={2.2} />
+              <BellOff
+                className="w-4 h-4 flex-shrink-0"
+                style={{ color: 'var(--md-sys-color-warning)' }}
+                strokeWidth={2.2}
+              />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold" style={{ color: '#92400E' }}>Notification Access Disabled</p>
-                <p className="text-2xs font-medium leading-relaxed" style={{ color: '#B45309' }}>
+                <p className="text-xs font-bold" style={{ color: 'var(--md-sys-color-on-warning-container)' }}>
+                  Notification Access Disabled
+                </p>
+                <p className="text-2xs font-medium leading-relaxed" style={{ color: 'var(--md-sys-color-on-warning-container)' }}>
                   WhatsApp notifications cannot be captured until listener access is enabled.
                 </p>
               </div>
@@ -281,9 +315,11 @@ export function ChatsPage() {
             <button
               type="button"
               id="enable-notif-access-btn"
-              onClick={requestNotificationListenerPermission}
-              className="w-full py-2 rounded-xl text-white text-xs font-bold transition-colors"
-              style={{ background: '#2C6BED' }}
+              onClick={() => {
+                HapticService.selection();
+                requestNotificationListenerPermission();
+              }}
+              className="btn-primary w-full text-xs"
             >
               Enable Notification Access
             </button>
@@ -294,15 +330,24 @@ export function ChatsPage() {
       {/* Action Toast */}
       {actionFeedback && (
         <div
-          className="fixed top-16 left-4 right-4 z-50 p-2.5 rounded-xl text-white text-xs font-bold text-center shadow-lg animate-slide-down"
-          style={{ background: '#2C6BED' }}
+          className="fixed top-16 left-4 right-4 z-50 p-3 rounded-2xl text-xs font-bold text-center shadow-lg animate-slide-down"
+          style={{
+            background: 'var(--md-sys-color-primary)',
+            color: 'var(--md-sys-color-on-primary)',
+          }}
         >
           {actionFeedback}
         </div>
       )}
 
       {/* Search + Filter Strip */}
-      <div className={`px-4 space-y-2 z-20 border-b border-[#E5E7EB] bg-white ${hasNotifAccess === false ? 'pt-2' : 'pt-20'} pb-2.5`}>
+      <div
+        className={`px-4 space-y-2 z-20 border-b ${hasNotifAccess === false ? 'pt-2' : 'pt-20'} pb-2.5`}
+        style={{
+          background: 'var(--md-sys-color-surface)',
+          borderColor: 'var(--md-sys-color-outline-variant)',
+        }}
+      >
         {searchVisible && (
           <SearchInput
             id="chats-search-input"
@@ -319,15 +364,24 @@ export function ChatsPage() {
               type="button"
               id={`filter-pill-${filter}`}
               aria-selected={activeFilter === filter}
-              onClick={() => setActiveFilter(filter)}
+              onClick={() => {
+                HapticService.selection();
+                setActiveFilter(filter);
+              }}
               className={activeFilter === filter ? 'filter-pill-active' : 'filter-pill-inactive'}
             >
               {FILTER_LABELS[filter]}
             </button>
           ))}
           {totalDeleted > 0 && (
-            <span className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-2xs font-bold"
-              style={{ background: '#FFF4E5', color: '#92400E', border: '1px solid #FED7AA' }}>
+            <span
+              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-2xs font-bold border"
+              style={{
+                background: 'var(--md-sys-color-tertiary-container)',
+                color: 'var(--md-sys-color-on-tertiary-container)',
+                borderColor: 'var(--md-sys-color-tertiary-border)',
+              }}
+            >
               {totalDeleted} deleted
             </span>
           )}
@@ -337,17 +391,27 @@ export function ChatsPage() {
       {/* Scrollable Conversation List */}
       <div className="flex-1 overflow-y-auto pb-20">
         {filteredResults.length > 0 ? (
-          <ul role="list" className="divide-y divide-[#F2F2F7]">
+          <ul
+            role="list"
+            className="divide-y"
+            style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+          >
             {filteredResults.map((result, index) => (
               <li
                 key={result.item.id}
                 className="animate-slide-up"
-                style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
+                style={{
+                  animationDelay: `${Math.min(index * 25, 200)}ms`,
+                  borderColor: 'var(--md-sys-color-outline-variant)',
+                }}
               >
                 <ConversationRow
                   conversation={result.item}
                   onClick={handleConversationSelect}
-                  onLongPress={chat => setSelectedChat(chat)}
+                  onLongPress={chat => {
+                    HapticService.longPress();
+                    setSelectedChat(chat);
+                  }}
                 />
               </li>
             ))}
@@ -355,7 +419,7 @@ export function ChatsPage() {
         ) : (
           <div className="flex flex-col items-center justify-center p-6 pt-16 space-y-4">
             <EmptyState
-              icon={<MessageCircle className="w-7 h-7 text-[#9CA3AF]" strokeWidth={1.8} />}
+              icon={<MessageCircle className="w-7 h-7" style={{ color: 'var(--md-sys-color-on-surface-muted)' }} strokeWidth={1.8} />}
               title={
                 searchQuery
                   ? 'No conversations found'
@@ -378,27 +442,45 @@ export function ChatsPage() {
       {/* Long-Press Action Sheet */}
       {selectedChat && !showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in"
+          style={{ backgroundColor: 'var(--md-sys-color-scrim)' }}
           onClick={() => setSelectedChat(null)}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-xl border border-[#E5E7EB] animate-slide-up space-y-3"
+            className="w-full max-w-sm rounded-3xl p-5 shadow-xl border animate-slide-up space-y-3"
+            style={{
+              background: 'var(--md-sys-color-surface-container-low)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              boxShadow: 'var(--md-elevation-5)',
+            }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#F2F2F7]">
+            <div
+              className="flex items-center justify-between pb-3 border-b"
+              style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
+            >
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-bold text-[#111827] truncate">
+                <h3
+                  className="text-base font-bold truncate"
+                  style={{ color: 'var(--md-sys-color-on-surface)' }}
+                >
                   {selectedChat.chatTitle}
                 </h3>
-                <p className="text-2xs text-[#9CA3AF] font-medium mt-0.5">
+                <p
+                  className="text-2xs font-medium mt-0.5"
+                  style={{ color: 'var(--md-sys-color-on-surface-muted)' }}
+                >
                   {selectedChat.isGroup ? 'Group Chat' : 'Direct Contact'} &middot; {selectedChat.deletedCount} deleted
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedChat(null)}
-                className="w-7 h-7 rounded-full flex items-center justify-center text-[#9CA3AF] hover:text-[#4B5563]"
-                style={{ background: '#F2F2F7' }}
+                onClick={() => { HapticService.tap(); setSelectedChat(null); }}
+                className="w-7 h-7 rounded-full flex items-center justify-center"
+                style={{
+                  background: 'var(--md-sys-color-surface-container-highest)',
+                  color: 'var(--md-sys-color-on-surface-variant)',
+                }}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -408,36 +490,55 @@ export function ChatsPage() {
               <button
                 type="button"
                 onClick={() => handleMarkAsRead(selectedChat)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors text-xs font-bold text-[#111827] hover:bg-[#F8F9FA]"
+                className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors text-xs font-bold min-h-[48px]"
+                style={{
+                  color: 'var(--md-sys-color-on-surface)',
+                  background: 'var(--md-sys-color-surface)',
+                }}
               >
-                <CheckCircle2 className="w-4 h-4 text-[#2C6BED]" />
+                <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--md-sys-color-primary)' }} />
                 <span>Mark as Read</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleExportPDF(selectedChat)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors text-xs font-bold text-[#111827] hover:bg-[#F8F9FA]"
+                className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors text-xs font-bold min-h-[48px]"
+                style={{
+                  color: 'var(--md-sys-color-on-surface)',
+                  background: 'var(--md-sys-color-surface)',
+                }}
               >
-                <FileText className="w-4 h-4 text-[#2C6BED]" />
+                <FileText className="w-4 h-4" style={{ color: 'var(--md-sys-color-primary)' }} />
                 <span>Export as PDF Dossier</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleExportCSV(selectedChat)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors text-xs font-bold text-[#111827] hover:bg-[#F8F9FA]"
+                className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors text-xs font-bold min-h-[48px]"
+                style={{
+                  color: 'var(--md-sys-color-on-surface)',
+                  background: 'var(--md-sys-color-surface)',
+                }}
               >
-                <Share2 className="w-4 h-4 text-[#2C6BED]" />
+                <Share2 className="w-4 h-4" style={{ color: 'var(--md-sys-color-primary)' }} />
                 <span>Export as CSV Spreadsheet</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors text-xs font-bold text-rose-700 hover:bg-rose-50"
+                onClick={() => {
+                  HapticService.warning();
+                  setShowDeleteConfirm(true);
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors text-xs font-bold min-h-[48px]"
+                style={{
+                  color: 'var(--md-sys-color-error)',
+                  background: 'var(--md-sys-color-error-container)',
+                }}
               >
-                <Trash2 className="w-4 h-4 text-rose-600" />
+                <Trash2 className="w-4 h-4" style={{ color: 'var(--md-sys-color-error)' }} />
                 <span>Delete Conversation</span>
               </button>
             </div>
@@ -452,6 +553,7 @@ export function ChatsPage() {
         description={`Permanently delete all captured messages for "${selectedChat?.chatTitle}"? This cannot be undone.`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
+        isDangerous={true}
         confirmVariant="danger"
         onConfirm={() => selectedChat && handleDeleteChat(selectedChat)}
         onCancel={() => setShowDeleteConfirm(false)}

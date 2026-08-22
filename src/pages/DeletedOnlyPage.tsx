@@ -3,9 +3,10 @@
  *
  * Shows ALL messages flagged as deleted by sender across ALL conversations.
  *
- * Visual system: Signal-inspired white canvas with amber deleted message cards,
- * Signal-blue active filter pills, and charcoal typography.
- * Covers every conversation — not scoped to a single contact.
+ * Visual system: NotiCatch Material 3 Expressive
+ * - Pure tonal canvas with zero token collision between light/dark themes.
+ * - Amber deleted message cards, primary active filter pills, and haptic feedback.
+ * - Covers every conversation across the entire on-device vault.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -17,6 +18,7 @@ import { DeletedMessageCard } from '@/components/chat';
 import { getDeletedMessages, getConversations } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
 import { extractEntities } from '@/services/EntityExtractor';
+import { HapticService } from '@/services/HapticService';
 import type { Conversation, Message } from '@/types';
 
 type DeletedFilter = 'all' | 'groups' | 'direct' | 'phones' | 'links' | 'otps' | 'today';
@@ -115,7 +117,13 @@ export function DeletedOnlyPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-white">
+      <div
+        className="flex flex-col h-screen overflow-hidden"
+        style={{
+          background: 'var(--md-sys-color-background)',
+          color: 'var(--md-sys-color-on-surface)',
+        }}
+      >
         <TopAppBar title="Deleted Vault" />
         <div className="pt-14 flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -125,7 +133,13 @@ export function DeletedOnlyPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{
+        background: 'var(--md-sys-color-background)',
+        color: 'var(--md-sys-color-on-surface)',
+      }}
+    >
       <TopAppBar
         title="Deleted Vault"
         subtitle={
@@ -135,7 +149,13 @@ export function DeletedOnlyPage() {
         }
       />
 
-      <div className="pt-16 z-20 bg-white border-b border-[#E5E7EB] shadow-xs">
+      <div
+        className="pt-16 z-20 border-b shadow-xs"
+        style={{
+          background: 'var(--md-sys-color-surface)',
+          borderColor: 'var(--md-sys-color-outline-variant)',
+        }}
+      >
         <div className="px-4 pt-2.5 pb-2">
           <SearchInput
             id="deleted-search-input"
@@ -154,7 +174,10 @@ export function DeletedOnlyPage() {
               type="button"
               role="tab"
               aria-selected={activeFilter === filter}
-              onClick={() => setActiveFilter(filter)}
+              onClick={() => {
+                HapticService.selection();
+                setActiveFilter(filter);
+              }}
               className={activeFilter === filter ? 'filter-pill-active' : 'filter-pill-inactive'}
             >
               {FILTER_LABELS[filter]}
@@ -162,16 +185,26 @@ export function DeletedOnlyPage() {
           ))}
           <div className="flex-1" />
           <div className="flex items-center gap-1 flex-shrink-0">
-            <ArrowUpDown className="w-3 h-3 text-content-muted" strokeWidth={2} />
+            <ArrowUpDown className="w-3 h-3" style={{ color: 'var(--md-sys-color-on-surface-muted)' }} strokeWidth={2} />
             {(Object.keys(SORT_LABELS) as SortMode[]).map(mode => (
               <button
                 key={mode}
                 id={`deleted-sort-${mode}`}
                 type="button"
-                onClick={() => setSortMode(mode)}
-                className={`text-2xs px-2 py-0.5 rounded-md font-semibold transition-colors ${
-                  sortMode === mode ? 'text-accent font-bold bg-accent-muted' : 'text-content-muted hover:text-content-primary'
-                }`}
+                onClick={() => {
+                  HapticService.selection();
+                  setSortMode(mode);
+                }}
+                className="text-2xs px-2 py-0.5 rounded-lg font-semibold transition-all duration-180"
+                style={{
+                  color: sortMode === mode
+                    ? 'var(--md-sys-color-primary)'
+                    : 'var(--md-sys-color-on-surface-variant)',
+                  background: sortMode === mode
+                    ? 'var(--md-sys-color-primary-container)'
+                    : 'transparent',
+                  fontWeight: sortMode === mode ? 700 : 500,
+                }}
               >
                 {SORT_LABELS[mode]}
               </button>
@@ -180,7 +213,14 @@ export function DeletedOnlyPage() {
         </div>
 
         {displayedMessages.length > 0 && (
-          <div className="px-4 py-1.5 flex items-center justify-between text-2xs font-medium border-t" style={{ background: '#F8F9FA', borderColor: '#E5E7EB', color: '#9CA3AF' }}>
+          <div
+            className="px-4 py-1.5 flex items-center justify-between text-2xs font-medium border-t"
+            style={{
+              background: 'var(--md-sys-color-surface-container)',
+              borderColor: 'var(--md-sys-color-outline-variant)',
+              color: 'var(--md-sys-color-on-surface-variant)',
+            }}
+          >
             <span>{displayedMessages.length} item{displayedMessages.length !== 1 ? 's' : ''} shown</span>
             <span className="font-mono">{totalChars.toLocaleString()} characters recovered</span>
           </div>
@@ -190,7 +230,7 @@ export function DeletedOnlyPage() {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-24">
         {displayedMessages.length === 0 ? (
           <EmptyState
-            icon={<Trash2 className="w-7 h-7 text-content-muted" />}
+            icon={<Trash2 className="w-7 h-7" style={{ color: 'var(--md-sys-color-on-surface-muted)' }} />}
             title="No Deleted Messages Found"
             description={
               searchQuery || activeFilter !== 'all'
@@ -201,8 +241,11 @@ export function DeletedOnlyPage() {
               activeFilter !== 'all' ? (
                 <button
                   type="button"
-                  onClick={() => setActiveFilter('all')}
-                  className="btn-neu-secondary text-xs py-2 px-4"
+                  onClick={() => {
+                    HapticService.selection();
+                    setActiveFilter('all');
+                  }}
+                  className="btn-secondary text-xs py-2 px-4"
                 >
                   Reset Filters
                 </button>
@@ -215,7 +258,10 @@ export function DeletedOnlyPage() {
               key={message.id}
               message={message}
               chatTitle={conversationMap.get(message.conversationId)?.chatTitle ?? 'Unknown Chat'}
-              onClick={() => navigate(`/chats/${message.conversationId}`)}
+              onClick={() => {
+                HapticService.navigate();
+                navigate(`/chats/${message.conversationId}`);
+              }}
             />
           ))
         )}
