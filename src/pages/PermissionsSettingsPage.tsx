@@ -30,6 +30,7 @@ import {
   setScreenSecureNative,
   openAutostartSettings,
   loadAppSettings,
+  saveAppSettings,
 } from '@/services/NativeBridgeService';
 import { HapticService } from '@/services/HapticService';
 
@@ -51,6 +52,10 @@ export function PermissionsSettingsPage() {
   async function handleToggleScreenSecure(enabled: boolean): Promise<void> {
     setScreenSecureOn(enabled);
     await setScreenSecureNative(enabled);
+    const settings = await loadAppSettings();
+    if (settings) {
+      await saveAppSettings({ ...settings, screenSecureEnabled: enabled });
+    }
   }
 
   return (

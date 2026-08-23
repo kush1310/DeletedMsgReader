@@ -13,7 +13,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, ArrowUpDown } from 'lucide-react';
 import { TopAppBar } from '@/components/navigation';
-import { SearchInput, EmptyState, LoadingSpinner } from '@/components/common';
+import { SearchInput, EmptyState, MessageTimelineSkeleton } from '@/components/common';
 import { DeletedMessageCard } from '@/components/chat';
 import { getDeletedMessages, getConversations } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
@@ -124,9 +124,9 @@ export function DeletedOnlyPage() {
           color: 'var(--md-sys-color-on-surface)',
         }}
       >
-        <TopAppBar title="Deleted Vault" />
-        <div className="pt-14 flex-1 flex items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <TopAppBar title="Deleted Vault" subtitle="Loading recovered messages..." />
+        <div className="pt-20 flex-1 overflow-y-auto pb-20">
+          <MessageTimelineSkeleton count={6} />
         </div>
       </div>
     );
