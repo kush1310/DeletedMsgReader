@@ -124,6 +124,63 @@ export function Skeleton({ className = '' }: SkeletonProps) {
   return <div className={`skeleton ${className}`} aria-hidden="true" />;
 }
 
+/**
+ * ConversationSkeleton
+ *
+ * Material 3 Expressive skeleton rows mimicking the 72dp conversation list items.
+ */
+export function ConversationSkeleton({ count = 6 }: { readonly count?: number }) {
+  return (
+    <div className="divide-y" style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="p-4 flex items-center gap-3 animate-pulse">
+          <div className="w-12 h-12 rounded-full skeleton flex-shrink-0" />
+          <div className="flex-1 space-y-2.5 min-w-0">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-32 rounded-full skeleton" />
+              <div className="h-3 w-12 rounded-full skeleton" />
+            </div>
+            <div className="h-3.5 w-48 rounded-full skeleton" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * MessageTimelineSkeleton
+ *
+ * Material 3 Expressive message bubble skeleton placeholders for chat timeline loading.
+ */
+export function MessageTimelineSkeleton({ count = 6 }: { readonly count?: number }) {
+  return (
+    <div className="p-4 space-y-4">
+      {Array.from({ length: count }).map((_, i) => {
+        const isAlternate = i % 3 === 2;
+        return (
+          <div
+            key={i}
+            className={`flex flex-col gap-1.5 animate-pulse max-w-[80%] ${
+              isAlternate ? 'ml-auto items-end' : 'items-start'
+            }`}
+          >
+            <div
+              className="p-3.5 rounded-2xl skeleton"
+              style={{
+                width: `${140 + (i % 3) * 60}px`,
+                height: `${46 + (i % 2) * 20}px`,
+                borderRadius: '16px',
+              }}
+            />
+            <div className="h-2.5 w-14 rounded-full skeleton opacity-50" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* =============================================================================
    Badges
    ============================================================================= */

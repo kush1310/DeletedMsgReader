@@ -853,6 +853,16 @@
     border-radius: var(--md-shape-corner-full);
   }
 
+  /* Disable browser-native search clear button to eliminate duplicate cross icon */
+  input[type="search"]::-webkit-search-decoration,
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-results-button,
+  input[type="search"]::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
+
   /* ── Skeleton Loader ───────────────────────────────────────────────── */
 
   .skeleton {
@@ -864,7 +874,7 @@
     );
     background-size: 200% 100%;
     border-radius: var(--md-shape-corner-medium);
-    animation: shimmer 1.8s linear infinite;
+    animation: shimmer 1.6s ease-in-out infinite;
   }
 
   /* ── Filter Chips ──────────────────────────────────────────────────── */

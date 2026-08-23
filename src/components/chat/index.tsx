@@ -473,6 +473,7 @@ function MediaIndicator({ mediaType }: MediaIndicatorProps) {
 
 interface MessageBubbleProps {
   readonly message: Message;
+  readonly isGroup?: boolean;
 }
 
 /**
@@ -486,11 +487,10 @@ interface MessageBubbleProps {
  * Received (normal): neutral bubble-received surface with optional media
  * indicator, audio waveform, edit diff, and edit badge.
  *
- * Both variants animate in with animate-slide-up for staggered list entry.
- *
  * @param message - Message data object from Room/SQLite.
+ * @param isGroup - If true, renders the sender name header for group threads.
  */
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, isGroup = false }: MessageBubbleProps) {
   const absoluteTime = new Date(message.timestamp).toLocaleTimeString([], {
     hour:   '2-digit',
     minute: '2-digit',
@@ -512,14 +512,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         id={`msg-deleted-${message.id}`}
         className="flex flex-col items-start gap-1 animate-slide-up w-full max-w-[88%]"
       >
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span
-            className="text-2xs font-bold"
-            style={{ color: 'var(--md-sys-color-primary)' }}
-          >
-            {message.senderName}
-          </span>
-        </div>
+        {isGroup && (
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span
+              className="text-2xs font-bold"
+              style={{ color: 'var(--md-sys-color-primary)' }}
+            >
+              {message.senderName}
+            </span>
+          </div>
+        )}
 
         <div className="bubble-deleted w-full">
           <div className="flex items-center justify-between mb-1.5">
@@ -604,26 +606,30 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       id={`msg-${message.id}`}
       className="flex flex-col items-start gap-1 animate-slide-up max-w-[85%]"
     >
-      <div className="flex items-center gap-1.5 mb-0.5">
-        <span
-          className="text-2xs font-bold"
-          style={{ color: 'var(--md-sys-color-primary)' }}
-        >
-          {message.senderName}
-        </span>
-        {message.isEdited && (
-          <span
-            className="flex items-center gap-0.5 text-2xs font-semibold px-1.5 py-0.5 rounded-full"
-            style={{
-              color: 'var(--md-sys-color-on-primary-container)',
-              background: 'var(--md-sys-color-primary-container)',
-            }}
-          >
-            <Pencil className="w-2.5 h-2.5" strokeWidth={2} />
-            Edited {message.editCount ? `(v${message.editCount + 1})` : ''}
-          </span>
-        )}
-      </div>
+      {(isGroup || message.isEdited) && (
+        <div className="flex items-center gap-1.5 mb-0.5">
+          {isGroup && (
+            <span
+              className="text-2xs font-bold"
+              style={{ color: 'var(--md-sys-color-primary)' }}
+            >
+              {message.senderName}
+            </span>
+          )}
+          {message.isEdited && (
+            <span
+              className="flex items-center gap-0.5 text-2xs font-semibold px-1.5 py-0.5 rounded-full"
+              style={{
+                color: 'var(--md-sys-color-on-primary-container)',
+                background: 'var(--md-sys-color-primary-container)',
+              }}
+            >
+              <Pencil className="w-2.5 h-2.5" strokeWidth={2} />
+              Edited {message.editCount ? `(v${message.editCount + 1})` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="bubble-received elevation-1">
         {message.mediaType && <MediaIndicator mediaType={message.mediaType} />}

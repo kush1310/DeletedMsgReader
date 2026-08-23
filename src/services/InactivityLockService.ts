@@ -6,9 +6,9 @@
  * re-authentication once the persisted timeout threshold has expired.
  *
  * Features:
- *   1. Active 1000ms heartbeat interval.
+ *   1. Active 2000ms heartbeat interval during foreground usage.
  *   2. Global interaction event capture (pointer, touch, keydown, scroll).
- *   3. Background-to-foreground elapsed duration calculation via Capacitor App.
+ *   3. Background-to-foreground elapsed duration calculation via Capacitor App & visibilitychange.
  */
 
 import { App as CapApp } from '@capacitor/app';
@@ -58,6 +58,15 @@ class InactivityLockManager {
       window.addEventListener('keydown',     handleInput, { passive: true });
       window.addEventListener('scroll',      handleInput, { passive: true });
       window.addEventListener('click',       handleInput, { passive: true });
+
+      document.addEventListener('visibilitychange', async () => {
+        if (document.visibilityState === 'hidden') {
+          this.backgroundedTimestamp = Date.now();
+        } else if (document.visibilityState === 'visible') {
+          await this.handleResume();
+        }
+      });
+
       this.isListeningToInputs = true;
     }
 
@@ -66,21 +75,39 @@ class InactivityLockManager {
       if (!isActive) {
         this.backgroundedTimestamp = Date.now();
       } else {
-        if (this.backgroundedTimestamp) {
-          const elapsedInBackground = Date.now() - this.backgroundedTimestamp;
-          this.backgroundedTimestamp = null;
-          await this.evaluateInactivity(elapsedInBackground);
-        }
+        await this.handleResume();
       }
     }).catch(() => {});
 
-    /* Heartbeat interval checking every 2000ms */
+    /* Heartbeat interval checking every 2000ms while active */
     if (!this.heartbeatTimerId) {
       this.heartbeatTimerId = setInterval(() => {
-        const elapsedSinceActive = Date.now() - this.lastActivityTimestamp;
-        this.evaluateInactivity(elapsedSinceActive);
+        if (document.visibilityState === 'visible') {
+          const elapsedSinceActive = Date.now() - this.lastActivityTimestamp;
+          this.evaluateInactivity(elapsedSinceActive);
+        }
       }, 2000);
     }
+  }
+
+  private async handleResume(): Promise<void> {
+    if (this.backgroundedTimestamp) {
+      const elapsedInBackground = Date.now() - this.backgroundedTimestamp;
+      this.backgroundedTimestamp = null;
+
+      const sessionStart = sessionStorage.getItem('session_start') || localStorage.getItem('noticatch_session_start');
+      if (!sessionStart) return;
+
+      const settings = await loadAppSettings();
+      if (settings && settings.sessionTimeoutSeconds > 0) {
+        const thresholdMs = settings.sessionTimeoutSeconds * 1000;
+        if (elapsedInBackground >= thresholdMs) {
+          this.triggerLock();
+          return;
+        }
+      }
+    }
+    this.recordUserActivity();
   }
 
   /**

@@ -127,9 +127,25 @@ export function SettingsPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (showAutoLockModal || showPanicModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showAutoLockModal, showPanicModal]);
+
   async function handleToggleScreenSecure(enabled: boolean) {
     setScreenSecureOn(enabled);
     await setScreenSecureNative(enabled);
+    if (settings) {
+      const updated: AppSettings = { ...settings, screenSecureEnabled: enabled };
+      await saveAppSettings(updated);
+      setSettings(updated);
+    }
     showToast(enabled ? 'Screen capture protection enabled' : 'Screen capture protection disabled');
   }
 
@@ -140,7 +156,7 @@ export function SettingsPage() {
       await saveAppSettings(updated);
       setSettings(updated);
     }
-    showToast(enabled ? 'Spam/OTP filter enabled' : 'Spam/OTP filter disabled');
+    showToast(enabled ? 'Spam filter enabled' : 'Spam filter disabled');
   }
 
   async function handleSelectAutoLock(value: number) {
@@ -583,7 +599,7 @@ export function SettingsPage() {
                 <div className="min-w-0">
                   <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Storage Statistics</h3>
                   <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
-                    {messageCount !== null ? `${messageCount} messages archived` : 'Local Room SQLite WAL'}
+                    {messageCount !== null ? `${messageCount} messages archived` : 'Local storage'}
                   </p>
                 </div>
               </div>
@@ -602,7 +618,7 @@ export function SettingsPage() {
               onClick={async () => {
                 HapticService.impact();
                 await exportChatAsPDFNative('all', 'All Conversations');
-                showToast('PDF export dossier generated');
+                showToast('PDF document exported');
               }}
               className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
               style={{
@@ -623,7 +639,7 @@ export function SettingsPage() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Export All as PDF</h3>
-                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Generate offline document dossier of all conversations</p>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Export conversations as a PDF document</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
@@ -636,9 +652,9 @@ export function SettingsPage() {
               onClick={async () => {
                 HapticService.impact();
                 await exportChatAsCSVNative('all', 'All Conversations');
-                showToast('CSV database backup exported');
+                showToast('CSV spreadsheet exported');
               }}
-              className="w-full p-4 flex items-center justify-between gap-3 min-h-[56px] transition-colors touch-manipulation"
+              className="w-full p-4 flex items-center justify-between gap-3 text-left min-h-[56px] transition-colors touch-manipulation"
               style={{ background: 'var(--md-sys-color-surface)' }}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -654,7 +670,7 @@ export function SettingsPage() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Export All as CSV</h3>
-                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Export tabular spreadsheet backup with SHA-256 signatures</p>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Export conversations as a CSV spreadsheet</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-on-surface-variant)' }} />
@@ -855,7 +871,7 @@ export function SettingsPage() {
                   borderColor: 'var(--md-sys-color-outline-variant)',
                 }}
               >
-                v2.0.2
+                v2.0.3
               </span>
             </div>
           </div>
@@ -930,8 +946,8 @@ export function SettingsPage() {
                   <Trash2 className="w-4 h-4" strokeWidth={2.2} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-error)' }}>Erase All Data (Panic Wipe)</h3>
-                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Permanently drops all database tables and resets app</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-error)' }}>Erase All Data</h3>
+                  <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Permanently deletes all saved messages and resets app</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--md-sys-color-error)' }} />

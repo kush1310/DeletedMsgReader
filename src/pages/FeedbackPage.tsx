@@ -266,7 +266,7 @@ export function FeedbackPage() {
                     color: 'var(--md-sys-color-on-surface-variant)',
                   }}
                 >
-                  <p>app: NotiCatch v2.0.2</p>
+                  <p>app: NotiCatch v2.0.3</p>
                   <p>target_pkg: com.whatsapp</p>
                   <p>listener_service: ACTIVE</p>
                   <p>battery_saver_exemption: GRANTED</p>

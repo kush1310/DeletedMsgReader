@@ -21,6 +21,7 @@ import android.util.Log
  *   - WhatsApp Edit notification detection & original text extraction
  *   - Voice note audio duration parser (0:42, 1:15, etc.)
  *   - Disappearing messages ephemeral flag detection
+ *   - Media placeholder filtering (ignores standalone "Photo", "Sticker", "GIF")
  *   - Automated OTP and broadcast spam classification
  */
 object WhatsAppNotificationParser {
@@ -68,7 +69,7 @@ object WhatsAppNotificationParser {
         Regex("यह संदेश हटा दिया गया"),
         Regex("આ સંદેશ કાઢી નાખવામાં આવ્યો છે"),
         Regex("இந்த செய்தி நீக்கப்பட்டது"),
-        Regex("ఈ సందేశం తొలகించబడింది"),
+        Regex("ఈ సందేశం తొలగించబడింది"),
         Regex("ಈ ಸಂದೇಶವನ್ನು ಅಳಿಸಲಾಗಿದೆ"),
         Regex("ഈ സന്ദേശം ഇല്ലാതാക്കി"),
         Regex("تم حذف هذه الرسالة"),
@@ -99,8 +100,30 @@ object WhatsAppNotificationParser {
     /** Edit indicators: "(edited)", "edited message" */
     private val EDIT_REGEX = Regex("(?:^|\\s)\\((?:edited|संपादित)\\)$", RegexOption.IGNORE_CASE)
 
+    /** Non-text media placeholder filter patterns (e.g., standalone photo/sticker/GIF indicators). */
+    private val IGNORED_MEDIA_PATTERNS = listOf(
+        Regex("^(?:📷\\s*)?Photo$",            RegexOption.IGNORE_CASE),
+        Regex("^(?:🖼️?\\s*)?Photo$",          RegexOption.IGNORE_CASE),
+        Regex("^(?:📹\\s*)?Video$",            RegexOption.IGNORE_CASE),
+        Regex("^Sticker$",                     RegexOption.IGNORE_CASE),
+        Regex("^(?:🎬\\s*)?GIF$",              RegexOption.IGNORE_CASE),
+        Regex("^(?:📍\\s*)?Location$",         RegexOption.IGNORE_CASE),
+        Regex("^(?:📍\\s*)?Live location$",    RegexOption.IGNORE_CASE)
+    )
+
     fun isWhatsAppNotification(packageName: String?): Boolean {
         return packageName == WHATSAPP_PKG || packageName == WHATSAPP_BUSINESS_PKG
+    }
+
+    /**
+     * isIgnoredMedia
+     *
+     * Returns true if the message text is a standalone WhatsApp media placeholder
+     * (e.g. "Photo", "Sticker", "GIF") that contains no textual content.
+     */
+    fun isIgnoredMedia(text: String): Boolean {
+        val trimmed = text.trim()
+        return IGNORED_MEDIA_PATTERNS.any { it.matches(trimmed) }
     }
 
     /**
@@ -112,7 +135,7 @@ object WhatsAppNotificationParser {
     fun cleanChatTitle(rawTitle: String): String {
         var clean = rawTitle.trim()
         clean = TITLE_MESSAGE_COUNT_REGEX.replace(clean, "").trim()
-        return clean.ifBlank { "WhatsApp Chat" }
+        return clean.ifBlank { "WhatsApp Contact" }
     }
 
     /**
@@ -127,6 +150,9 @@ object WhatsAppNotificationParser {
 
         val notification: Notification = sbn.notification ?: return emptyList()
         val extras: Bundle = notification.extras ?: return emptyList()
+
+        /* Filter out group summary notifications when they don't contain individual message payloads */
+        val isGroupSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
 
         val isGroupExplicit = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
         val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
@@ -178,12 +204,17 @@ object WhatsAppNotificationParser {
                     val audioDuration = parseAudioDuration(cleanText)
                     val isDisappearing = isDisappearing(cleanText)
 
+                    /* Skip non-text placeholders (pure photos/stickers) unless it is a deletion event */
+                    if (!isDeletion && isIgnoredMedia(cleanText)) {
+                        continue
+                    }
+
                     messagesList.add(
                         ParsedMessage(
                             packageName          = packageName,
                             chatTitle            = chatTitle,
                             senderName           = sender.ifBlank { chatTitle },
-                            messageText          = if (isDeletion) cleanText else cleanText,
+                            messageText          = cleanText,
                             notificationId       = notificationId,
                             timestamp            = if (msgTime > 0) msgTime else timestamp,
                             isDeletion           = isDeletion,
@@ -199,7 +230,7 @@ object WhatsAppNotificationParser {
         }
 
         /* 2. Fallback to standard BigText/Text extraction if no MessagingStyle bundles found */
-        if (messagesList.isEmpty()) {
+        if (messagesList.isEmpty() && !isGroupSummary) {
             val bodyText = extractBodyText(extras)
             if (bodyText.isNotBlank() && !isSummaryCount(bodyText)) {
                 var senderName = chatTitle
@@ -221,22 +252,25 @@ object WhatsAppNotificationParser {
                 val audioDuration = parseAudioDuration(cleanText)
                 val isDisappearing = isDisappearing(cleanText)
 
-                messagesList.add(
-                    ParsedMessage(
-                        packageName          = packageName,
-                        chatTitle            = chatTitle,
-                        senderName           = senderName.ifBlank { chatTitle },
-                        messageText          = cleanText,
-                        notificationId       = notificationId,
-                        timestamp            = timestamp,
-                        isDeletion           = isDeletion,
-                        isEdit               = isEdit,
-                        isGroup              = isGroup,
-                        isSpamOtp            = isSpamOtp,
-                        audioDurationSeconds = audioDuration,
-                        isDisappearing       = isDisappearing,
+                /* Skip non-text placeholders unless it is a deletion event */
+                if (isDeletion || !isIgnoredMedia(cleanText)) {
+                    messagesList.add(
+                        ParsedMessage(
+                            packageName          = packageName,
+                            chatTitle            = chatTitle,
+                            senderName           = senderName.ifBlank { chatTitle },
+                            messageText          = cleanText,
+                            notificationId       = notificationId,
+                            timestamp            = timestamp,
+                            isDeletion           = isDeletion,
+                            isEdit               = isEdit,
+                            isGroup              = isGroup,
+                            isSpamOtp            = isSpamOtp,
+                            audioDurationSeconds = audioDuration,
+                            isDisappearing       = isDisappearing,
+                        )
                     )
-                )
+                }
             }
         }
 

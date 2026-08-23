@@ -28,7 +28,7 @@ import {
   Info,
 } from 'lucide-react';
 import { IconButton } from '@/components/navigation';
-import { SearchInput, EmptyState, LoadingSpinner } from '@/components/common';
+import { SearchInput, EmptyState, MessageTimelineSkeleton } from '@/components/common';
 import { MessageBubble } from '@/components/chat';
 import {
   getMessagesByConversation,
@@ -130,26 +130,41 @@ export function ChatDetailPage() {
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
 
+  /* Deduplicate messages defensively to eliminate identical consecutive burst duplicates */
+  const deduplicatedMessages = useMemo(() => {
+    const seen = new Set<string>();
+    const result: Message[] = [];
+    for (const msg of allMessages) {
+      const timeBlock = Math.floor(msg.timestamp / 15000);
+      const key = `${msg.senderName}|${msg.messageText}|${timeBlock}|${msg.isDeletedBySender}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(msg);
+      }
+    }
+    return result;
+  }, [allMessages]);
+
   /* Search filtered messages */
   const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return allMessages;
+    if (!searchQuery.trim()) return deduplicatedMessages;
     const q = searchQuery.toLowerCase();
-    return allMessages.filter(m =>
+    return deduplicatedMessages.filter(m =>
       (m.messageText && m.messageText.toLowerCase().includes(q)) ||
       m.senderName.toLowerCase().includes(q)
     );
-  }, [allMessages, searchQuery]);
+  }, [deduplicatedMessages, searchQuery]);
 
   /* Deleted filter */
   const displayedMessages = useMemo(() => {
-    const base = searchQuery.trim() ? searchResults : allMessages;
+    const base = searchQuery.trim() ? searchResults : deduplicatedMessages;
     if (!showDeletedOnly) return base;
     return base.filter(m => m.isDeletedBySender);
-  }, [allMessages, searchResults, searchQuery, showDeletedOnly]);
+  }, [deduplicatedMessages, searchResults, searchQuery, showDeletedOnly]);
 
   const deletedMessages = useMemo(() =>
-    allMessages.filter(m => m.isDeletedBySender),
-    [allMessages]
+    deduplicatedMessages.filter(m => m.isDeletedBySender),
+    [deduplicatedMessages]
   );
 
   /* Date grouping */
@@ -177,7 +192,7 @@ export function ChatDetailPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  /* Loading state */
+  /* Loading state with M3 Expressive skeleton timeline */
   if (isLoading) {
     return (
       <div
@@ -206,8 +221,8 @@ export function ChatDetailPage() {
             </span>
           </div>
         </header>
-        <div className="flex-1 flex items-center justify-center pt-14">
-          <LoadingSpinner size="lg" />
+        <div className="flex-1 overflow-y-auto pt-16 pb-6">
+          <MessageTimelineSkeleton count={7} />
         </div>
       </div>
     );
@@ -533,7 +548,7 @@ export function ChatDetailPage() {
             <div key={group.dateLabel} className="space-y-3">
               <SectionDivider label={group.dateLabel} />
               {group.messages.map(message => (
-                <MessageBubble key={message.id} message={message} />
+                <MessageBubble key={message.id} message={message} isGroup={conversation.isGroup} />
               ))}
             </div>
           ))

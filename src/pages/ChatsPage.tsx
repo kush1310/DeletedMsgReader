@@ -23,9 +23,10 @@ import {
   X,
   Search,
   ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';
-import { SearchInput, EmptyState, LoadingSpinner, ConfirmationModal } from '@/components/common';
+import { SearchInput, EmptyState, ConfirmationModal, ConversationSkeleton } from '@/components/common';
 import { ConversationRow } from '@/components/chat';
 import {
   getConversations,
@@ -42,6 +43,16 @@ import { HapticService } from '@/services/HapticService';
 import type { Conversation } from '@/types';
 
 type ChatFilter = 'all' | 'deleted' | 'groups' | 'direct';
+
+interface SearchHistoryItem {
+  readonly id: string;
+  readonly query: string;
+  readonly chatTitle: string;
+  readonly conversationId: string;
+  readonly timestamp: number;
+}
+
+const SEARCH_HISTORY_KEY = 'noticatch_search_history';
 
 const FILTER_LABELS: Record<ChatFilter, string> = {
   all:     'All',
@@ -62,6 +73,13 @@ export function ChatsPage() {
   const [lastSynced,        setLastSynced]        = useState<Date | null>(null);
   const [hasNotifAccess,    setHasNotifAccess]    = useState<boolean | null>(null);
   const [searchVisible,     setSearchVisible]     = useState(false);
+  const [searchHistory,     setSearchHistory]     = useState<SearchHistoryItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  });
 
   const [selectedChat,      setSelectedChat]      = useState<Conversation | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -192,7 +210,23 @@ export function ChatsPage() {
     );
   }, [conversations, activeFilter, searchQuery]);
 
-  function handleConversationSelect(conversationId: string): void {
+  function handleConversationSelect(conversationId: string, chatTitle?: string): void {
+    if (searchQuery.trim()) {
+      const existing: SearchHistoryItem[] = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+      const filtered = existing.filter(
+        h => h.conversationId !== conversationId && h.query.toLowerCase() !== searchQuery.trim().toLowerCase()
+      );
+      filtered.unshift({
+        id: `${Date.now()}`,
+        query: searchQuery.trim(),
+        chatTitle: chatTitle || 'Conversation',
+        conversationId,
+        timestamp: Date.now(),
+      });
+      const updated = filtered.slice(0, 8);
+      localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+      setSearchHistory(updated);
+    }
     HapticService.navigate();
     navigate(`/chats/${conversationId}`);
   }
@@ -226,8 +260,8 @@ export function ChatsPage() {
             </div>
           }
         />
-        <div className="flex-1 flex items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="flex-1 overflow-y-auto pt-20 pb-20">
+          <ConversationSkeleton count={7} />
         </div>
       </main>
     );
@@ -349,12 +383,57 @@ export function ChatsPage() {
         }}
       >
         {searchVisible && (
-          <SearchInput
-            id="chats-search-input"
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search conversations..."
-          />
+          <div className="space-y-2">
+            <SearchInput
+              id="chats-search-input"
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search conversations..."
+            />
+
+            {searchHistory.length > 0 && !searchQuery.trim() && (
+              <div className="pt-1 space-y-1.5 animate-fade-in">
+                <div className="flex items-center justify-between text-2xs">
+                  <span className="font-semibold" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                    Recent Searches
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      HapticService.tap();
+                      localStorage.removeItem(SEARCH_HISTORY_KEY);
+                      setSearchHistory([]);
+                    }}
+                    className="font-bold underline hover:opacity-80 transition-opacity cursor-pointer"
+                    style={{ color: 'var(--md-sys-color-primary)' }}
+                  >
+                    Clear History
+                  </button>
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                  {searchHistory.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        HapticService.selection();
+                        navigate(`/chats/${item.conversationId}`);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-2xs font-medium border transition-colors flex-shrink-0 active:scale-95"
+                      style={{
+                        background: 'var(--md-sys-color-surface-container)',
+                        borderColor: 'var(--md-sys-color-outline-variant)',
+                        color: 'var(--md-sys-color-on-surface)',
+                      }}
+                    >
+                      <Clock className="w-3 h-3 opacity-60" />
+                      <span>{item.chatTitle || item.query}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
@@ -407,7 +486,7 @@ export function ChatsPage() {
               >
                 <ConversationRow
                   conversation={result.item}
-                  onClick={handleConversationSelect}
+                  onClick={(id) => handleConversationSelect(id, result.item.chatTitle)}
                   onLongPress={chat => {
                     HapticService.longPress();
                     setSelectedChat(chat);

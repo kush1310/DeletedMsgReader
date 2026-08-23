@@ -14,6 +14,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -22,7 +24,7 @@ import java.util.UUID
  *
  * High-reliability Android NotificationListenerService for NotiCatch.
  * Delegates message extraction to WhatsAppNotificationParser and persists records
- * to local Room SQLite with sequential burst handling, duplicate prevention, and SHA-256 signatures.
+ * to local Room SQLite with sequential mutex synchronization, duplicate prevention, and SHA-256 signatures.
  */
 class NotificationListener : NotificationListenerService() {
 
@@ -41,6 +43,7 @@ class NotificationListener : NotificationListenerService() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ingestionMutex = Mutex()
     private lateinit var database: NotiCatchDatabase
 
     override fun onCreate() {
@@ -70,14 +73,16 @@ class NotificationListener : NotificationListenerService() {
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
 
-        /* Execute all parsed messages sequentially to prevent race conditions */
+        /* Execute all parsed messages with Mutex synchronization to guarantee race-free serialization */
         serviceScope.launch {
-            for (parsed in parsedList) {
-                if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
-                    Log.d(TAG, "Suppressed OTP message from: ${parsed.senderName}")
-                    continue
+            ingestionMutex.withLock {
+                for (parsed in parsedList) {
+                    if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
+                        Log.d(TAG, "Suppressed OTP message from: ${parsed.senderName}")
+                        continue
+                    }
+                    persistAndBroadcast(parsed)
                 }
-                persistAndBroadcast(parsed)
             }
         }
     }
@@ -200,13 +205,13 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 4. Standard message insertion with strict sliding-window deduplication (5-minute window) */
+        /* 4. Standard message insertion with strict sliding-window deduplication (10-minute window) */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
 
-            /* Deduplication check: Match text & sender within a ±5 minute window */
-            val minTime = parsed.timestamp - 300000L // -5 minutes
-            val maxTime = parsed.timestamp + 300000L // +5 minutes
+            /* Deduplication check: Match text & sender within a ±10 minute window */
+            val minTime = parsed.timestamp - 600000L // -10 minutes
+            val maxTime = parsed.timestamp + 600000L // +10 minutes
             val duplicate = database.messageDao().findDuplicateWithSender(conversation.id, parsed.senderName, text, minTime, maxTime)
 
             if (duplicate != null) {
