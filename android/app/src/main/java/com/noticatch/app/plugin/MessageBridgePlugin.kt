@@ -92,6 +92,21 @@ class MessageBridgePlugin : Plugin() {
        BIOMETRIC & DEVICE CREDENTIAL AUTHENTICATION
        ========================================================================= */
 
+    /**
+     * authenticateBiometric
+     *
+     * Invokes AndroidX BiometricPrompt with strong biometric and device credential support.
+     * MASVS-AUTH-1: Does NOT bypass authentication when biometric hardware is absent.
+     * MASVS-AUTH-2: Does NOT resolve success on unexpected exceptions.
+     *
+     * @param  title     - BiometricPrompt dialog title text.
+     * @param  subtitle  - BiometricPrompt dialog subtitle text.
+     * @returns          - {success: boolean, error: string|null}
+     * @validates         - FragmentActivity availability, biometric hardware presence.
+     * @edge-cases        - Devices without biometrics: checks if device credential is configured.
+     *                     If no authentication mechanism exists, returns success=false.
+     *                     Unexpected exceptions return success=false with sanitized error message.
+     */
     @PluginMethod
     fun authenticateBiometric(call: PluginCall) {
         val title = call.getString("title", "Unlock NotiCatch") ?: "Unlock NotiCatch"
@@ -102,9 +117,10 @@ class MessageBridgePlugin : Plugin() {
             try {
                 val fragmentActivity = activity as? FragmentActivity
                 if (fragmentActivity == null) {
+                    /* MASVS-AUTH-2: Cannot cast to FragmentActivity — deny access */
                     val res = JSObject().apply {
-                        put("success", true)
-                        put("error", null)
+                        put("success", false)
+                        put("error", "Authentication unavailable: activity context error")
                     }
                     call.resolve(res)
                     return@runOnUiThread
@@ -123,14 +139,37 @@ class MessageBridgePlugin : Plugin() {
 
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
-                        // If no hardware or biometrics enrolled, permit device entry fallback
+                        /* MASVS-AUTH-1: When biometric hardware is absent or no biometrics enrolled,
+                           check if the device has a configured screen lock (PIN/Pattern/Password).
+                           Only allow fallback if DEVICE_CREDENTIAL is verifiably configured.
+                           Never auto-grant success=true — that creates a universal bypass. */
                         if (errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS ||
                             errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT ||
                             errorCode == BiometricPrompt.ERROR_HW_UNAVAILABLE
                         ) {
+                            val biometricManager = BiometricManager.from(context)
+                            val canAuthWithCredential = biometricManager.canAuthenticate(
+                                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                            )
+                            if (canAuthWithCredential == BiometricManager.BIOMETRIC_SUCCESS) {
+                                /* Device has screen lock configured — attempt credential-only auth */
+                                try {
+                                    val credPromptInfo = BiometricPrompt.PromptInfo.Builder()
+                                        .setTitle(title)
+                                        .setSubtitle(subtitle)
+                                        .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                                        .build()
+                                    val credPrompt = BiometricPrompt(fragmentActivity, executor, this)
+                                    credPrompt.authenticate(credPromptInfo)
+                                    return
+                                } catch (_: Exception) {
+                                    /* Fall through to deny */
+                                }
+                            }
+                            /* No device credential configured — deny access */
                             val res = JSObject().apply {
-                                put("success", true)
-                                put("error", null)
+                                put("success", false)
+                                put("error", "No authentication method available on this device")
                             }
                             call.resolve(res)
                             return
@@ -144,7 +183,7 @@ class MessageBridgePlugin : Plugin() {
 
                     override fun onAuthenticationFailed() {
                         super.onAuthenticationFailed()
-                        // Intermediate attempt failure (e.g. partial print), prompt remains open
+                        /* Intermediate attempt failure (e.g. partial fingerprint), prompt remains open */
                     }
                 }
 
@@ -152,7 +191,7 @@ class MessageBridgePlugin : Plugin() {
                     .setTitle(title)
                     .setSubtitle(subtitle)
 
-                // Allow Biometric (Fingerprint/Face) OR Device Screen Lock (PIN/Pattern/Password)
+                /* Allow Biometric (Fingerprint/Face) OR Device Screen Lock (PIN/Pattern/Password) */
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     promptInfoBuilder.setAllowedAuthenticators(
                         BiometricManager.Authenticators.BIOMETRIC_STRONG or
@@ -170,10 +209,11 @@ class MessageBridgePlugin : Plugin() {
                 val biometricPrompt = BiometricPrompt(fragmentActivity, executor, callback)
                 biometricPrompt.authenticate(promptInfo)
             } catch (e: Exception) {
-                // If an unexpected exception occurs, resolve gracefully so user is not permanently locked out
+                /* MASVS-AUTH-2: Unexpected exceptions must NOT auto-grant access.
+                   Return failure with a sanitized error message that does not leak internals. */
                 val res = JSObject().apply {
-                    put("success", true)
-                    put("error", null)
+                    put("success", false)
+                    put("error", "Authentication system error")
                 }
                 call.resolve(res)
             }
@@ -539,7 +579,9 @@ class MessageBridgePlugin : Plugin() {
             call.reject("conversationId is required")
             return
         }
-        val chatTitle = call.getString("chatTitle", "Chat") ?: "Chat"
+        /* MASVS-STORAGE-1: Sanitize chatTitle to prevent path traversal via crafted names */
+        val rawTitle = call.getString("chatTitle", "Chat") ?: "Chat"
+        val chatTitle = rawTitle.take(128).replace(Regex("[^a-zA-Z0-9\\s_\\-]"), "")
 
         pluginScope.launch {
             try {
@@ -626,7 +668,9 @@ class MessageBridgePlugin : Plugin() {
             call.reject("conversationId is required")
             return
         }
-        val chatTitle = call.getString("chatTitle", "Chat") ?: "Chat"
+        /* MASVS-STORAGE-1: Sanitize chatTitle to prevent path traversal via crafted names */
+        val rawTitle = call.getString("chatTitle", "Chat") ?: "Chat"
+        val chatTitle = rawTitle.take(128).replace(Regex("[^a-zA-Z0-9\\s_\\-]"), "")
 
         pluginScope.launch {
             try {
@@ -772,9 +816,10 @@ class MessageBridgePlugin : Plugin() {
 
     @PluginMethod
     fun simulateNotification(call: PluginCall) {
-        val chatTitle = call.getString("chatTitle", "Alice Smith") ?: "Alice Smith"
-        val senderName = call.getString("senderName", "Alice") ?: "Alice"
-        val messageText = call.getString("messageText", "Hello from simulated message") ?: "Hello from simulated message"
+        /* MASVS-PLATFORM-2: Input length validation on all string parameters */
+        val chatTitle = (call.getString("chatTitle", "Alice Smith") ?: "Alice Smith").take(256)
+        val senderName = (call.getString("senderName", "Alice") ?: "Alice").take(256)
+        val messageText = (call.getString("messageText", "Hello from simulated message") ?: "Hello from simulated message").take(4096)
         val isDeleted = call.getBoolean("isDeleted", false) ?: false
         val isGroup = call.getBoolean("isGroup", false) ?: false
 

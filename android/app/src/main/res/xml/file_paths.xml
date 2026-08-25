@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  file_paths.xml — NotiCatch FileProvider Configuration
+  
+  MASVS-STORAGE-1: Restrict shared paths to the minimum necessary scope.
+  Only the exports subdirectory under cache is exposed for PDF/CSV sharing.
+  Root path exposure (path=".") is eliminated to prevent unintended file access.
+-->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
-    <external-files-path name="export_docs" path="." />
-    <files-path name="internal_docs" path="." />
-    <cache-path name="my_cache_images" path="." />
+    <cache-path name="noticatch_exports" path="exports/" />
 </paths>

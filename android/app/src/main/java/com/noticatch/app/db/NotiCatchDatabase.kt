@@ -53,6 +53,11 @@ abstract class NotiCatchDatabase : RoomDatabase() {
                         db.execSQL("PRAGMA temp_store = MEMORY;")
                         db.execSQL("PRAGMA mmap_size = 268435456;") // 256MB memory-mapped I/O
                         db.execSQL("PRAGMA cache_size = -4000;")     // 4MB page cache
+                        /* MASVS-STORAGE-2: Overwrite deleted data pages with zeroes
+                           to prevent forensic recovery of deleted messages */
+                        db.execSQL("PRAGMA secure_delete = ON;")
+                        /* Bound WAL file growth to 8MB to prevent disk exhaustion */
+                        db.execSQL("PRAGMA journal_size_limit = 8388608;")
                         db.execSQL("PRAGMA optimize;")               // Dynamic query-planner index optimization
                     }
                 })

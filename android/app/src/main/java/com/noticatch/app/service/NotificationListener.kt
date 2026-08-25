@@ -20,6 +20,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * NotificationListener
@@ -75,6 +77,13 @@ class NotificationListener : NotificationListenerService() {
     private val ingestionMutex = Mutex()
     private lateinit var database: NotiCatchDatabase
 
+    /* MASVS-CODE-4: Notification flood rate limiter to prevent DoS via rapid notification spam.
+       Maximum 100 notification ingestion events per 60-second sliding window. */
+    private val rateLimitCounter = AtomicInteger(0)
+    private val rateLimitWindowStart = AtomicLong(0L)
+    private val RATE_LIMIT_MAX_EVENTS = 100
+    private val RATE_LIMIT_WINDOW_MS = 60_000L
+
     override fun onCreate() {
         super.onCreate()
         database = NotiCatchDatabase.getInstance(applicationContext)
@@ -98,6 +107,18 @@ class NotificationListener : NotificationListenerService() {
         if (sbn == null) return
         val parsedList = WhatsAppNotificationParser.parse(sbn)
         if (parsedList.isEmpty()) return
+
+        /* MASVS-CODE-4: Rate limiting — reject notifications if the sliding window quota is exhausted */
+        val now = System.currentTimeMillis()
+        val windowStart = rateLimitWindowStart.get()
+        if (now - windowStart > RATE_LIMIT_WINDOW_MS) {
+            rateLimitWindowStart.set(now)
+            rateLimitCounter.set(0)
+        }
+        if (rateLimitCounter.incrementAndGet() > RATE_LIMIT_MAX_EVENTS) {
+            Log.w(TAG, "Rate limit exceeded — suppressing notification burst")
+            return
+        }
 
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)

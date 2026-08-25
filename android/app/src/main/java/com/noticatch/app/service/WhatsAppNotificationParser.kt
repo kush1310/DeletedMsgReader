@@ -132,14 +132,19 @@ object WhatsAppNotificationParser {
     /* Whitespace normalization regex */
     private val WHITESPACE_COLLAPSE_REGEX = Regex("\\s+")
 
+    /* MASVS-PLATFORM-2: Maximum accepted character length for any extracted notification text.
+       Prevents OOM from maliciously crafted oversized notifications on OEM ROMs. */
+    private const val MAX_TEXT_LENGTH = 8192
+
     /**
      * cleanChatTitle
      *
      * Strips ephemeral WhatsApp message count suffixes such as "(6 messages)" or "(12 new messages)"
      * and removes Unicode BiDi isolation characters so all notifications resolve to one canonical title.
+     * Enforces length cap to prevent oversized title processing.
      */
     fun cleanChatTitle(rawTitle: String): String {
-        var clean = rawTitle.trim()
+        var clean = rawTitle.take(MAX_TEXT_LENGTH).trim()
         clean = BIDI_MARKERS_REGEX.replace(clean, "")
         clean = TITLE_MESSAGE_COUNT_REGEX.replace(clean, "").trim()
         return clean.ifBlank { "WhatsApp Contact" }

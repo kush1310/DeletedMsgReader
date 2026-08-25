@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 
 /**
@@ -133,6 +134,8 @@ interface MessageDao {
     @Query("UPDATE messages SET isPurged = 1, purgedAt = :now WHERE timestamp < :cutoffTimestamp")
     suspend fun purgeOldMessages(cutoffTimestamp: Long, now: Long = System.currentTimeMillis())
 
+    /* MASVS-CODE-4: @Transaction ensures cascade deletion of messages is atomic */
+    @Transaction
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun deleteByConversation(conversationId: String)
 

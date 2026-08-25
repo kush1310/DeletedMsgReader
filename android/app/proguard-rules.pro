@@ -1,21 +1,73 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ============================================================
+# NotiCatch — ProGuard / R8 Keep Rules
+# ============================================================
+# Ensures Room, Capacitor, BiometricPrompt, and Kotlin Coroutines
+# survive R8 code shrinking and obfuscation in release builds.
+# ============================================================
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# --------------------------------------------------
+# Room Database: Keep all @Entity and @Dao annotated classes
+# --------------------------------------------------
+-keep class com.noticatch.app.db.** { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keepclassmembers class * {
+    @androidx.room.* <methods>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# --------------------------------------------------
+# Capacitor Plugin: Keep @PluginMethod annotated methods
+# --------------------------------------------------
+-keep class com.noticatch.app.plugin.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod <methods>;
+}
+-keep class com.getcapacitor.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# --------------------------------------------------
+# BiometricPrompt / AndroidX: Keep callback classes
+# --------------------------------------------------
+-keep class androidx.biometric.** { *; }
+-keep class androidx.fragment.** { *; }
+
+# --------------------------------------------------
+# Kotlin Coroutines and Serialization
+# --------------------------------------------------
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
+-dontwarn kotlinx.coroutines.**
+
+# --------------------------------------------------
+# NotificationListenerService: Preserve service binding
+# --------------------------------------------------
+-keep class com.noticatch.app.service.** { *; }
+
+# --------------------------------------------------
+# Application class
+# --------------------------------------------------
+-keep class com.noticatch.app.NotiCatchApplication { *; }
+-keep class com.noticatch.app.MainActivity { *; }
+
+# --------------------------------------------------
+# Strip debug and verbose logging from release builds
+# (MASVS-CODE-2: Prevent sensitive data leakage via logcat)
+# --------------------------------------------------
+-assumenosideeffects class android.util.Log {
+    public static int d(...);
+    public static int v(...);
+}
+
+# --------------------------------------------------
+# Preserve line numbers for crash reporting
+# --------------------------------------------------
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# --------------------------------------------------
+# Suppress common R8 warnings for libraries
+# --------------------------------------------------
+-dontwarn com.google.android.gms.**
+-dontwarn org.apache.**

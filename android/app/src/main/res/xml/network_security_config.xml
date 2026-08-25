@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  network_security_config.xml — NotiCatch
+  
+  Defense-in-depth: Explicitly deny cleartext traffic for all domains.
+  Complements the absence of INTERNET permission in AndroidManifest.
+  MASVS-NETWORK-1: Enforce TLS-only communication policy.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

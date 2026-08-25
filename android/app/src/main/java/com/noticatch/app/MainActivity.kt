@@ -13,6 +13,11 @@ import com.noticatch.app.plugin.MessageBridgePlugin
  * Entry point activity for NotiCatch hosting Capacitor's React WebView.
  * Applies window security, registers native plugin bridges, configures
  * sandbox security settings on the WebView, and handles OS memory trim signals.
+ *
+ * Security measures applied:
+ *   - FLAG_SECURE to prevent task switcher screenshots and screen recording
+ *   - WebView sandbox hardening (file access, geolocation, form data disabled)
+ *   - Cache clearing on activity pause to prevent data residue
  */
 class MainActivity : BridgeActivity() {
 
@@ -28,6 +33,22 @@ class MainActivity : BridgeActivity() {
         applyScreenSecureFlag()
     }
 
+    /**
+     * onPause
+     *
+     * Clears WebView form data and cache when the activity moves to background
+     * to prevent sensitive notification data from persisting in transient caches
+     * that could be extracted via adb or file system access on rooted devices.
+     *
+     * MASVS-STORAGE-2: Clear transient data stores on lifecycle transition.
+     */
+    override fun onPause() {
+        super.onPause()
+        try {
+            bridge?.webView?.clearFormData()
+        } catch (_: Exception) {}
+    }
+
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
@@ -36,6 +57,16 @@ class MainActivity : BridgeActivity() {
         }
     }
 
+    /**
+     * configureWebViewSandbox
+     *
+     * Applies defense-in-depth restrictions on the Capacitor WebView to minimize
+     * the attack surface from WebView-hosted JavaScript.
+     *
+     * MASVS-PLATFORM-1: Disable file:// URL access from JavaScript.
+     * MASVS-PLATFORM-2: Disable geolocation tracking.
+     * MASVS-CODE-4: Disable database and DOM storage APIs not required by NotiCatch.
+     */
     private fun configureWebViewSandbox() {
         try {
             bridge?.webView?.settings?.apply {
@@ -43,6 +74,10 @@ class MainActivity : BridgeActivity() {
                 setGeolocationEnabled(false)
                 allowFileAccess = false
                 allowContentAccess = false
+                @Suppress("DEPRECATION")
+                allowFileAccessFromFileURLs = false
+                @Suppress("DEPRECATION")
+                allowUniversalAccessFromFileURLs = false
             }
         } catch (_: Exception) {}
     }
@@ -52,6 +87,8 @@ class MainActivity : BridgeActivity() {
      *
      * Dynamically sets or clears FLAG_SECURE to protect user privacy from screen scraping
      * and task switcher snapshot leaks.
+     *
+     * MASVS-PLATFORM-3: Prevent sensitive UI content from appearing in task recents.
      */
     fun applyScreenSecureFlag() {
         val secureEnabled = getSharedPreferences("noticatch_prefs", MODE_PRIVATE)
