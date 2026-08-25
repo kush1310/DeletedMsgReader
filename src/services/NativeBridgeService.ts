@@ -10,6 +10,7 @@
  */
 
 import type { AppSettings, Conversation, Message, KernelSocketStats, DeviceSecurityStatus } from '@/types';
+import { validateAppSettingsSchema } from '@/services/SecurityService';
 
 type CapacitorWindow = {
   Capacitor?: {
@@ -337,13 +338,26 @@ export async function exportChatAsCSVNative(
    Settings Management
    ============================================================= */
 
+/**
+ * loadAppSettings
+ *
+ * Retrieves persisted application settings from localStorage with schema validation.
+ * MASVS-STORAGE-2: Validates parsed JSON against expected types and value ranges
+ * to prevent malicious localStorage injection from tampering with security config.
+ *
+ * @returns {Promise<AppSettings>} - Validated settings object or secure defaults.
+ */
 export async function loadAppSettings(): Promise<AppSettings> {
   const stored = localStorage.getItem('app_settings_noticatch');
   if (stored) {
     try {
-      return JSON.parse(stored) as AppSettings;
+      const parsed = JSON.parse(stored);
+      /* MASVS-STORAGE-2: Reject tampered settings that fail schema validation */
+      if (validateAppSettingsSchema(parsed)) {
+        return parsed as AppSettings;
+      }
     } catch {
-      /* fall through to defaults */
+      /* Corrupted JSON — fall through to defaults */
     }
   }
   return {

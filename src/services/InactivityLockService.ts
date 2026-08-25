@@ -18,6 +18,7 @@ type LockCallback = () => void;
 
 class InactivityLockManager {
   private lastActivityTimestamp: number = Date.now();
+  private lastMonotonicTimestamp: number = performance.now();
   private backgroundedTimestamp: number | null = null;
   private heartbeatTimerId: ReturnType<typeof setInterval> | null = null;
   private lockListeners: Set<LockCallback> = new Set();
@@ -37,10 +38,13 @@ class InactivityLockManager {
 
   /**
    * Records a user interaction event to refresh the active session lease.
+   * Uses both wall-clock and monotonic timestamps to detect clock manipulation.
    */
   public recordUserActivity(): void {
     const now = Date.now();
+    const monotonicNow = performance.now();
     this.lastActivityTimestamp = now;
+    this.lastMonotonicTimestamp = monotonicNow;
 
     // Throttle disk / web storage writes to at most once every 5000ms to eliminate storage thrashing
     if (now - this.lastStorageWriteTimestamp > 5000) {
@@ -98,33 +102,53 @@ class InactivityLockManager {
     }
   }
 
-  private isResuming = false;
+  private resumePromise: Promise<void> | null = null;
 
+  /**
+   * handleResume
+   *
+   * MASVS-AUTH-3: Uses Promise-based serialization instead of setTimeout
+   * to prevent rapid app-switch race conditions. Also validates monotonic
+   * time to detect system clock backward manipulation.
+   */
   private async handleResume(): Promise<void> {
-    if (this.isResuming) return;
-    this.isResuming = true;
+    if (this.resumePromise) return this.resumePromise;
 
-    try {
-      if (this.backgroundedTimestamp) {
-        const elapsedInBackground = Date.now() - this.backgroundedTimestamp;
-        this.backgroundedTimestamp = null;
+    this.resumePromise = (async () => {
+      try {
+        if (this.backgroundedTimestamp) {
+          const now = Date.now();
+          const monotonicNow = performance.now();
+          const elapsedInBackground = now - this.backgroundedTimestamp;
+          this.backgroundedTimestamp = null;
 
-        const sessionStart = sessionStorage.getItem('session_start') || localStorage.getItem('noticatch_session_start');
-        if (!sessionStart) return;
+          /* MASVS-AUTH-3: Detect clock manipulation by comparing wall-clock
+             elapsed time against monotonic elapsed time. If the wall-clock
+             reports significantly less time than monotonic, the system clock
+             was moved backward to extend the session. */
+          const monotonicElapsed = monotonicNow - this.lastMonotonicTimestamp;
+          const clockSkew = Math.abs(elapsedInBackground - monotonicElapsed);
+          const useElapsed = clockSkew > 30_000 ? monotonicElapsed : elapsedInBackground;
 
-        const settings = await loadAppSettings();
-        if (settings && settings.sessionTimeoutSeconds > 0) {
-          const thresholdMs = settings.sessionTimeoutSeconds * 1000;
-          if (elapsedInBackground >= thresholdMs) {
-            this.triggerLock();
-            return;
+          const sessionStart = sessionStorage.getItem('session_start') || localStorage.getItem('noticatch_session_start');
+          if (!sessionStart) return;
+
+          const settings = await loadAppSettings();
+          if (settings && settings.sessionTimeoutSeconds > 0) {
+            const thresholdMs = settings.sessionTimeoutSeconds * 1000;
+            if (useElapsed >= thresholdMs) {
+              this.triggerLock();
+              return;
+            }
           }
         }
+        this.recordUserActivity();
+      } finally {
+        this.resumePromise = null;
       }
-      this.recordUserActivity();
-    } finally {
-      setTimeout(() => { this.isResuming = false; }, 250);
-    }
+    })();
+
+    return this.resumePromise;
   }
 
   /**

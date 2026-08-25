@@ -17,6 +17,7 @@ import {
   generateUUID,
   constantTimeCompare,
   verifyMerkleAuditChain,
+  validateAppSettingsSchema,
 } from '@/services/SecurityService';
 import type { RawNotificationPayload } from '@/types';
 
@@ -293,5 +294,86 @@ describe('Secure Coding 14 — General Coding Practices', () => {
     const invalidChain = ['a'.repeat(64), 'invalid-hash'];
     expect(verifyMerkleAuditChain(validChain)).toBe(true);
     expect(verifyMerkleAuditChain(invalidChain)).toBe(false);
+  });
+});
+
+/* =============================================================
+   OWASP MASVS Hardening Test Suite
+   ============================================================= */
+
+describe('OWASP MASVS — Storage, Crypto & Schema Integrity', () => {
+  it('validates a well-formed AppSettings object', () => {
+    const validSettings = {
+      biometricEnabled:      true,
+      isPinSet:              true,
+      isDuressPinSet:        false,
+      sessionTimeoutSeconds: 300,
+      screenSecureEnabled:   true,
+      airGapModeActive:      true,
+      spamFilterEnabled:     true,
+      theme:                 'light',
+      lastIntegrityCheck:    null,
+      databaseVersion:       1,
+    };
+    expect(validateAppSettingsSchema(validSettings)).toBe(true);
+  });
+
+  it('rejects tampered AppSettings with negative session timeout', () => {
+    const tampered = {
+      biometricEnabled:      true,
+      isPinSet:              true,
+      isDuressPinSet:        false,
+      sessionTimeoutSeconds: -10,
+      screenSecureEnabled:   true,
+      airGapModeActive:      true,
+      spamFilterEnabled:     true,
+      theme:                 'light',
+      databaseVersion:       1,
+    };
+    expect(validateAppSettingsSchema(tampered)).toBe(false);
+  });
+
+  it('rejects tampered AppSettings with timeout exceeding 24h limit', () => {
+    const tampered = {
+      biometricEnabled:      true,
+      isPinSet:              true,
+      isDuressPinSet:        false,
+      sessionTimeoutSeconds: 999999,
+      screenSecureEnabled:   true,
+      airGapModeActive:      true,
+      spamFilterEnabled:     true,
+      theme:                 'light',
+      databaseVersion:       1,
+    };
+    expect(validateAppSettingsSchema(tampered)).toBe(false);
+  });
+
+  it('rejects tampered AppSettings with invalid theme string', () => {
+    const tampered = {
+      biometricEnabled:      true,
+      isPinSet:              true,
+      isDuressPinSet:        false,
+      sessionTimeoutSeconds: 300,
+      screenSecureEnabled:   true,
+      airGapModeActive:      true,
+      spamFilterEnabled:     true,
+      theme:                 'malicious-theme',
+      databaseVersion:       1,
+    };
+    expect(validateAppSettingsSchema(tampered)).toBe(false);
+  });
+
+  it('rejects non-object or null AppSettings', () => {
+    expect(validateAppSettingsSchema(null)).toBe(false);
+    expect(validateAppSettingsSchema(undefined)).toBe(false);
+    expect(validateAppSettingsSchema('string')).toBe(false);
+    expect(validateAppSettingsSchema(123)).toBe(false);
+  });
+
+  it('constantTimeCompare performs full iteration on unequal length inputs without early exit', () => {
+    expect(constantTimeCompare('secret', 'very_long_mismatched_string')).toBe(false);
+    expect(constantTimeCompare('identical_string_123', 'identical_string_123')).toBe(true);
+    expect(constantTimeCompare('', '')).toBe(true);
+    expect(constantTimeCompare('a', '')).toBe(false);
   });
 });

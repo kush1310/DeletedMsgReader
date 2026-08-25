@@ -286,17 +286,26 @@ export function setAcceptedPrivacyPolicy(accepted: boolean): void {
  * Compares two strings in constant time to protect cryptographic verification
  * against timing side-channel attacks.
  *
+ * MASVS-CRYPTO-1: The length comparison no longer uses early return.
+ * When lengths differ, the function XORs against the shorter string
+ * padded to the longer length, then forces mismatch=1 to preserve
+ * constant execution time regardless of input.
+ *
  * @param  {string} a - First string (e.g. computed signature).
  * @param  {string} b - Second string (e.g. stored signature).
  * @returns {boolean} - True if both strings are identical.
  */
 export function constantTimeCompare(a: string, b: string): boolean {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
 
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const maxLen = Math.max(a.length, b.length);
+  /* Force mismatch when lengths differ without revealing which is shorter */
+  let mismatch = a.length !== b.length ? 1 : 0;
+
+  for (let i = 0; i < maxLen; i++) {
+    const charA = i < a.length ? a.charCodeAt(i) : 0;
+    const charB = i < b.length ? b.charCodeAt(i) : 0;
+    mismatch |= charA ^ charB;
   }
   return mismatch === 0;
 }
@@ -318,4 +327,44 @@ export function verifyMerkleAuditChain(signatures: readonly string[]): boolean {
   return true;
 }
 
+/* =============================================================
+   App Settings Schema Validation
+   ============================================================= */
 
+const VALID_THEMES = new Set(['light', 'dark', 'system']);
+const MAX_SESSION_TIMEOUT = 86400; /* 24 hours maximum */
+const MIN_SESSION_TIMEOUT = 0;     /* 0 = "never" timeout */
+
+/**
+ * validateAppSettingsSchema
+ *
+ * Validates a parsed AppSettings object against expected types and value ranges
+ * to prevent malicious localStorage injection from tampering with security configuration.
+ *
+ * MASVS-STORAGE-2: Settings stored in web localStorage are trivially modifiable.
+ * This function ensures that critical fields like biometricEnabled, sessionTimeoutSeconds,
+ * and screenSecureEnabled conform to expected types and value boundaries.
+ *
+ * @param  {unknown} raw - Parsed JSON object from localStorage.
+ * @returns {boolean}    - True if all fields pass schema validation.
+ */
+export function validateAppSettingsSchema(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const settings = raw as Record<string, unknown>;
+
+  if (typeof settings.biometricEnabled !== 'boolean') return false;
+  if (typeof settings.isPinSet !== 'boolean') return false;
+  if (typeof settings.isDuressPinSet !== 'boolean') return false;
+  if (typeof settings.screenSecureEnabled !== 'boolean') return false;
+  if (typeof settings.airGapModeActive !== 'boolean') return false;
+  if (typeof settings.spamFilterEnabled !== 'boolean') return false;
+
+  if (typeof settings.sessionTimeoutSeconds !== 'number') return false;
+  if (settings.sessionTimeoutSeconds < MIN_SESSION_TIMEOUT || settings.sessionTimeoutSeconds > MAX_SESSION_TIMEOUT) return false;
+  if (!Number.isInteger(settings.sessionTimeoutSeconds)) return false;
+
+  if (typeof settings.theme !== 'string' || !VALID_THEMES.has(settings.theme)) return false;
+  if (typeof settings.databaseVersion !== 'number') return false;
+
+  return true;
+}
