@@ -37,8 +37,6 @@ import { HapticService } from '@/services/HapticService';
 export { ThreeSecurityCanvas } from './ThreeSecurityCanvas';
 export { ConfirmationModal } from './ConfirmationModal';
 export { LegalDocumentModal } from './LegalDocumentModal';
-export { ColorModeModal, type ColorMode } from './ColorModeModal';
-export { FontStyleModal, type FontStyle } from './FontStyleModal';
 
 /* =============================================================================
    Ripple Utility — programmatic ripple on pointer events
