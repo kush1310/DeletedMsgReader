@@ -166,6 +166,19 @@ export function validateSearchQuery(query: string): boolean {
  * @returns                - Hex-encoded SHA-256 digest string (64 characters).
  * @edge-cases             - Null messageText is normalized to empty string before hashing.
  */
+const HEX_LOOKUP: string[] = [];
+for (let i = 0; i < 256; i++) {
+  HEX_LOOKUP.push(i.toString(16).padStart(2, '0'));
+}
+
+export function bytesToHex(bytes: Uint8Array): string {
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    hex += HEX_LOOKUP[bytes[i]];
+  }
+  return hex;
+}
+
 export async function computeMessageHash(
   conversationId: string,
   senderName: string,
@@ -175,8 +188,7 @@ export async function computeMessageHash(
   const inputString = `${conversationId}|${senderName}|${timestamp}|${messageText ?? ''}`;
   const encodedBytes = new TextEncoder().encode(inputString);
   const hashBuffer = await crypto.subtle.digest('SHA-256', encodedBytes);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return bytesToHex(new Uint8Array(hashBuffer));
 }
 
 /**

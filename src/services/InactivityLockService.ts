@@ -33,15 +33,23 @@ class InactivityLockManager {
     };
   }
 
+  private lastStorageWriteTimestamp: number = 0;
+
   /**
    * Records a user interaction event to refresh the active session lease.
    */
   public recordUserActivity(): void {
-    this.lastActivityTimestamp = Date.now();
-    try {
-      sessionStorage.setItem('session_last_active', String(this.lastActivityTimestamp));
-      localStorage.setItem('noticatch_last_active', String(this.lastActivityTimestamp));
-    } catch {}
+    const now = Date.now();
+    this.lastActivityTimestamp = now;
+
+    // Throttle disk / web storage writes to at most once every 5000ms to eliminate storage thrashing
+    if (now - this.lastStorageWriteTimestamp > 5000) {
+      this.lastStorageWriteTimestamp = now;
+      try {
+        sessionStorage.setItem('session_last_active', String(now));
+        localStorage.setItem('noticatch_last_active', String(now));
+      } catch {}
+    }
   }
 
   /**

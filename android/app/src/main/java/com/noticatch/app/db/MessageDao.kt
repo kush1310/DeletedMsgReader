@@ -31,6 +31,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isPurged = 0 ORDER BY timestamp ASC LIMIT :limit OFFSET :offset")
     suspend fun getPaginatedByConversation(conversationId: String, limit: Int, offset: Int): List<MessageEntity>
 
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND timestamp < :cursorTimestamp AND isPurged = 0 ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getKeysetPaginated(conversationId: String, cursorTimestamp: Long, limit: Int): List<MessageEntity>
+
     @Query("SELECT * FROM messages WHERE isDeletedBySender = 1 AND isPurged = 0 ORDER BY timestamp DESC")
     suspend fun getAllDeleted(): List<MessageEntity>
 

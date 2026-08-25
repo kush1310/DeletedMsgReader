@@ -27,57 +27,65 @@ const TIME_REGEX  = /\b(?:1[0-2]|0?[1-9])(?::[0-5][0-9])?\s*(?:am|pm|AM|PM)\b|\b
  * @returns {ExtractedEntity[]} - Array of extracted entity objects.
  */
 export function extractEntities(text: string | null | undefined): ExtractedEntity[] {
-  if (!text || text.trim().length === 0) return [];
+  if (!text || text.length < 3) return [];
 
   const entities: ExtractedEntity[] = [];
 
-  /* 1. URLs */
-  const urlMatches = text.match(URL_REGEX);
-  if (urlMatches) {
-    for (const match of urlMatches) {
-      entities.push({
-        type:  'URL',
-        value: match,
-        label: 'Link',
-      });
-    }
-  }
-
-  /* 2. Phone Numbers */
-  const phoneMatches = text.match(PHONE_REGEX);
-  if (phoneMatches) {
-    for (const match of phoneMatches) {
-      if (match.length >= 10) {
+  /* 1. URLs (only if "http" or "www" present) */
+  if (text.includes('http') || text.includes('www.')) {
+    const urlMatches = text.match(URL_REGEX);
+    if (urlMatches) {
+      for (const match of urlMatches) {
         entities.push({
-          type:  'PHONE_NUMBER',
+          type:  'URL',
           value: match,
-          label: 'Phone',
+          label: 'Link',
         });
       }
     }
   }
 
-  /* 3. Email Addresses */
-  const emailMatches = text.match(EMAIL_REGEX);
-  if (emailMatches) {
-    for (const match of emailMatches) {
-      entities.push({
-        type:  'EMAIL',
-        value: match,
-        label: 'Email',
-      });
+  /* 2. Phone Numbers (only if digits present) */
+  if (/\d{3}/.test(text)) {
+    const phoneMatches = text.match(PHONE_REGEX);
+    if (phoneMatches) {
+      for (const match of phoneMatches) {
+        if (match.length >= 10) {
+          entities.push({
+            type:  'PHONE_NUMBER',
+            value: match,
+            label: 'Phone',
+          });
+        }
+      }
     }
   }
 
-  /* 4. Meeting Times */
-  const timeMatches = text.match(TIME_REGEX);
-  if (timeMatches) {
-    for (const match of timeMatches) {
-      entities.push({
-        type:  'MEETING_TIME',
-        value: match,
-        label: 'Time',
-      });
+  /* 3. Email Addresses (only if "@" present) */
+  if (text.includes('@')) {
+    const emailMatches = text.match(EMAIL_REGEX);
+    if (emailMatches) {
+      for (const match of emailMatches) {
+        entities.push({
+          type:  'EMAIL',
+          value: match,
+          label: 'Email',
+        });
+      }
+    }
+  }
+
+  /* 4. Meeting Times (only if ":" or am/pm present) */
+  if (text.includes(':') || /am|pm/i.test(text)) {
+    const timeMatches = text.match(TIME_REGEX);
+    if (timeMatches) {
+      for (const match of timeMatches) {
+        entities.push({
+          type:  'MEETING_TIME',
+          value: match,
+          label: 'Time',
+        });
+      }
     }
   }
 

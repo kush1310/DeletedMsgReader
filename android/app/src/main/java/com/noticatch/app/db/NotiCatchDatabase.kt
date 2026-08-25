@@ -50,6 +50,8 @@ abstract class NotiCatchDatabase : RoomDatabase() {
                         super.onOpen(db)
                         db.execSQL("PRAGMA synchronous = NORMAL;")
                         db.execSQL("PRAGMA temp_store = MEMORY;")
+                        db.execSQL("PRAGMA mmap_size = 268435456;") // 256MB memory-mapped I/O
+                        db.execSQL("PRAGMA cache_size = -4000;")     // 4MB page cache
                     }
                 })
                 .build()

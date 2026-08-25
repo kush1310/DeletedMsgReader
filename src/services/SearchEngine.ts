@@ -93,43 +93,52 @@ export function damerauLevenshteinDistance(
   if (sLen === 0) return tLen;
   if (tLen === 0) return sLen;
 
-  let prevRow = Array.from({ length: tLen + 1 }, (_, i) => i);
-  let currRow = new Array<number>(tLen + 1).fill(0);
-  let transRow = new Array<number>(tLen + 1).fill(0);
+  let prevRow = new Int32Array(tLen + 1);
+  let currRow = new Int32Array(tLen + 1);
+  let transRow = new Int32Array(tLen + 1);
+
+  for (let j = 0; j <= tLen; j++) {
+    prevRow[j] = j;
+  }
 
   for (let i = 1; i <= sLen; i++) {
     currRow[0] = i;
     let minInRow = currRow[0];
 
     for (let j = 1; j <= tLen; j++) {
-      const cost = source[i - 1] === target[j - 1] ? 0 : 1;
+      const cost = source.charCodeAt(i - 1) === target.charCodeAt(j - 1) ? 0 : 1;
 
-      currRow[j] = Math.min(
-        prevRow[j] + 1,       // Deletion
-        currRow[j - 1] + 1,   // Insertion
-        prevRow[j - 1] + cost // Substitution
-      );
+      let val = prevRow[j] + 1; // Deletion
+      const ins = currRow[j - 1] + 1; // Insertion
+      if (ins < val) val = ins;
+      const sub = prevRow[j - 1] + cost; // Substitution
+      if (sub < val) val = sub;
 
       // Transposition
       if (
         i > 1 &&
         j > 1 &&
-        source[i - 1] === target[j - 2] &&
-        source[i - 2] === target[j - 1]
+        source.charCodeAt(i - 1) === target.charCodeAt(j - 2) &&
+        source.charCodeAt(i - 2) === target.charCodeAt(j - 1)
       ) {
-        currRow[j] = Math.min(currRow[j], transRow[j - 2] + cost);
+        const trans = transRow[j - 2] + cost;
+        if (trans < val) val = trans;
       }
 
-      minInRow = Math.min(minInRow, currRow[j]);
+      currRow[j] = val;
+      if (val < minInRow) minInRow = val;
     }
 
     if (minInRow > maxThreshold) return maxThreshold + 1;
 
-    transRow = [...prevRow];
-    prevRow  = [...currRow];
+    // Zero-allocation buffer rotation
+    const temp = transRow;
+    transRow = prevRow;
+    prevRow = currRow;
+    currRow = temp;
   }
 
-  return currRow[tLen];
+  return prevRow[tLen];
 }
 
 export const computeDamerauLevenshteinDistance = damerauLevenshteinDistance;

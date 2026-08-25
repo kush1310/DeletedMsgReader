@@ -13,6 +13,8 @@ import com.noticatch.app.db.NotiCatchDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,9 +42,36 @@ class NotificationListener : NotificationListenerService() {
 
         const val PREF_SPAM_FILTER = "spam_filter_enabled"
         const val PREFS_NAME       = "noticatch_prefs"
+
+        /* Pre-compiled whitespace regex to avoid repeated compilation during burst ingestion */
+        private val WHITESPACE_REGEX = Regex("\\s+")
+
+        /* Pre-allocated hex lookup table for zero-allocation fast SHA-256 hex encoding */
+        private val HEX_CHARS = "0123456789abcdef".toCharArray()
+
+        /* ThreadLocal MessageDigest recycling to eliminate repeated JNI provider lookups */
+        private val SHA256_DIGEST = ThreadLocal.withInitial {
+            try {
+                MessageDigest.getInstance("SHA-256")
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        /* High-performance in-memory event flow for zero-IPC dispatch */
+        private val _messageEvents = MutableSharedFlow<MessageBroadcastEvent>(extraBufferCapacity = 64)
+        val messageEvents = _messageEvents.asSharedFlow()
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    data class MessageBroadcastEvent(
+        val senderName: String,
+        val messageText: String?,
+        val conversationId: String,
+        val isDeleted: Boolean,
+        val timestamp: Long,
+    )
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val ingestionMutex = Mutex()
     private lateinit var database: NotiCatchDatabase
 
@@ -73,7 +102,7 @@ class NotificationListener : NotificationListenerService() {
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
 
-        /* Execute all parsed messages with Mutex synchronization to guarantee race-free serialization */
+        /* Execute all parsed messages with Mutex synchronization on Dispatchers.Default to prevent thread starvation */
         serviceScope.launch {
             ingestionMutex.withLock {
                 for (parsed in parsedList) {
@@ -97,7 +126,7 @@ class NotificationListener : NotificationListenerService() {
 
     private suspend fun persistAndBroadcast(parsed: WhatsAppNotificationParser.ParsedMessage) {
         val cleanTitle = WhatsAppNotificationParser.cleanChatTitle(parsed.chatTitle)
-        val normalizedTitle = cleanTitle.lowercase().replace(Regex("\\s+"), " ")
+        val normalizedTitle = cleanTitle.lowercase().replace(WHITESPACE_REGEX, " ")
         val conversationKey = "${parsed.packageName}_$normalizedTitle"
 
         /* 1. Resolve or create parent conversation */
@@ -143,7 +172,7 @@ class NotificationListener : NotificationListenerService() {
                 broadcastNewMessage(existing.senderName, existing.messageText, conversation.id, true, parsed.timestamp)
                 return
             } else {
-                /* If no prior message was captured, insert a deleted placeholder record so the deletion event is never lost */
+                /* If no prior message was captured, insert a deleted placeholder record */
                 val rawSignature = "${conversation.id}|${parsed.senderName}|${parsed.timestamp}|deleted"
                 val sha256Signature = computeSha256(rawSignature)
 
@@ -244,7 +273,7 @@ class NotificationListener : NotificationListenerService() {
             )
             database.messageDao().insert(message)
 
-            /* Update parent conversation metadata — unreadCount only increments on true new messages */
+            /* Update parent conversation metadata */
             database.conversationDao().update(
                 conversation.copy(
                     chatTitle            = cleanTitle,
@@ -258,11 +287,23 @@ class NotificationListener : NotificationListenerService() {
         }
     }
 
+    /**
+     * computeSha256
+     *
+     * High-speed zero-allocation SHA-256 calculation using ThreadLocal recycling and char lookup.
+     */
     private fun computeSha256(input: String): String {
+        val digest = SHA256_DIGEST.get() ?: return ""
         return try {
-            val md = MessageDigest.getInstance("SHA-256")
-            val digest = md.digest(input.toByteArray(Charsets.UTF_8))
-            digest.joinToString("") { "%02x".format(it) }
+            digest.reset()
+            val hashBytes = digest.digest(input.toByteArray(Charsets.UTF_8))
+            val result = CharArray(hashBytes.size * 2)
+            for (i in hashBytes.indices) {
+                val v = hashBytes[i].toInt() and 0xFF
+                result[i * 2] = HEX_CHARS[v ushr 4]
+                result[i * 2 + 1] = HEX_CHARS[v and 0x0F]
+            }
+            String(result)
         } catch (e: Exception) {
             ""
         }
@@ -275,6 +316,15 @@ class NotificationListener : NotificationListenerService() {
         isDeleted:      Boolean,
         timestamp:      Long,
     ) {
+        val event = MessageBroadcastEvent(
+            senderName     = senderName,
+            messageText    = messageText,
+            conversationId = conversationId,
+            isDeleted      = isDeleted,
+            timestamp      = timestamp,
+        )
+        _messageEvents.tryEmit(event)
+
         val intent = Intent(ACTION_NEW_MESSAGE).apply {
             putExtra(EXTRA_SENDER,          senderName)
             putExtra(EXTRA_MESSAGE,         messageText ?: "")

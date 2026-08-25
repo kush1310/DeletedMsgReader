@@ -277,19 +277,52 @@ object WhatsAppNotificationParser {
         return messagesList
     }
 
+    private val SUMMARY_REGEX_1 = Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE)
+    private val SUMMARY_REGEX_2 = Regex("^\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?$", RegexOption.IGNORE_CASE)
+    private val SUMMARY_REGEX_3 = Regex("^[\\w\\s°.~]+:\\s+\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE)
+
     private fun isSummaryCount(text: String): Boolean {
-        return text.matches(Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE)) ||
-               text.matches(Regex("^\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?$", RegexOption.IGNORE_CASE)) ||
-               text.matches(Regex("^[\\w\\s°.~]+:\\s+\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE))
+        if (!text.contains("message", ignoreCase = true)) return false
+        return text.matches(SUMMARY_REGEX_1) ||
+               text.matches(SUMMARY_REGEX_2) ||
+               text.matches(SUMMARY_REGEX_3)
     }
 
     fun isDeletion(text: String, title: String): Boolean {
+        /* Short-circuit check for common deletion roots before regex array evaluation */
+        val combined = "$text $title".lowercase()
+        if (!combined.contains("delet") &&
+            !combined.contains("apag") &&
+            !combined.contains("elimin") &&
+            !combined.contains("supprim") &&
+            !combined.contains("gelöscht") &&
+            !combined.contains("verwijderd") &&
+            !combined.contains("usunięta") &&
+            !combined.contains("silindi") &&
+            !combined.contains("dihapus") &&
+            !combined.contains("xóa") &&
+            !combined.contains("ลบ") &&
+            !combined.contains("हटा") &&
+            !combined.contains("કાઢી") &&
+            !combined.contains("நீக்க") &&
+            !combined.contains("తొలగ") &&
+            !combined.contains("అళ") &&
+            !combined.contains("ഇല്ലാ") &&
+            !combined.contains("حذف") &&
+            !combined.contains("删除") &&
+            !combined.contains("削除") &&
+            !combined.contains("삭제")
+        ) {
+            return false
+        }
+
         return DELETION_PATTERNS.any { pattern ->
             pattern.containsMatchIn(text) || pattern.containsMatchIn(title)
         }
     }
 
     fun isEdit(text: String): Boolean {
+        if (!text.endsWith(")") && !text.contains("edited", ignoreCase = true) && !text.contains("संपादित")) return false
         return EDIT_REGEX.containsMatchIn(text)
     }
 
