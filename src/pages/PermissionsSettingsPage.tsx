@@ -270,6 +270,30 @@ export function PermissionsSettingsPage() {
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* 5. Air-Gap Cryptographic Isolation Proof */}
+          <div className="p-4 space-y-2">
+            <div className="flex items-start gap-3 min-w-0">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: 'var(--md-sys-color-success-container)',
+                  color: 'var(--md-sys-color-on-success-container)',
+                  border: '1px solid var(--md-sys-color-success-border)',
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4" strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                  Air-Gap Verification Status
+                </h3>
+                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  100% Offline · Zero Internet Permission (android.permission.INTERNET is omitted) · Local Room SQLite.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>

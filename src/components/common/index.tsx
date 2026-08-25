@@ -197,7 +197,7 @@ interface DeletedBadgeProps {
  *
  * @param compact - If true shows only the warning icon (no text label).
  */
-export function DeletedBadge({ compact = false }: DeletedBadgeProps) {
+function DeletedBadgeInternal({ compact = false }: DeletedBadgeProps) {
   return (
     <span className="badge-deleted">
       <AlertTriangle className="w-3 h-3" aria-hidden="true" style={{ color: 'var(--md-color-deleted-icon)' }} strokeWidth={2.2} />
@@ -206,13 +206,9 @@ export function DeletedBadge({ compact = false }: DeletedBadgeProps) {
   );
 }
 
-/**
- * RecoveredBadge
- *
- * Emerald pill badge indicating successfully recovered content.
- * Uses success-container semantic tokens.
- */
-export function RecoveredBadge() {
+export const DeletedBadge = React.memo(DeletedBadgeInternal);
+
+function RecoveredBadgeInternal() {
   return (
     <span className="badge-recovered">
       <Shield className="w-3 h-3" aria-hidden="true" style={{ color: 'var(--md-color-protected-icon)' }} strokeWidth={2.2} />
@@ -220,6 +216,8 @@ export function RecoveredBadge() {
     </span>
   );
 }
+
+export const RecoveredBadge = React.memo(RecoveredBadgeInternal);
 
 /* =============================================================================
    Search Input
@@ -352,7 +350,7 @@ const AVATAR_TONES: Array<{ bg: string; text: string }> = [
  * @param hasRecentDeletion  - If true adds an amber ring to signal recent activity.
  * @param colorIndex         - Override tone index. If omitted, derived from name.
  */
-export function Avatar({ name, size = 'md', isGroup = false, hasRecentDeletion = false, colorIndex }: AvatarProps) {
+function AvatarInternal({ name, size = 'md', isGroup = false, hasRecentDeletion = false, colorIndex }: AvatarProps) {
   const sizeMap: Record<string, string> = {
     xs: 'w-7 h-7 text-2xs',
     sm: 'w-9 h-9 text-xs',
@@ -386,6 +384,8 @@ export function Avatar({ name, size = 'md', isGroup = false, hasRecentDeletion =
     </div>
   );
 }
+
+export const Avatar = React.memo(AvatarInternal);
 
 /* =============================================================================
    Section Divider
