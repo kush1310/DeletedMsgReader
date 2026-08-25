@@ -10,7 +10,7 @@
  * - Material 3 search and filter pills.
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageCircle,
@@ -66,6 +66,7 @@ export function ChatsPage() {
   const isNative  = isNativeAndroid();
 
   const [searchQuery,       setSearchQuery]       = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [conversations,     setConversations]     = useState<Conversation[]>([]);
   const [isLoading,         setIsLoading]         = useState(true);
   const [isRefreshing,      setIsRefreshing]      = useState(false);
@@ -104,25 +105,31 @@ export function ChatsPage() {
    *
    * Fetches all captured conversations from the on-device Room SQLite DB.
    */
-  const loadData = useCallback(async (): Promise<void> => {
-    const data = await getConversations();
-    setConversations(data);
-    setLastSynced(new Date());
-    setIsLoading(false);
+  const loadData = useCallback(async (quiet = false): Promise<void> => {
+    if (!quiet) setIsLoading(true);
+    try {
+      const data = await getConversations();
+      setConversations(data);
+      setLastSynced(new Date());
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
   }, []);
 
-  async function handleRefresh(): Promise<void> {
-    HapticService.tap();
+  const handleRefresh = useCallback(async (): Promise<void> => {
+    HapticService.selection();
     setIsRefreshing(true);
-    await Promise.all([loadData(), verifyPermissionState()]);
-    setIsRefreshing(false);
-    HapticService.success();
-  }
+    await verifyPermissionState();
+    await loadData(true);
+  }, [verifyPermissionState, loadData]);
 
   useEffect(() => {
-    loadData();
     verifyPermissionState();
-  }, [loadData, verifyPermissionState]);
+    loadData();
+  }, [verifyPermissionState, loadData]);
 
   /* Re-verify permission and reload conversations when the app regains focus */
   useEffect(() => {
@@ -140,53 +147,53 @@ export function ChatsPage() {
 
   /* Polling interval — refreshes every 3.5 seconds for near-real-time updates */
   useEffect(() => {
-    const timer = setInterval(() => { loadData(); }, 3500);
+    const timer = setInterval(() => { loadData(true); }, 3500);
     return () => clearInterval(timer);
   }, [loadData]);
 
   /* Listen for new-message events fired by the native Kotlin bridge */
   useEffect(() => {
-    function handleNewMessage(): void { loadData(); }
+    function handleNewMessage(): void { loadData(true); }
     window.addEventListener('noticatch:new-message', handleNewMessage);
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
 
-  async function handleMarkAsRead(chat: Conversation) {
+  const handleMarkAsRead = useCallback(async (chat: Conversation) => {
     HapticService.selection();
     await markConversationAsReadNative(chat.id);
     setSelectedChat(null);
-    await loadData();
+    await loadData(true);
     setActionFeedback('Marked as read');
     setTimeout(() => setActionFeedback(null), 2000);
-  }
+  }, [loadData]);
 
-  async function handleExportPDF(chat: Conversation) {
+  const handleExportPDF = useCallback(async (chat: Conversation) => {
     HapticService.impact();
     setSelectedChat(null);
     setActionFeedback('Generating PDF...');
     await exportChatAsPDFNative(chat.id);
     setActionFeedback('PDF exported successfully');
     setTimeout(() => setActionFeedback(null), 2500);
-  }
+  }, []);
 
-  async function handleExportCSV(chat: Conversation) {
+  const handleExportCSV = useCallback(async (chat: Conversation) => {
     HapticService.impact();
     setSelectedChat(null);
     setActionFeedback('Generating CSV...');
     await exportChatAsCSVNative(chat.id);
     setActionFeedback('CSV exported successfully');
     setTimeout(() => setActionFeedback(null), 2500);
-  }
+  }, []);
 
-  async function handleDeleteChat(chat: Conversation) {
+  const handleDeleteChat = useCallback(async (chat: Conversation) => {
     HapticService.deleteAction();
     await deleteConversationNative(chat.id);
     setShowDeleteConfirm(false);
     setSelectedChat(null);
-    await loadData();
+    await loadData(true);
     setActionFeedback('Conversation deleted');
     setTimeout(() => setActionFeedback(null), 2000);
-  }
+  }, [loadData]);
 
   const filteredResults = useMemo(() => {
     let list = conversations;
@@ -199,16 +206,16 @@ export function ChatsPage() {
       list = list.filter(chat => !chat.isGroup);
     }
 
-    if (!searchQuery.trim()) {
+    if (!deferredSearchQuery.trim()) {
       return list.map(item => ({ item, score: 1, matchedPositions: [] }));
     }
 
     return searchAndRank(
       list,
       (chat: Conversation) => `${chat.chatTitle} ${chat.lastMessageSnippet ?? ''}`,
-      searchQuery
+      deferredSearchQuery
     );
-  }, [conversations, activeFilter, searchQuery]);
+  }, [conversations, activeFilter, deferredSearchQuery]);
 
   function handleConversationSelect(conversationId: string, chatTitle?: string): void {
     if (searchQuery.trim()) {

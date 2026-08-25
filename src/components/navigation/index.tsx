@@ -54,7 +54,7 @@ interface TopAppBarProps {
  * @param dark      - Reserved — dark mode is now controlled by html.dark class.
  * @param scrolled  - If true applies MD3 scroll elevation behavior.
  */
-export function TopAppBar({ title, subtitle, leading, trailing, scrolled = false }: TopAppBarProps) {
+function TopAppBarInternal({ title, subtitle, leading, trailing, scrolled = false }: TopAppBarProps) {
   return (
     <header
       className={`top-bar pt-safe transition-shadow duration-220 ${scrolled ? 'top-bar-scrolled' : ''}`}
@@ -85,6 +85,8 @@ export function TopAppBar({ title, subtitle, leading, trailing, scrolled = false
     </header>
   );
 }
+
+export const TopAppBar = React.memo(TopAppBarInternal);
 
 /* =============================================================================
    App Brand Header (Login / Onboarding screens only)
@@ -195,7 +197,7 @@ const NAV_ITEMS: NavItem[] = [
  * @param onTabChange        - Callback when the user taps a tab.
  * @param deletedBadgeCount  - Optional unread count badge on the Deleted tab.
  */
-export function BottomNavbar({ activeTab, onTabChange, deletedBadgeCount = 0 }: BottomNavbarProps) {
+function BottomNavbarInternal({ activeTab, onTabChange, deletedBadgeCount = 0 }: BottomNavbarProps) {
   const handleTabPress = useCallback((tab: NavTab) => {
     HapticService.navigate();
     onTabChange(tab);
@@ -274,6 +276,8 @@ export function BottomNavbar({ activeTab, onTabChange, deletedBadgeCount = 0 }: 
   );
 }
 
+export const BottomNavbar = React.memo(BottomNavbarInternal);
+
 /* =============================================================================
    Icon Button — 48dp accessible touch target
    ============================================================================= */
@@ -288,28 +292,7 @@ interface IconButtonProps {
   readonly disabled?: boolean;
 }
 
-/**
- * IconButton
- *
- * Accessible 48dp touch target icon button. Used in TopAppBar trailing/leading
- * slots and throughout the application for secondary actions.
- *
- * Variants:
- *   ghost  — transparent background, on-surface-variant icon, hover tonal surface.
- *   tonal  — surface-container filled with on-surface-variant icon.
- *   filled — primary filled with on-primary icon (for primary FAB-style contexts).
- *
- * Haptic: fires HapticService.tap() on every press.
- *
- * @param icon     - Lucide React icon element.
- * @param onClick  - Press handler.
- * @param label    - Accessibility aria-label string.
- * @param id       - Unique element ID for automated testing.
- * @param variant  - 'ghost' (default), 'tonal', 'filled'.
- * @param active   - If true applies active/selected styling.
- * @param disabled - If true disables the button.
- */
-export function IconButton({ icon, onClick, label, id, variant = 'ghost', active = false, disabled = false }: IconButtonProps) {
+function IconButtonInternal({ icon, onClick, label, id, variant = 'ghost', active = false, disabled = false }: IconButtonProps) {
   const handlePress = useCallback(() => {
     if (disabled) return;
     HapticService.tap();
@@ -356,3 +339,5 @@ export function IconButton({ icon, onClick, label, id, variant = 'ghost', active
     </button>
   );
 }
+
+export const IconButton = React.memo(IconButtonInternal);

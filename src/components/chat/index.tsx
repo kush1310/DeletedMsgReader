@@ -59,7 +59,7 @@ interface ConversationRowProps {
  * @param onClick      - Tap handler navigating to the chat detail.
  * @param onLongPress  - Long-press handler opening the action sheet.
  */
-export function ConversationRow({ conversation, onClick, onLongPress }: ConversationRowProps) {
+function ConversationRowInternal({ conversation, onClick, onLongPress }: ConversationRowProps) {
   const formattedTime = formatTimestamp(conversation.lastMessageTimestamp);
   const hasDeleted    = conversation.deletedCount > 0;
   const buttonRef     = useRef<HTMLButtonElement>(null);
@@ -225,6 +225,17 @@ export function ConversationRow({ conversation, onClick, onLongPress }: Conversa
     </button>
   );
 }
+
+export const ConversationRow = React.memo(
+  ConversationRowInternal,
+  (prev, next) =>
+    prev.conversation.id === next.conversation.id &&
+    prev.conversation.lastMessageTimestamp === next.conversation.lastMessageTimestamp &&
+    prev.conversation.unreadCount === next.conversation.unreadCount &&
+    prev.conversation.deletedCount === next.conversation.deletedCount &&
+    prev.conversation.chatTitle === next.conversation.chatTitle &&
+    prev.conversation.lastMessageSnippet === next.conversation.lastMessageSnippet
+);
 
 /* =============================================================================
    Entity Chips
@@ -490,7 +501,7 @@ interface MessageBubbleProps {
  * @param message - Message data object from Room/SQLite.
  * @param isGroup - If true, renders the sender name header for group threads.
  */
-export function MessageBubble({ message, isGroup = false }: MessageBubbleProps) {
+function MessageBubbleInternal({ message, isGroup = false }: MessageBubbleProps) {
   const absoluteTime = new Date(message.timestamp).toLocaleTimeString([], {
     hour:   '2-digit',
     minute: '2-digit',
@@ -668,6 +679,17 @@ export function MessageBubble({ message, isGroup = false }: MessageBubbleProps) 
     </div>
   );
 }
+
+export const MessageBubble = React.memo(
+  MessageBubbleInternal,
+  (prev, next) =>
+    prev.message.id === next.message.id &&
+    prev.message.isDeletedBySender === next.message.isDeletedBySender &&
+    prev.message.isEdited === next.message.isEdited &&
+    prev.message.messageText === next.message.messageText &&
+    prev.message.originalText === next.message.originalText &&
+    prev.isGroup === next.isGroup
+);
 
 /* =============================================================================
    Deleted Message Card (Deleted Vault Page)

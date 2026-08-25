@@ -6,26 +6,28 @@
  * and background-to-foreground lifecycle evaluation.
  */
 
-import { type ReactNode, useCallback, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { BottomNavbar } from '@/components/navigation';
-import { LandingPage           } from '@/pages/LandingPage';
-import { LoginPage             } from '@/pages/LoginPage';
-import { PrivacyOnboardingPage } from '@/pages/PrivacyOnboardingPage';
-import { SetupPage             } from '@/pages/SetupPage';
-import { ChatsPage             } from '@/pages/ChatsPage';
-import { ChatDetailPage        } from '@/pages/ChatDetailPage';
-import { DeletedOnlyPage       } from '@/pages/DeletedOnlyPage';
-import { SettingsPage          } from '@/pages/SettingsPage';
-import { ProfilePage           } from '@/pages/ProfilePage';
-import { NotificationsSettingsPage } from '@/pages/NotificationsSettingsPage';
-import { PermissionsSettingsPage   } from '@/pages/PermissionsSettingsPage';
-import { PrivacySettingsPage       } from '@/pages/PrivacySettingsPage';
-import { ContactUsPage         } from '@/pages/ContactUsPage';
-import { FeedbackPage          } from '@/pages/FeedbackPage';
+import { LoginPage } from '@/pages/LoginPage';
+import { ChatsPage } from '@/pages/ChatsPage';
+import { ChatDetailPage } from '@/pages/ChatDetailPage';
+import { DeletedOnlyPage } from '@/pages/DeletedOnlyPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { hasAcceptedPrivacyPolicy } from '@/services/SecurityService';
 import { inactivityLockService } from '@/services/InactivityLockService';
 import type { NavTab } from '@/types';
+
+/* Lazy loaded secondary routes for optimal initial bundle execution */
+const LandingPage = lazy(() => import('@/pages/LandingPage').then(m => ({ default: m.LandingPage })));
+const PrivacyOnboardingPage = lazy(() => import('@/pages/PrivacyOnboardingPage').then(m => ({ default: m.PrivacyOnboardingPage })));
+const SetupPage = lazy(() => import('@/pages/SetupPage').then(m => ({ default: m.SetupPage })));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
+const NotificationsSettingsPage = lazy(() => import('@/pages/NotificationsSettingsPage').then(m => ({ default: m.NotificationsSettingsPage })));
+const PermissionsSettingsPage = lazy(() => import('@/pages/PermissionsSettingsPage').then(m => ({ default: m.PermissionsSettingsPage })));
+const PrivacySettingsPage = lazy(() => import('@/pages/PrivacySettingsPage').then(m => ({ default: m.PrivacySettingsPage })));
+const ContactUsPage = lazy(() => import('@/pages/ContactUsPage').then(m => ({ default: m.ContactUsPage })));
+const FeedbackPage = lazy(() => import('@/pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })));
 
 /** Routes that show the bottom navigation bar */
 const BOTTOM_NAV_ROUTES = new Set(['/chats', '/deleted', '/settings']);
@@ -136,30 +138,32 @@ function AppShell({ children }: { readonly children: ReactNode }) {
 /**
  * App
  *
- * Root component rendering the full React Router v6 route tree.
+ * Root component rendering the full React Router v6 route tree with Suspense chunking.
  */
 export function App() {
   return (
     <AppShell>
-      <Routes>
-        <Route path="/"        element={<Navigate to="/login" replace />} />
-        <Route path="/login"   element={<LoginPage />} />
-        <Route path="/onboarding/privacy" element={<PrivacyOnboardingPage />} />
-        <Route path="/setup"   element={<SetupPage />} />
-        <Route path="/dashboard" element={<LandingPage />} />
-        <Route path="/landing"   element={<LandingPage />} />
-        <Route path="/chats"          element={<ChatsPage />} />
-        <Route path="/deleted"        element={<DeletedOnlyPage />} />
-        <Route path="/settings"       element={<SettingsPage />} />
-        <Route path="/settings/profile"       element={<ProfilePage />} />
-        <Route path="/settings/notifications" element={<NotificationsSettingsPage />} />
-        <Route path="/settings/permissions"   element={<PermissionsSettingsPage />} />
-        <Route path="/settings/privacy"       element={<PrivacySettingsPage />} />
-        <Route path="/chats/:conversationId"  element={<ChatDetailPage />} />
-        <Route path="/contact"  element={<ContactUsPage />} />
-        <Route path="/feedback" element={<FeedbackPage />} />
-        <Route path="*"         element={<Navigate to="/login" replace />} />
-      </Routes>
+      <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center" />}>
+        <Routes>
+          <Route path="/"        element={<Navigate to="/login" replace />} />
+          <Route path="/login"   element={<LoginPage />} />
+          <Route path="/onboarding/privacy" element={<PrivacyOnboardingPage />} />
+          <Route path="/setup"   element={<SetupPage />} />
+          <Route path="/dashboard" element={<LandingPage />} />
+          <Route path="/landing"   element={<LandingPage />} />
+          <Route path="/chats"          element={<ChatsPage />} />
+          <Route path="/deleted"        element={<DeletedOnlyPage />} />
+          <Route path="/settings"       element={<SettingsPage />} />
+          <Route path="/settings/profile"       element={<ProfilePage />} />
+          <Route path="/settings/notifications" element={<NotificationsSettingsPage />} />
+          <Route path="/settings/permissions"   element={<PermissionsSettingsPage />} />
+          <Route path="/settings/privacy"       element={<PrivacySettingsPage />} />
+          <Route path="/chats/:conversationId"  element={<ChatDetailPage />} />
+          <Route path="/contact"  element={<ContactUsPage />} />
+          <Route path="/feedback" element={<FeedbackPage />} />
+          <Route path="*"         element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Suspense>
     </AppShell>
   );
 }

@@ -259,29 +259,29 @@
     --md-sys-color-information-container:      #0A3A50;
     --md-sys-color-on-information-container:   #B8E4F5;
 
-    /* ── Background / Canvas ────────────────────────────────────────── */
-    --md-sys-color-background:                 #0F0F14;
+    /* ── Background / Canvas (OLED True Black #000000 for maximum battery preservation) ── */
+    --md-sys-color-background:                 #000000;
     --md-sys-color-on-background:              #E1E3E8;
 
-    /* ── Surface Tonal Hierarchy (Dark — lifted surfaces, not inverted) */
-    --md-sys-color-surface:                    #141418;
+    /* ── Surface Tonal Hierarchy (Dark — lifted surfaces, true black base) */
+    --md-sys-color-surface:                    #0B0B0E;
     --md-sys-color-on-surface:                 #E3E5EE;
     --md-sys-color-on-surface-muted:           #6B7280;
-    --md-sys-color-surface-dim:                #0F0F14;
-    --md-sys-color-surface-bright:             #2A2A35;
+    --md-sys-color-surface-dim:                #000000;
+    --md-sys-color-surface-bright:             #1F1F28;
 
-    --md-sys-color-surface-container-lowest:   #0A0A0E;
-    --md-sys-color-surface-container-low:      #141418;
-    --md-sys-color-surface-container:          #1C1C24;
-    --md-sys-color-surface-container-high:     #24242E;
-    --md-sys-color-surface-container-highest:  #2E2E3A;
+    --md-sys-color-surface-container-lowest:   #000000;
+    --md-sys-color-surface-container-low:      #0C0C10;
+    --md-sys-color-surface-container:          #14141A;
+    --md-sys-color-surface-container-high:     #1C1C24;
+    --md-sys-color-surface-container-highest:  #24242E;
 
-    --md-sys-color-surface-variant:            #2A2A35;
+    --md-sys-color-surface-variant:            #1E1E26;
     --md-sys-color-on-surface-variant:         #9BA8B5;
 
     /* ── Outline ────────────────────────────────────────────────────── */
-    --md-sys-color-outline:                    #3D3D4E;
-    --md-sys-color-outline-variant:            #2A2A38;
+    --md-sys-color-outline:                    #333342;
+    --md-sys-color-outline-variant:            #20202A;
 
     /* ── Inverse ────────────────────────────────────────────────────── */
     --md-sys-color-inverse-surface:            #E3E5EE;
@@ -1129,4 +1129,32 @@
   /* Touch interaction */
   .touch-manipulation { touch-action: manipulation; }
   .no-select { -webkit-user-select: none; user-select: none; }
+
+  /* Hardware GPU Layer Promotion & Layout Containment */
+  .gpu-accelerated {
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    will-change: transform, opacity;
+  }
+
+  .contain-strict {
+    contain: strict;
+  }
+
+  .contain-layout-paint {
+    contain: layout paint;
+    content-visibility: auto;
+    contain-intrinsic-size: 0 72px;
+  }
+
+  .scroll-smooth-touch {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  .no-subpixel-jitter {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
 }
