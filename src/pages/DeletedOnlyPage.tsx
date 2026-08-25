@@ -87,15 +87,27 @@ export function DeletedOnlyPage() {
     searchQuery,
   ), [deletedMessages, searchQuery]);
 
+  const messageEntityTypesMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const msg of deletedMessages) {
+      if (msg.messageText) {
+        const entities = extractEntities(msg.messageText);
+        const types = new Set(entities.map(e => e.type));
+        map.set(msg.id, types);
+      }
+    }
+    return map;
+  }, [deletedMessages]);
+
   const displayedMessages = useMemo(() => {
     let filtered = searchResults.map(r => r.item);
 
     switch (activeFilter) {
       case 'groups': filtered = filtered.filter(m => conversationMap.get(m.conversationId)?.isGroup === true); break;
       case 'direct': filtered = filtered.filter(m => conversationMap.get(m.conversationId)?.isGroup === false); break;
-      case 'phones': filtered = filtered.filter(m => extractEntities(m.messageText).some(e => e.type === 'PHONE_NUMBER')); break;
-      case 'links':  filtered = filtered.filter(m => extractEntities(m.messageText).some(e => e.type === 'URL')); break;
-      case 'otps':   filtered = filtered.filter(m => extractEntities(m.messageText).some(e => e.type === 'OTP_CODE')); break;
+      case 'phones': filtered = filtered.filter(m => messageEntityTypesMap.get(m.id)?.has('PHONE_NUMBER') === true); break;
+      case 'links':  filtered = filtered.filter(m => messageEntityTypesMap.get(m.id)?.has('URL') === true); break;
+      case 'otps':   filtered = filtered.filter(m => messageEntityTypesMap.get(m.id)?.has('OTP_CODE') === true); break;
       case 'today':  filtered = filtered.filter(m => isToday(m.timestamp)); break;
       default: break;
     }
@@ -109,7 +121,7 @@ export function DeletedOnlyPage() {
       });
       default: return [...filtered].sort((a, b) => b.timestamp - a.timestamp);
     }
-  }, [searchResults, activeFilter, sortMode, conversationMap]);
+  }, [searchResults, activeFilter, sortMode, conversationMap, messageEntityTypesMap]);
 
   const totalChars = useMemo(() =>
     displayedMessages.reduce((sum, m) => sum + (m.messageText?.length ?? 0), 0),

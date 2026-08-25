@@ -15,6 +15,8 @@ import {
   validateSearchQuery,
   computeMessageHash,
   generateUUID,
+  constantTimeCompare,
+  verifyMerkleAuditChain,
 } from '@/services/SecurityService';
 import type { RawNotificationPayload } from '@/types';
 
@@ -275,5 +277,21 @@ describe('Secure Coding 14 — General Coding Practices', () => {
     };
     expect(() => validateNotificationPayload(emptyPayload)).not.toThrow();
     expect(validateNotificationPayload(emptyPayload)).toBe(false);
+  });
+
+  it('constantTimeCompare returns true for identical signatures and false for unequal signatures', () => {
+    const sigA = 'a'.repeat(64);
+    const sigB = 'a'.repeat(64);
+    const sigC = 'a'.repeat(63) + 'b';
+    expect(constantTimeCompare(sigA, sigB)).toBe(true);
+    expect(constantTimeCompare(sigA, sigC)).toBe(false);
+    expect(constantTimeCompare(sigA, 'short')).toBe(false);
+  });
+
+  it('verifyMerkleAuditChain validates valid 64-char hex SHA-256 strings', () => {
+    const validChain = ['a'.repeat(64), 'b'.repeat(64)];
+    const invalidChain = ['a'.repeat(64), 'invalid-hash'];
+    expect(verifyMerkleAuditChain(validChain)).toBe(true);
+    expect(verifyMerkleAuditChain(invalidChain)).toBe(false);
   });
 });

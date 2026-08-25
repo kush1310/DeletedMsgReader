@@ -3,6 +3,7 @@ package com.noticatch.app.db
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
+import androidx.room.ForeignKey
 
 /**
  * MessageEntity
@@ -36,6 +37,14 @@ import androidx.room.Index
  */
 @Entity(
     tableName = "messages",
+    foreignKeys = [
+        ForeignKey(
+            entity        = ConversationEntity::class,
+            parentColumns = ["id"],
+            childColumns  = ["conversationId"],
+            onDelete      = ForeignKey.CASCADE
+        )
+    ],
     indices   = [
         Index(value = ["conversationId", "timestamp"]),
         Index(value = ["isDeletedBySender", "timestamp"]),

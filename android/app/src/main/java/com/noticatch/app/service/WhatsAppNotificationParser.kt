@@ -129,6 +129,9 @@ object WhatsAppNotificationParser {
     /* Unicode bidirectional isolation markers commonly embedded in WhatsApp multi-lingual notifications */
     private val BIDI_MARKERS_REGEX = Regex("[\\u200E\\u200F\\u202A-\\u202E]")
 
+    /* Whitespace normalization regex */
+    private val WHITESPACE_COLLAPSE_REGEX = Regex("\\s+")
+
     /**
      * cleanChatTitle
      *
@@ -140,6 +143,17 @@ object WhatsAppNotificationParser {
         clean = BIDI_MARKERS_REGEX.replace(clean, "")
         clean = TITLE_MESSAGE_COUNT_REGEX.replace(clean, "").trim()
         return clean.ifBlank { "WhatsApp Contact" }
+    }
+
+    /**
+     * generateConversationKey
+     *
+     * Derives a deterministic, canonical conversation key from package name and chat title.
+     */
+    fun generateConversationKey(packageName: String, rawTitle: String): String {
+        val clean = cleanChatTitle(rawTitle)
+        val normalized = clean.lowercase().replace(WHITESPACE_COLLAPSE_REGEX, " ")
+        return "${packageName}_$normalized"
     }
 
     /**

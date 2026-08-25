@@ -98,24 +98,33 @@ class InactivityLockManager {
     }
   }
 
+  private isResuming = false;
+
   private async handleResume(): Promise<void> {
-    if (this.backgroundedTimestamp) {
-      const elapsedInBackground = Date.now() - this.backgroundedTimestamp;
-      this.backgroundedTimestamp = null;
+    if (this.isResuming) return;
+    this.isResuming = true;
 
-      const sessionStart = sessionStorage.getItem('session_start') || localStorage.getItem('noticatch_session_start');
-      if (!sessionStart) return;
+    try {
+      if (this.backgroundedTimestamp) {
+        const elapsedInBackground = Date.now() - this.backgroundedTimestamp;
+        this.backgroundedTimestamp = null;
 
-      const settings = await loadAppSettings();
-      if (settings && settings.sessionTimeoutSeconds > 0) {
-        const thresholdMs = settings.sessionTimeoutSeconds * 1000;
-        if (elapsedInBackground >= thresholdMs) {
-          this.triggerLock();
-          return;
+        const sessionStart = sessionStorage.getItem('session_start') || localStorage.getItem('noticatch_session_start');
+        if (!sessionStart) return;
+
+        const settings = await loadAppSettings();
+        if (settings && settings.sessionTimeoutSeconds > 0) {
+          const thresholdMs = settings.sessionTimeoutSeconds * 1000;
+          if (elapsedInBackground >= thresholdMs) {
+            this.triggerLock();
+            return;
+          }
         }
       }
+      this.recordUserActivity();
+    } finally {
+      setTimeout(() => { this.isResuming = false; }, 250);
     }
-    this.recordUserActivity();
   }
 
   /**

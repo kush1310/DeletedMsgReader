@@ -266,6 +266,8 @@ export function SettingsPage() {
             <button
               type="button"
               id="row-inactivity-autolock"
+              aria-haspopup="dialog"
+              aria-expanded={showAutoLockModal}
               onClick={() => { HapticService.selection(); setShowAutoLockModal(true); }}
               className="w-full p-4 flex items-center justify-between gap-3 text-left border-b min-h-[56px] transition-colors touch-manipulation"
               style={{

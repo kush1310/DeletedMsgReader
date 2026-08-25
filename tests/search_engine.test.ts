@@ -11,6 +11,7 @@ import {
   boyerMooreHorspoolSearch,
   computeDamerauLevenshteinDistance,
   searchAndRank,
+  TrigramIndex,
 } from '@/services/SearchEngine';
 
 describe('SearchEngine — Boyer-Moore-Horspool Algorithm', () => {
@@ -130,5 +131,34 @@ describe('SearchEngine — Unified searchAndRank Pipeline', () => {
   it('returns all items when query is empty string', () => {
     const results = searchAndRank(sampleMessages, (m: SampleMsg) => m.text, '');
     expect(results.length).toBe(sampleMessages.length);
+  });
+});
+
+describe('SearchEngine — Trigram Index Fast Filtering', () => {
+  it('indexes documents and returns exact candidate match', () => {
+    const index = new TrigramIndex();
+    index.addDocument(0, 'Doctor prescription is ready for pickup');
+    index.addDocument(1, 'Meeting tomorrow at 6 PM');
+    index.addDocument(2, 'Happy birthday to our sister');
+
+    const candidates = index.searchCandidates('prescription');
+    expect(candidates.has(0)).toBe(true);
+    expect(candidates.has(1)).toBe(false);
+    expect(candidates.has(2)).toBe(false);
+  });
+
+  it('returns empty set for non-matching query', () => {
+    const index = new TrigramIndex();
+    index.addDocument(0, 'Hello world');
+    const candidates = index.searchCandidates('nonexistent');
+    expect(candidates.size).toBe(0);
+  });
+
+  it('handles short sub-3-char queries gracefully by returning full candidate list', () => {
+    const index = new TrigramIndex();
+    index.addDocument(0, 'Hello');
+    index.addDocument(1, 'World');
+    const candidates = index.searchCandidates('he');
+    expect(candidates.size).toBe(2);
   });
 });

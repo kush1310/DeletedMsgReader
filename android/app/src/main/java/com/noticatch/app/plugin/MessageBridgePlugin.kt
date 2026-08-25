@@ -781,7 +781,8 @@ class MessageBridgePlugin : Plugin() {
         pluginScope.launch {
             try {
                 val db = NotiCatchDatabase.getInstance(context)
-                val convKey = "com.whatsapp:$chatTitle"
+                val cleanTitle = WhatsAppNotificationParser.cleanChatTitle(chatTitle)
+                val convKey = WhatsAppNotificationParser.generateConversationKey(WhatsAppNotificationParser.WHATSAPP_PKG, cleanTitle)
                 var conv = db.conversationDao().findByKey(convKey)
                 val convId = conv?.id ?: UUID.randomUUID().toString()
 
@@ -789,7 +790,7 @@ class MessageBridgePlugin : Plugin() {
                     conv = ConversationEntity(
                         id = convId,
                         conversationKey = convKey,
-                        chatTitle = chatTitle,
+                        chatTitle = cleanTitle,
                         isGroup = isGroup,
                         unreadCount = 1,
                         lastMessageTimestamp = System.currentTimeMillis(),
@@ -798,6 +799,7 @@ class MessageBridgePlugin : Plugin() {
                     db.conversationDao().insert(conv)
                 } else {
                     val updatedConv = conv.copy(
+                        chatTitle = cleanTitle,
                         lastMessageTimestamp = System.currentTimeMillis(),
                         unreadCount = conv.unreadCount + 1,
                         deletedCount = if (isDeleted) conv.deletedCount + 1 else conv.deletedCount
@@ -838,11 +840,19 @@ class MessageBridgePlugin : Plugin() {
         }
     }
 
+    private val HEX_CHARS = "0123456789abcdef".toCharArray()
+
     private fun computeSha256(input: String): String {
         return try {
             val md = MessageDigest.getInstance("SHA-256")
             val digest = md.digest(input.toByteArray(Charsets.UTF_8))
-            digest.joinToString("") { "%02x".format(it) }
+            val result = CharArray(digest.size * 2)
+            for (i in digest.indices) {
+                val v = digest[i].toInt() and 0xFF
+                result[i * 2] = HEX_CHARS[v ushr 4]
+                result[i * 2 + 1] = HEX_CHARS[v and 0x0F]
+            }
+            String(result)
         } catch (e: Exception) {
             ""
         }

@@ -132,8 +132,7 @@ class NotificationListener : NotificationListenerService() {
 
     private suspend fun persistAndBroadcast(parsed: WhatsAppNotificationParser.ParsedMessage) {
         val cleanTitle = WhatsAppNotificationParser.cleanChatTitle(parsed.chatTitle)
-        val normalizedTitle = cleanTitle.lowercase().replace(WHITESPACE_REGEX, " ")
-        val conversationKey = "${parsed.packageName}_$normalizedTitle"
+        val conversationKey = WhatsAppNotificationParser.generateConversationKey(parsed.packageName, parsed.chatTitle)
 
         /* 1. Resolve or create parent conversation */
         var conversation = database.conversationDao().findByKey(conversationKey)
