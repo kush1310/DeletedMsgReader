@@ -297,3 +297,61 @@ export function executeRankedSearch<T>(
 
   return scored.map(res => res.item);
 }
+
+/* =============================================================
+   5. In-Memory Trigram Index for Sub-Millisecond Filtering
+   ============================================================= */
+
+export class TrigramIndex {
+  private readonly index = new Map<string, Set<number>>();
+  private readonly documents: string[] = [];
+
+  public addDocument(docId: number, text: string): void {
+    const normalized = text.toLowerCase();
+    this.documents[docId] = normalized;
+
+    if (normalized.length < 3) {
+      const token = normalized.padEnd(3, ' ');
+      if (!this.index.has(token)) this.index.set(token, new Set());
+      this.index.get(token)!.add(docId);
+      return;
+    }
+
+    for (let i = 0; i <= normalized.length - 3; i++) {
+      const trigram = normalized.substring(i, i + 3);
+      if (!this.index.has(trigram)) {
+        this.index.set(trigram, new Set());
+      }
+      this.index.get(trigram)!.add(docId);
+    }
+  }
+
+  public searchCandidates(query: string): Set<number> {
+    const normalized = query.toLowerCase().trim();
+    if (normalized.length < 3) return new Set(this.documents.map((_, idx) => idx));
+
+    const trigrams: string[] = [];
+    for (let i = 0; i <= normalized.length - 3; i++) {
+      trigrams.push(normalized.substring(i, i + 3));
+    }
+
+    if (trigrams.length === 0) return new Set();
+
+    let candidateSet: Set<number> | null = null;
+    for (const tri of trigrams) {
+      const matches = this.index.get(tri) ?? new Set();
+      if (candidateSet === null) {
+        candidateSet = new Set(matches);
+      } else {
+        for (const id of candidateSet) {
+          if (!matches.has(id)) {
+            candidateSet.delete(id);
+          }
+        }
+      }
+      if (candidateSet.size === 0) break;
+    }
+
+    return candidateSet ?? new Set();
+  }
+}

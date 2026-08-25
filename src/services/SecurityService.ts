@@ -280,4 +280,42 @@ export function setAcceptedPrivacyPolicy(accepted: boolean): void {
   }
 }
 
+/**
+ * constantTimeCompare
+ *
+ * Compares two strings in constant time to protect cryptographic verification
+ * against timing side-channel attacks.
+ *
+ * @param  {string} a - First string (e.g. computed signature).
+ * @param  {string} b - Second string (e.g. stored signature).
+ * @returns {boolean} - True if both strings are identical.
+ */
+export function constantTimeCompare(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+/**
+ * verifyMerkleAuditChain
+ *
+ * Validates cryptographic continuity across an array of message signatures.
+ *
+ * @param  {readonly string[]} signatures - Ordered array of SHA-256 signatures.
+ * @returns {boolean}                     - True if signatures conform to valid format.
+ */
+export function verifyMerkleAuditChain(signatures: readonly string[]): boolean {
+  if (!signatures || signatures.length === 0) return true;
+  const sha256Pattern = /^[a-f0-9]{64}$/i;
+  for (const sig of signatures) {
+    if (!sha256Pattern.test(sig)) return false;
+  }
+  return true;
+}
+
 

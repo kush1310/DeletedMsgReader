@@ -89,12 +89,13 @@ export function extractEntities(text: string | null | undefined): ExtractedEntit
     }
   }
 
-  /* 5. OTP Codes (only if accompanied by OTP / code keywords) */
-  if (/\b(otp|code|pin|password|verification)\b/i.test(text)) {
+  /* 5. OTP Codes (only if accompanied by OTP / code keywords and 4-8 digits) */
+  if (/\b(otp|code|pin|password|verification|valid for|expires)\b/i.test(text)) {
     const otpMatches = text.match(OTP_REGEX);
     if (otpMatches) {
       for (const match of otpMatches) {
-        if (!entities.some(e => e.value === match)) {
+        /* Avoid duplicate overlap with phone numbers or timestamps */
+        if (!entities.some(e => e.value.includes(match))) {
           entities.push({
             type:  'OTP_CODE',
             value: match,

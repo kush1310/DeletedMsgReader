@@ -126,14 +126,18 @@ object WhatsAppNotificationParser {
         return IGNORED_MEDIA_PATTERNS.any { it.matches(trimmed) }
     }
 
+    /* Unicode bidirectional isolation markers commonly embedded in WhatsApp multi-lingual notifications */
+    private val BIDI_MARKERS_REGEX = Regex("[\\u200E\\u200F\\u202A-\\u202E]")
+
     /**
      * cleanChatTitle
      *
      * Strips ephemeral WhatsApp message count suffixes such as "(6 messages)" or "(12 new messages)"
-     * so that all notifications for a single conversation resolve to one canonical title.
+     * and removes Unicode BiDi isolation characters so all notifications resolve to one canonical title.
      */
     fun cleanChatTitle(rawTitle: String): String {
         var clean = rawTitle.trim()
+        clean = BIDI_MARKERS_REGEX.replace(clean, "")
         clean = TITLE_MESSAGE_COUNT_REGEX.replace(clean, "").trim()
         return clean.ifBlank { "WhatsApp Contact" }
     }

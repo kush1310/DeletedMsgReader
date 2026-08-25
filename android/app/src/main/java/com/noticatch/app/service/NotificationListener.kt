@@ -102,8 +102,14 @@ class NotificationListener : NotificationListenerService() {
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
 
-        /* Execute all parsed messages with Mutex synchronization on Dispatchers.Default to prevent thread starvation */
+        /* Execute all parsed messages with Mutex synchronization on Dispatchers.Default with elevated background priority */
         serviceScope.launch {
+            try {
+                android.os.Process.setThreadPriority(
+                    android.os.Process.THREAD_PRIORITY_BACKGROUND + android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE
+                )
+            } catch (_: Exception) {}
+
             ingestionMutex.withLock {
                 for (parsed in parsedList) {
                     if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {

@@ -13,7 +13,7 @@
  * Dark theme is fully supported through the .dark class on <html>.
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Trash2,
   Pencil,
@@ -320,10 +320,36 @@ function EntityChips({ entities }: EntityChipsProps) {
  * @param durationSeconds - Voice note duration in seconds.
  */
 function AudioWaveform({ durationSeconds }: { readonly durationSeconds: number }) {
-  const bars = [4, 8, 14, 10, 18, 12, 16, 20, 14, 8, 16, 12, 6, 10, 14, 8];
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const minutes = Math.floor(durationSeconds / 60);
   const seconds = durationSeconds % 60;
   const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const bars = [4, 8, 14, 10, 18, 12, 16, 20, 14, 8, 16, 12, 6, 10, 14, 8];
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = '#2C6BED';
+    const barWidth = 3;
+    const gap = 3;
+    const totalBars = bars.length;
+
+    for (let i = 0; i < totalBars; i++) {
+      const x = i * (barWidth + gap);
+      const barH = bars[i];
+      const y = (height - barH) / 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, barWidth, barH, 2);
+      ctx.fill();
+    }
+  }, [durationSeconds]);
 
   return (
     <div
@@ -333,18 +359,13 @@ function AudioWaveform({ durationSeconds }: { readonly durationSeconds: number }
         borderColor: 'var(--md-sys-color-outline-variant)',
       }}
     >
-      <div className="flex items-center gap-0.5 h-5 flex-1">
-        {bars.map((height, barIndex) => (
-          <div
-            key={barIndex}
-            className="w-1 rounded-full opacity-80"
-            style={{
-              height: `${height}px`,
-              background: 'var(--md-sys-color-primary)',
-            }}
-          />
-        ))}
-      </div>
+      <canvas
+        ref={canvasRef}
+        width={100}
+        height={22}
+        className="flex-1 max-w-[120px] h-[22px]"
+        aria-hidden="true"
+      />
       <span
         className="text-2xs font-bold tabular-nums"
         style={{ color: 'var(--md-sys-color-on-surface-muted)' }}

@@ -1157,4 +1157,17 @@
     transform: translateZ(0);
     backface-visibility: hidden;
   }
+
+  /* WCAG 2.2 AAA High-Contrast Focus Ring */
+  *:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary) !important;
+    outline-offset: 2px !important;
+    border-radius: 4px;
+  }
+
+  /* 48dp Minimum Accessible Touch Target Standards */
+  .touch-target-48 {
+    min-width: 48px;
+    min-height: 48px;
+  }
 }
