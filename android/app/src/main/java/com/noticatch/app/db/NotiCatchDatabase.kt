@@ -9,13 +9,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * NotiCatchDatabase
  *
- * Room Database singleton for NotiCatch.
- * Version 1: schema with indexed messages and conversations tables.
- *
- * Features:
- *   - Write-Ahead Logging (WAL) mode for non-blocking concurrent reads and writes
- *   - Auto-vacuum configuration for reclaiming fragmented pages
- *   - 100% Parameterized query safety
+ * High-performance Room Database singleton for NotiCatch.
+ * Configured with Write-Ahead Logging (WAL), 256MB memory-mapped I/O,
+ * 8MB dedicated page cache, secure deletion, and auto-checkpointing.
  */
 @Database(
     entities = [MessageEntity::class, ConversationEntity::class],
@@ -34,7 +30,7 @@ abstract class NotiCatchDatabase : RoomDatabase() {
         /**
          * getInstance
          *
-         * Returns the singleton database instance configured with WAL mode.
+         * Returns the singleton database instance configured with WAL mode and optimized PRAGMAs.
          */
         fun getInstance(context: Context): NotiCatchDatabase {
             return instance ?: synchronized(this) {
@@ -52,7 +48,9 @@ abstract class NotiCatchDatabase : RoomDatabase() {
                         db.execSQL("PRAGMA synchronous = NORMAL;")
                         db.execSQL("PRAGMA temp_store = MEMORY;")
                         db.execSQL("PRAGMA mmap_size = 268435456;") // 256MB memory-mapped I/O
-                        db.execSQL("PRAGMA cache_size = -4000;")     // 4MB page cache
+                        db.execSQL("PRAGMA cache_size = -8000;")     // 8MB dedicated page cache
+                        db.execSQL("PRAGMA busy_timeout = 5000;")    // 5000ms busy retry timeout
+                        db.execSQL("PRAGMA wal_autocheckpoint = 1000;") // Checkpoint every 1000 pages
                         /* MASVS-STORAGE-2: Overwrite deleted data pages with zeroes
                            to prevent forensic recovery of deleted messages */
                         db.execSQL("PRAGMA secure_delete = ON;")
