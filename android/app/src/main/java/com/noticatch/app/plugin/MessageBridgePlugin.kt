@@ -30,6 +30,7 @@ import com.noticatch.app.db.ConversationEntity
 import com.noticatch.app.db.MessageEntity
 import com.noticatch.app.db.NotiCatchDatabase
 import com.noticatch.app.service.NotificationListener
+import com.noticatch.app.service.WhatsAppNotificationParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

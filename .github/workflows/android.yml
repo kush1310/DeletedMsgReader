@@ -101,31 +101,31 @@ jobs:
           retention-days: 30
           compression-level: 0
 
-      # Only runs on v* tag pushes — attaches the single dedicated .apk asset to the GitHub Release.
-      # Users can download NotiCatch-v2.0.1.apk directly from the release assets.
+      # Publish GitHub Release with Direct APK Asset
+      # Automatically publishes to Releases section on every main push and tag push
       - name: Publish GitHub Release with Direct APK Asset
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: "NotiCatch ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
+          name: "NotiCatch ${{ steps.resolve_tag.outputs.tag_name }}"
+          tag_name: ${{ steps.resolve_tag.outputs.tag_name }}
           body: |
-            ## NotiCatch ${{ github.ref_name }}
+            ## NotiCatch ${{ steps.resolve_tag.outputs.tag_name }}
 
             ### Direct APK Download
-            - **Download APK**: [NotiCatch-${{ github.ref_name }}.apk](https://github.com/kush1310/DeletedMsgReader/releases/download/${{ github.ref_name }}/NotiCatch-${{ github.ref_name }}.apk)
+            - **Download APK**: [NotiCatch-${{ steps.resolve_tag.outputs.tag_name }}.apk](https://github.com/kush1310/DeletedMsgReader/releases/download/${{ steps.resolve_tag.outputs.tag_name }}/NotiCatch-${{ steps.resolve_tag.outputs.tag_name }}.apk)
 
             ### Installation Instructions
-            1. Download the **NotiCatch-${{ github.ref_name }}.apk** file from the Assets section below.
+            1. Download the **NotiCatch-${{ steps.resolve_tag.outputs.tag_name }}.apk** file from the Assets section below.
             2. On your Android device, allow installation from unknown sources if prompted.
             3. Open the `.apk` file to install NotiCatch.
             4. Grant Notification Access and Battery Optimization exemption when prompted.
 
             > **Note:** The "Source code (zip)" and "Source code (tar.gz)" links below are standard GitHub source archives. Always download the `.apk` file for installation.
           files: |
-            release-apks/NotiCatch-${{ github.ref_name }}.apk
+            release-apks/NotiCatch-${{ steps.resolve_tag.outputs.tag_name }}.apk
           generate_release_notes: false
           draft: false
           prerelease: false
