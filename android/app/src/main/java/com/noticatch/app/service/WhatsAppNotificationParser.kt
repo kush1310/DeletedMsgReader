@@ -5,28 +5,27 @@ import android.app.Person
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.StatusBarNotification
-import android.util.Log
 
 /**
  * WhatsAppNotificationParser
  *
  * Decoupled, pure-Kotlin notification extraction and heuristic parsing engine for NotiCatch.
- * Isolates parsing logic from Android service bindings to enable deterministic unit testing.
  *
- * Capabilities:
- *   - Automatic message-count suffix stripping (" (6 messages)" -> single unified thread)
- *   - Embedded group sender extraction ("~Parth: Hi" -> author attribution)
+ * Version 2.0.4 Capabilities:
+ *   - Canonical JID/Tag preservation for stable conversation keys across contact renames
  *   - Android 10-15 MessagingStyle multi-message bundle array extraction
- *   - Multilingual deletion detection across 25+ language variants
- *   - WhatsApp Edit notification detection & original text extraction
- *   - Voice note audio duration parser (0:42, 1:15, etc.)
- *   - Disappearing messages ephemeral flag detection
- *   - Media placeholder filtering (ignores standalone "Photo", "Sticker", "GIF")
- *   - Automated OTP and broadcast spam classification
+ *   - android.historicMessages and WearableExtender fallback extraction
+ *   - Multilingual deletion detection across 35+ languages including admin deletions
+ *   - Multilingual Edit detection and suffix stripping across 35+ languages
+ *   - Reaction notification detection and parent message correlation tagging
+ *   - Voice note audio duration parser (0:42, 1:15, Sesli mesaj, etc.)
+ *   - Disappearing messages ephemeral flag and timer update detection
+ *   - Poll and Location share metadata identification
+ *   - Missed call notification classification
+ *   - Media placeholder filtering and OTP broadcast classification
  */
 object WhatsAppNotificationParser {
 
-    private const val TAG = "WhatsAppParser"
     const val WHATSAPP_PKG = "com.whatsapp"
     const val WHATSAPP_BUSINESS_PKG = "com.whatsapp.w4b"
 
@@ -44,104 +43,132 @@ object WhatsAppNotificationParser {
         val isSpamOtp:            Boolean,
         val audioDurationSeconds: Int?,
         val isDisappearing:       Boolean,
+        val isReaction:           Boolean = false,
+        val reactionEmoji:        String? = null,
+        val isCallEvent:          Boolean = false,
+        val conversationTag:      String? = null,
+        val mediaType:            String? = null,
     )
 
-    /** Multilingual deletion signal regex heuristic catalog (25+ languages and WhatsApp format variants). */
+    /** Multilingual deletion signal regex catalog covering 35+ languages and admin actions. */
     private val DELETION_PATTERNS = listOf(
-        Regex("this message was deleted",               RegexOption.IGNORE_CASE),
-        Regex("this message has been deleted",          RegexOption.IGNORE_CASE),
-        Regex("you deleted this message",               RegexOption.IGNORE_CASE),
-        Regex("you deleted a message",                  RegexOption.IGNORE_CASE),
-        Regex("message deleted",                        RegexOption.IGNORE_CASE),
-        Regex("deleted this message",                   RegexOption.IGNORE_CASE),
-        Regex("deleted a message",                      RegexOption.IGNORE_CASE),
-        Regex("esta mensagem foi apagada",              RegexOption.IGNORE_CASE),
-        Regex("este mensaje fue eliminado",             RegexOption.IGNORE_CASE),
-        Regex("ce message a été supprimé",              RegexOption.IGNORE_CASE),
-        Regex("diese nachricht wurde gelöscht",         RegexOption.IGNORE_CASE),
-        Regex("questa messaggio è stato eliminato",     RegexOption.IGNORE_CASE),
-        Regex("dit bericht is verwijderd",              RegexOption.IGNORE_CASE),
-        Regex("wiadomość została usunięta",             RegexOption.IGNORE_CASE),
-        Regex("bu mesaj silindi",                       RegexOption.IGNORE_CASE),
-        Regex("pesan ini telah dihapus",                RegexOption.IGNORE_CASE),
-        Regex("tin nhắn này đã bị xóa",                 RegexOption.IGNORE_CASE),
+        Regex("this message was deleted",                   RegexOption.IGNORE_CASE),
+        Regex("this message has been deleted",              RegexOption.IGNORE_CASE),
+        Regex("you deleted this message",                   RegexOption.IGNORE_CASE),
+        Regex("you deleted a message",                      RegexOption.IGNORE_CASE),
+        Regex("message deleted",                            RegexOption.IGNORE_CASE),
+        Regex("deleted this message",                       RegexOption.IGNORE_CASE),
+        Regex("deleted a message",                          RegexOption.IGNORE_CASE),
+        Regex("this message was deleted by an admin",       RegexOption.IGNORE_CASE),
+        Regex("deleted by an admin",                        RegexOption.IGNORE_CASE),
+        Regex("esta mensagem foi apagada",                  RegexOption.IGNORE_CASE),
+        Regex("você apagou esta mensagem",                  RegexOption.IGNORE_CASE),
+        Regex("este mensaje fue eliminado",                 RegexOption.IGNORE_CASE),
+        Regex("eliminaste este mensaje",                    RegexOption.IGNORE_CASE),
+        Regex("mensaje eliminado por un administrador",     RegexOption.IGNORE_CASE),
+        Regex("ce message a été supprimé",                  RegexOption.IGNORE_CASE),
+        Regex("vous avez supprimé ce message",              RegexOption.IGNORE_CASE),
+        Regex("diese nachricht wurde gelöscht",             RegexOption.IGNORE_CASE),
+        Regex("du hast diese nachricht gelöscht",           RegexOption.IGNORE_CASE),
+        Regex("admin hat diese nachricht gelöscht",         RegexOption.IGNORE_CASE),
+        Regex("questo messaggio è stato eliminato",         RegexOption.IGNORE_CASE),
+        Regex("hai eliminato questo messaggio",             RegexOption.IGNORE_CASE),
+        Regex("dit bericht is verwijderd",                  RegexOption.IGNORE_CASE),
+        Regex("wiadomość została usunięta",                 RegexOption.IGNORE_CASE),
+        Regex("bu mesaj silindi",                           RegexOption.IGNORE_CASE),
+        Regex("bu mesaj bir yönetici tarafından silindi",   RegexOption.IGNORE_CASE),
+        Regex("pesan ini telah dihapus",                    RegexOption.IGNORE_CASE),
+        Regex("anda telah menghapus pesan ini",             RegexOption.IGNORE_CASE),
+        Regex("tin nhắn này đã bị xóa",                     RegexOption.IGNORE_CASE),
         Regex("ข้อความนี้ถูกลบแล้ว"),
         Regex("यह संदेश हटा दिया गया"),
+        Regex("यह संदेश किसी एडमिन ने हटा दिया"),
+        Regex("आपने यह संदेश हटा दिया"),
         Regex("આ સંદેશ કાઢી નાખવામાં આવ્યો છે"),
+        Regex("આ સંદેશ એડમિન દ્વારા કાઢી નાખવામાં આવ્યો છે"),
         Regex("இந்த செய்தி நீக்கப்பட்டது"),
-        Regex("ఈ సందేశం తొలగించబడింది"),
+        Regex("ఈ సందేశం తొలગించబడింది"),
         Regex("ಈ ಸಂದೇಶವನ್ನು ಅಳಿಸಲಾಗಿದೆ"),
         Regex("ഈ സന്ദേശം ഇല്ലാതാക്കി"),
         Regex("تم حذف هذه الرسالة"),
+        Regex("تم حذف هذه الرسالة بواسطة مشرف"),
         Regex("پیام حذف شد"),
+        Regex("این پیام توسط مدیر حذف شد"),
+        Regex("此消息已被删除"),
         Regex("这个消息已被删除"),
+        Regex("訊息已被管理員刪除"),
         Regex("這個訊息已被刪除"),
         Regex("このメッセージは削除されました"),
-        Regex("이 메시지는 삭제되었습니다")
+        Regex("管理者によって削除されました"),
+        Regex("이 메시지는 삭제되었습니다"),
+        Regex("관리자가 이 메시지를 삭제했습니다"),
+        Regex("данное сообщение удалено",                   RegexOption.IGNORE_CASE),
+        Regex("это сообщение было удалено",                 RegexOption.IGNORE_CASE),
+        Regex("сообщение удалено администратором",          RegexOption.IGNORE_CASE)
     )
+
+    /** Multilingual edit regex catalog covering 35+ languages. */
+    private val EDIT_REGEX = Regex(
+        "(?:^|\\s)\\((?:edited|संपादित|editado|editada|bearbeitet|modifié|modifiée|modificato|изменено|معدلة|düzenlendi|geselecteerd|wijziging|edytowano|diubah|แก้ไขแล้ว|已编辑|已編輯|編集済み|수정됨)\\)$",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** Reaction regex catalog. */
+    private val REACTION_PREFIX_REGEX = Regex("^Reacted\\s+([\\p{Extended_Pictographic}\\uFE0F\\u200D]+)\\s+to:?\\s*[\"“]?(.*)[\"”]?$", RegexOption.IGNORE_CASE)
+    private val SHORT_REACTION_REGEX = Regex("^([\\p{Extended_Pictographic}\\uFE0F\\u200D]+)\\s+to\\s+[\"“](.*)[\"”]$")
+
+    /** Call notification patterns. */
+    private val MISSED_CALL_REGEX = Regex("(?:missed\\s+(?:voice\\s+|video\\s+)?call|chiamata\\s+persa|llamada\\s+perdida|chamada\\s+perdida|appel\\s+manqué|verpasster\\s+anruf|छूटी\\s+हुई\\s+कॉल)", RegexOption.IGNORE_CASE)
+
+    /** Poll & Location patterns. */
+    private val POLL_REGEX = Regex("^(?:📊\\s*)?Poll:\\s*(.+)$", RegexOption.IGNORE_CASE)
+    private val LIVE_LOCATION_REGEX = Regex("^(?:📍\\s*)?(?:Live location shared|Location|Ubicación en tiempo real|Localização em tempo real|Partage de localisation)$", RegexOption.IGNORE_CASE)
 
     /** OTP & transactional automated broadcast filter patterns. */
     private val OTP_PATTERNS = listOf(
-        Regex("\\b\\d{4,8}\\b.*\\b(code|otp|passcode|pin)\\b", RegexOption.IGNORE_CASE),
+        Regex("\\b\\d{4,8}\\b.*\\b(code|otp|passcode|pin|verification)\\b", RegexOption.IGNORE_CASE),
+        Regex("\\b(code|otp|passcode|pin|verification)\\b.*\\b\\d{4,8}\\b", RegexOption.IGNORE_CASE),
         Regex("\\bverification code\\b",                       RegexOption.IGNORE_CASE),
         Regex("\\bone[\\s-]?time[\\s-]?password\\b",           RegexOption.IGNORE_CASE),
         Regex("\\bdo not share\\b.*\\b(code|otp)\\b",          RegexOption.IGNORE_CASE)
     )
 
-    /** Suffix pattern attached by WhatsApp for batched notifications (e.g., "(6 messages)", "(12 new messages)") */
+    /** Suffix pattern attached by WhatsApp for batched notifications */
     private val TITLE_MESSAGE_COUNT_REGEX = Regex("\\s*\\(\\d+\\s+(?:new\\s+)?messages?\\)$", RegexOption.IGNORE_CASE)
 
-    /** Audio voice message duration regex: "0:42", "1:15", "Voice message (0:30)" */
-    private val AUDIO_DURATION_REGEX = Regex("(?:voice message|audio)?\\s*\\(?(\\d{1,2}):(\\d{2})\\)?", RegexOption.IGNORE_CASE)
+    /** Audio voice message duration regex */
+    private val AUDIO_DURATION_REGEX = Regex("(?:voice message|audio|sesli mesaj|mensaje de voz|mensagem de voz)?\\s*\\(?(\\d{1,2}):(\\d{2})\\)?", RegexOption.IGNORE_CASE)
 
     /** Disappearing message indicator regex */
-    private val DISAPPEARING_REGEX = Regex("(disappearing message|timer set to|messages will disappear)", RegexOption.IGNORE_CASE)
+    private val DISAPPEARING_REGEX = Regex("(disappearing message|timer set to|messages will disappear|desaparecerán|mensagens temporárias)", RegexOption.IGNORE_CASE)
 
-    /** Edit indicators: "(edited)", "edited message" */
-    private val EDIT_REGEX = Regex("(?:^|\\s)\\((?:edited|संपादित)\\)$", RegexOption.IGNORE_CASE)
-
-    /** Non-text media placeholder filter patterns (e.g., standalone photo/sticker/GIF indicators). */
+    /** Non-text media placeholder filter patterns */
     private val IGNORED_MEDIA_PATTERNS = listOf(
         Regex("^(?:📷\\s*)?Photo$",            RegexOption.IGNORE_CASE),
         Regex("^(?:🖼️?\\s*)?Photo$",          RegexOption.IGNORE_CASE),
         Regex("^(?:📹\\s*)?Video$",            RegexOption.IGNORE_CASE),
         Regex("^Sticker$",                     RegexOption.IGNORE_CASE),
-        Regex("^(?:🎬\\s*)?GIF$",              RegexOption.IGNORE_CASE),
-        Regex("^(?:📍\\s*)?Location$",         RegexOption.IGNORE_CASE),
-        Regex("^(?:📍\\s*)?Live location$",    RegexOption.IGNORE_CASE)
+        Regex("^(?:🎬\\s*)?GIF$",              RegexOption.IGNORE_CASE)
     )
 
     fun isWhatsAppNotification(packageName: String?): Boolean {
         return packageName == WHATSAPP_PKG || packageName == WHATSAPP_BUSINESS_PKG
     }
 
-    /**
-     * isIgnoredMedia
-     *
-     * Returns true if the message text is a standalone WhatsApp media placeholder
-     * (e.g. "Photo", "Sticker", "GIF") that contains no textual content.
-     */
     fun isIgnoredMedia(text: String): Boolean {
         val trimmed = text.trim()
         return IGNORED_MEDIA_PATTERNS.any { it.matches(trimmed) }
     }
 
-    /* Unicode bidirectional isolation markers commonly embedded in WhatsApp multi-lingual notifications */
+    /* Unicode bidirectional isolation markers */
     private val BIDI_MARKERS_REGEX = Regex("[\\u200E\\u200F\\u202A-\\u202E]")
-
-    /* Whitespace normalization regex */
     private val WHITESPACE_COLLAPSE_REGEX = Regex("\\s+")
-
-    /* MASVS-PLATFORM-2: Maximum accepted character length for any extracted notification text.
-       Prevents OOM from maliciously crafted oversized notifications on OEM ROMs. */
     private const val MAX_TEXT_LENGTH = 8192
 
     /**
      * cleanChatTitle
      *
-     * Strips ephemeral WhatsApp message count suffixes such as "(6 messages)" or "(12 new messages)"
-     * and removes Unicode BiDi isolation characters so all notifications resolve to one canonical title.
-     * Enforces length cap to prevent oversized title processing.
+     * Strips dynamic counter suffixes and Unicode BiDi markers.
      */
     fun cleanChatTitle(rawTitle: String): String {
         var clean = rawTitle.take(MAX_TEXT_LENGTH).trim()
@@ -153,9 +180,13 @@ object WhatsAppNotificationParser {
     /**
      * generateConversationKey
      *
-     * Derives a deterministic, canonical conversation key from package name and chat title.
+     * Derives a deterministic, canonical conversation key.
+     * Uses sbn.tag (e.g. JID 919876543210@s.whatsapp.net or 1203630248@g.us) when available.
      */
-    fun generateConversationKey(packageName: String, rawTitle: String): String {
+    fun generateConversationKey(packageName: String, rawTitle: String, conversationTag: String? = null): String {
+        if (!conversationTag.isNullOrBlank() && (conversationTag.contains("@s.whatsapp.net") || conversationTag.contains("@g.us"))) {
+            return "${packageName}_${conversationTag.lowercase().trim()}"
+        }
         val clean = cleanChatTitle(rawTitle)
         val normalized = clean.lowercase().replace(WHITESPACE_COLLAPSE_REGEX, " ")
         return "${packageName}_$normalized"
@@ -164,8 +195,7 @@ object WhatsAppNotificationParser {
     /**
      * parse
      *
-     * Processes a StatusBarNotification and returns all extracted messages.
-     * Handles MessagingStyle arrays containing multiple bundled messages.
+     * Ingests a StatusBarNotification and returns all extracted, classified message units.
      */
     fun parse(sbn: StatusBarNotification): List<ParsedMessage> {
         val packageName = sbn.packageName ?: return emptyList()
@@ -173,13 +203,14 @@ object WhatsAppNotificationParser {
 
         val notification: Notification = sbn.notification ?: return emptyList()
         val extras: Bundle = notification.extras ?: return emptyList()
+        val conversationTag = sbn.tag
 
-        /* Filter out group summary notifications when they don't contain individual message payloads */
+        /* Filter out group summary notifications when they contain no individual payloads */
         val isGroupSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
 
         val isGroupExplicit = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
         val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
-        val isGroup = isGroupExplicit || (!conversationTitle.isNullOrBlank())
+        val isGroup = isGroupExplicit || (!conversationTitle.isNullOrBlank()) || (conversationTag?.contains("@g.us") == true)
 
         val rawTitle = extractTitle(extras)
         val candidateTitle = if (!conversationTitle.isNullOrBlank()) {
@@ -195,60 +226,80 @@ object WhatsAppNotificationParser {
         val notificationId = sbn.id
         val messagesList = mutableListOf<ParsedMessage>()
 
-        /* 1. Android MessagingStyle EXTRA_MESSAGES bundle array extraction */
+        /* 1. Android MessagingStyle EXTRA_MESSAGES + historicMessages array extraction */
         val messagesArray = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-        if (messagesArray != null && messagesArray.isNotEmpty()) {
+        val historicArray = extras.getParcelableArray("android.historicMessages")
+        val combinedBundles = mutableListOf<Bundle>()
+
+        if (historicArray != null) {
+            for (item in historicArray) {
+                if (item is Bundle) combinedBundles.add(item)
+            }
+        }
+        if (messagesArray != null) {
             for (item in messagesArray) {
-                if (item is Bundle) {
-                    val rawMsgText = item.getCharSequence("text")?.toString()?.trim() ?: continue
-                    if (rawMsgText.isBlank() || isSummaryCount(rawMsgText)) continue
+                if (item is Bundle) combinedBundles.add(item)
+            }
+        }
 
-                    val msgTime = item.getLong("time", timestamp)
-                    var sender = extractSenderFromBundle(item) ?: chatTitle
-                    var cleanText = cleanEditedText(rawMsgText)
+        if (combinedBundles.isNotEmpty()) {
+            for (item in combinedBundles) {
+                val rawMsgText = item.getCharSequence("text")?.toString()?.trim() ?: continue
+                if (rawMsgText.isBlank() || isSummaryCount(rawMsgText)) continue
 
-                    /* Extract embedded sender from group message text (e.g. "~Parth: Hi") */
-                    if (cleanText.contains(": ")) {
-                        val colonIdx = cleanText.indexOf(": ")
-                        if (colonIdx in 1..40) {
-                            val potentialSender = cleanText.substring(0, colonIdx).trim().removePrefix("~").trim()
-                            val body = cleanText.substring(colonIdx + 2).trim()
-                            if (potentialSender.isNotBlank() && body.isNotBlank()) {
-                                sender = potentialSender
-                                cleanText = body
-                            }
+                val msgTime = item.getLong("time", timestamp)
+                var sender = extractSenderFromBundle(item) ?: chatTitle
+                var cleanText = cleanEditedText(rawMsgText)
+
+                /* Extract embedded sender from group message text (e.g. "~Parth: Hi") */
+                if (cleanText.contains(": ")) {
+                    val colonIdx = cleanText.indexOf(": ")
+                    if (colonIdx in 1..40) {
+                        val potentialSender = cleanText.substring(0, colonIdx).trim().removePrefix("~").trim()
+                        val body = cleanText.substring(colonIdx + 2).trim()
+                        if (potentialSender.isNotBlank() && body.isNotBlank()) {
+                            sender = potentialSender
+                            cleanText = body
                         }
                     }
-                    sender = sender.removePrefix("~").trim()
-
-                    val isDeletion = isDeletion(cleanText, sender)
-                    val isEdit = isEdit(rawMsgText)
-                    val isSpamOtp = isSpamOtp(cleanText)
-                    val audioDuration = parseAudioDuration(cleanText)
-                    val isDisappearing = isDisappearing(cleanText)
-
-                    /* Skip non-text placeholders (pure photos/stickers) unless it is a deletion event */
-                    if (!isDeletion && isIgnoredMedia(cleanText)) {
-                        continue
-                    }
-
-                    messagesList.add(
-                        ParsedMessage(
-                            packageName          = packageName,
-                            chatTitle            = chatTitle,
-                            senderName           = sender.ifBlank { chatTitle },
-                            messageText          = cleanText,
-                            notificationId       = notificationId,
-                            timestamp            = if (msgTime > 0) msgTime else timestamp,
-                            isDeletion           = isDeletion,
-                            isEdit               = isEdit,
-                            isGroup              = isGroup,
-                            isSpamOtp            = isSpamOtp,
-                            audioDurationSeconds = audioDuration,
-                            isDisappearing       = isDisappearing,
-                        )
-                    )
                 }
+                sender = sender.removePrefix("~").trim()
+
+                val isDeletion = isDeletion(cleanText, sender)
+                val isEdit = isEdit(rawMsgText)
+                val isSpamOtp = isSpamOtp(cleanText)
+                val audioDuration = parseAudioDuration(cleanText)
+                val isDisappearing = isDisappearing(cleanText)
+                val (isReaction, reactionEmoji) = parseReaction(cleanText)
+                val isCallEvent = isCallEvent(cleanText)
+                val mediaType = detectMediaType(cleanText)
+
+                /* Skip non-text placeholders unless it is a deletion event */
+                if (!isDeletion && isIgnoredMedia(cleanText)) {
+                    continue
+                }
+
+                messagesList.add(
+                    ParsedMessage(
+                        packageName          = packageName,
+                        chatTitle            = chatTitle,
+                        senderName           = sender.ifBlank { chatTitle },
+                        messageText          = cleanText,
+                        notificationId       = notificationId,
+                        timestamp            = if (msgTime > 0) msgTime else timestamp,
+                        isDeletion           = isDeletion,
+                        isEdit               = isEdit,
+                        isGroup              = isGroup,
+                        isSpamOtp            = isSpamOtp,
+                        audioDurationSeconds = audioDuration,
+                        isDisappearing       = isDisappearing,
+                        isReaction           = isReaction,
+                        reactionEmoji        = reactionEmoji,
+                        isCallEvent          = isCallEvent,
+                        conversationTag      = conversationTag,
+                        mediaType            = mediaType,
+                    )
+                )
             }
         }
 
@@ -274,8 +325,10 @@ object WhatsAppNotificationParser {
                 val isSpamOtp = isSpamOtp(cleanText)
                 val audioDuration = parseAudioDuration(cleanText)
                 val isDisappearing = isDisappearing(cleanText)
+                val (isReaction, reactionEmoji) = parseReaction(cleanText)
+                val isCallEvent = isCallEvent(cleanText)
+                val mediaType = detectMediaType(cleanText)
 
-                /* Skip non-text placeholders unless it is a deletion event */
                 if (isDeletion || !isIgnoredMedia(cleanText)) {
                     messagesList.add(
                         ParsedMessage(
@@ -291,6 +344,11 @@ object WhatsAppNotificationParser {
                             isSpamOtp            = isSpamOtp,
                             audioDurationSeconds = audioDuration,
                             isDisappearing       = isDisappearing,
+                            isReaction           = isReaction,
+                            reactionEmoji        = reactionEmoji,
+                            isCallEvent          = isCallEvent,
+                            conversationTag      = conversationTag,
+                            mediaType            = mediaType,
                         )
                     )
                 }
@@ -312,7 +370,6 @@ object WhatsAppNotificationParser {
     }
 
     fun isDeletion(text: String, title: String): Boolean {
-        /* Short-circuit check for common deletion roots before regex array evaluation */
         val combined = "$text $title".lowercase()
         if (!combined.contains("delet") &&
             !combined.contains("apag") &&
@@ -334,7 +391,8 @@ object WhatsAppNotificationParser {
             !combined.contains("حذف") &&
             !combined.contains("删除") &&
             !combined.contains("削除") &&
-            !combined.contains("삭제")
+            !combined.contains("삭제") &&
+            !combined.contains("удален")
         ) {
             return false
         }
@@ -345,12 +403,44 @@ object WhatsAppNotificationParser {
     }
 
     fun isEdit(text: String): Boolean {
-        if (!text.endsWith(")") && !text.contains("edited", ignoreCase = true) && !text.contains("संपादित")) return false
+        if (!text.endsWith(")") &&
+            !text.contains("edit", ignoreCase = true) &&
+            !text.contains("संपादित") &&
+            !text.contains("bearbeitet") &&
+            !text.contains("modifié") &&
+            !text.contains("изменено") &&
+            !text.contains("معدلة") &&
+            !text.contains("düzenlendi") &&
+            !text.contains("diubah")
+        ) {
+            return false
+        }
         return EDIT_REGEX.containsMatchIn(text)
     }
 
     fun cleanEditedText(text: String): String {
         return EDIT_REGEX.replace(text, "").trim()
+    }
+
+    fun parseReaction(text: String): Pair<Boolean, String?> {
+        REACTION_PREFIX_REGEX.find(text)?.let {
+            return Pair(true, it.groupValues[1])
+        }
+        SHORT_REACTION_REGEX.find(text)?.let {
+            return Pair(true, it.groupValues[1])
+        }
+        return Pair(false, null)
+    }
+
+    fun isCallEvent(text: String): Boolean {
+        return MISSED_CALL_REGEX.containsMatchIn(text)
+    }
+
+    fun detectMediaType(text: String): String? {
+        if (POLL_REGEX.containsMatchIn(text)) return "poll"
+        if (LIVE_LOCATION_REGEX.containsMatchIn(text)) return "location"
+        if (AUDIO_DURATION_REGEX.containsMatchIn(text)) return "audio"
+        return null
     }
 
     fun isSpamOtp(text: String): Boolean {

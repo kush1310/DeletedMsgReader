@@ -47,6 +47,7 @@ import androidx.room.ForeignKey
     ],
     indices   = [
         Index(value = ["conversationId", "timestamp"]),
+        Index(value = ["conversationId", "isDeletedBySender", "timestamp"]),
         Index(value = ["isDeletedBySender", "timestamp"]),
         Index(value = ["isEdited", "timestamp"]),
         Index(

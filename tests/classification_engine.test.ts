@@ -80,6 +80,36 @@ describe('ClassificationEngine — Deletion Signal Detection', () => {
     expect(result.isDeletion).toBe(true);
   });
 
+  it('classifies Hindi deletion notification correctly', () => {
+    const result = classifyNotification(buildPayload('यह संदेश हटा दिया गया'));
+    expect(result.classification).toBe('DELETION_SIGNAL');
+    expect(result.isDeletion).toBe(true);
+  });
+
+  it('classifies Gujarati deletion notification correctly', () => {
+    const result = classifyNotification(buildPayload('આ સંદેશ કાઢી નાખવામાં આવ્યો છે'));
+    expect(result.classification).toBe('DELETION_SIGNAL');
+    expect(result.isDeletion).toBe(true);
+  });
+
+  it('classifies Arabic deletion notification correctly', () => {
+    const result = classifyNotification(buildPayload('تم حذف هذه الرسالة'));
+    expect(result.classification).toBe('DELETION_SIGNAL');
+    expect(result.isDeletion).toBe(true);
+  });
+
+  it('classifies Admin deletion notification correctly', () => {
+    const result = classifyNotification(buildPayload('This message was deleted by an admin'));
+    expect(result.classification).toBe('DELETION_SIGNAL');
+    expect(result.isDeletion).toBe(true);
+  });
+
+  it('classifies German admin deletion correctly', () => {
+    const result = classifyNotification(buildPayload('Admin hat diese Nachricht gelöscht'));
+    expect(result.classification).toBe('DELETION_SIGNAL');
+    expect(result.isDeletion).toBe(true);
+  });
+
   it('deletion signal sets isDeletion=true, isEdit=false, isSystemMessage=false', () => {
     const result = classifyNotification(buildPayload('This message was deleted'));
     expect(result.isDeletion).toBe(true);
@@ -103,6 +133,30 @@ describe('ClassificationEngine — Edit Signal Detection', () => {
     expect(result.classification).toBe('EDIT_SIGNAL');
     expect(result.isEdit).toBe(true);
     expect(result.isDeletion).toBe(false);
+  });
+
+  it('classifies English suffix edit correctly: "Meeting at 5pm (edited)"', () => {
+    const result = classifyNotification(buildPayload('Meeting at 5pm (edited)'));
+    expect(result.classification).toBe('EDIT_SIGNAL');
+    expect(result.isEdit).toBe(true);
+  });
+
+  it('classifies Hindi suffix edit correctly: "कल मिलते हैं (संपादित)"', () => {
+    const result = classifyNotification(buildPayload('कल मिलते हैं (संपादित)'));
+    expect(result.classification).toBe('EDIT_SIGNAL');
+    expect(result.isEdit).toBe(true);
+  });
+
+  it('classifies Spanish suffix edit correctly: "Nos vemos mañana (editado)"', () => {
+    const result = classifyNotification(buildPayload('Nos vemos mañana (editado)'));
+    expect(result.classification).toBe('EDIT_SIGNAL');
+    expect(result.isEdit).toBe(true);
+  });
+
+  it('classifies French suffix edit correctly: "Rendez-vous à 14h (modifié)"', () => {
+    const result = classifyNotification(buildPayload('Rendez-vous à 14h (modifié)'));
+    expect(result.classification).toBe('EDIT_SIGNAL');
+    expect(result.isEdit).toBe(true);
   });
 
   it('edit signal returns null normalizedText', () => {

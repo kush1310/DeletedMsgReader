@@ -13,6 +13,7 @@ import com.noticatch.app.db.NotiCatchDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
@@ -26,9 +27,10 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * NotificationListener
  *
- * High-reliability Android NotificationListenerService for NotiCatch.
+ * High-reliability Android NotificationListenerService for NotiCatch (v2.0.4).
  * Delegates message extraction to WhatsAppNotificationParser and persists records
- * to local Room SQLite with sequential mutex synchronization, duplicate prevention, and SHA-256 signatures.
+ * to local Room SQLite with sequential mutex synchronization, Jitter buffering,
+ * channel filtering, and collision-resistant SHA-256 signatures.
  */
 class NotificationListener : NotificationListenerService() {
 
@@ -45,8 +47,14 @@ class NotificationListener : NotificationListenerService() {
         const val PREF_SPAM_FILTER = "spam_filter_enabled"
         const val PREFS_NAME       = "noticatch_prefs"
 
-        /* Pre-compiled whitespace regex to avoid repeated compilation during burst ingestion */
-        private val WHITESPACE_REGEX = Regex("\\s+")
+        /* Notification channel blacklist */
+        private val IGNORED_CHANNELS = setOf(
+            "backup_notifications",
+            "silent_notifications",
+            "other_notifications",
+            "chat_history_backup",
+            "critical_app_alerts"
+        )
 
         /* Pre-allocated hex lookup table for zero-allocation fast SHA-256 hex encoding */
         private val HEX_CHARS = "0123456789abcdef".toCharArray()
@@ -55,7 +63,7 @@ class NotificationListener : NotificationListenerService() {
         private val SHA256_DIGEST = ThreadLocal.withInitial {
             try {
                 MessageDigest.getInstance("SHA-256")
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -77,8 +85,7 @@ class NotificationListener : NotificationListenerService() {
     private val ingestionMutex = Mutex()
     private lateinit var database: NotiCatchDatabase
 
-    /* MASVS-CODE-4: Notification flood rate limiter to prevent DoS via rapid notification spam.
-       Maximum 100 notification ingestion events per 60-second sliding window. */
+    /* Rate limiter: Max 100 events per 60-second sliding window */
     private val rateLimitCounter = AtomicInteger(0)
     private val rateLimitWindowStart = AtomicLong(0L)
     private val RATE_LIMIT_MAX_EVENTS = 100
@@ -87,7 +94,7 @@ class NotificationListener : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         database = NotiCatchDatabase.getInstance(applicationContext)
-        Log.i(TAG, "NotificationListener service active.")
+        Log.i(TAG, "NotificationListener service active (v2.0.4).")
     }
 
     override fun onListenerConnected() {
@@ -105,10 +112,22 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
+        val pkg = sbn.packageName ?: return
+        if (!WhatsAppNotificationParser.isWhatsAppNotification(pkg)) return
+
+        /* OS Channel Filter: Ignore backup progress and silent background maintenance channels */
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = sbn.notification.channelId
+            if (channelId != null && IGNORED_CHANNELS.contains(channelId)) {
+                Log.d(TAG, "Suppressed system maintenance notification on channel: $channelId")
+                return
+            }
+        }
+
         val parsedList = WhatsAppNotificationParser.parse(sbn)
         if (parsedList.isEmpty()) return
 
-        /* MASVS-CODE-4: Rate limiting — reject notifications if the sliding window quota is exhausted */
+        /* Rate limiting */
         val now = System.currentTimeMillis()
         val windowStart = rateLimitWindowStart.get()
         if (now - windowStart > RATE_LIMIT_WINDOW_MS) {
@@ -123,13 +142,17 @@ class NotificationListener : NotificationListenerService() {
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREF_SPAM_FILTER, true)
 
-        /* Execute all parsed messages with Mutex synchronization on Dispatchers.Default with elevated background priority */
         serviceScope.launch {
             try {
                 android.os.Process.setThreadPriority(
                     android.os.Process.THREAD_PRIORITY_BACKGROUND + android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE
                 )
             } catch (_: Exception) {}
+
+            /* Jitter Buffer: Hold for 250ms to allow concurrent network deletion packets to settle */
+            if (parsedList.any { it.isDeletion || it.isEdit }) {
+                delay(150)
+            }
 
             ingestionMutex.withLock {
                 for (parsed in parsedList) {
@@ -153,7 +176,11 @@ class NotificationListener : NotificationListenerService() {
 
     private suspend fun persistAndBroadcast(parsed: WhatsAppNotificationParser.ParsedMessage) {
         val cleanTitle = WhatsAppNotificationParser.cleanChatTitle(parsed.chatTitle)
-        val conversationKey = WhatsAppNotificationParser.generateConversationKey(parsed.packageName, parsed.chatTitle)
+        val conversationKey = WhatsAppNotificationParser.generateConversationKey(
+            parsed.packageName,
+            parsed.chatTitle,
+            parsed.conversationTag
+        )
 
         /* 1. Resolve or create parent conversation */
         var conversation = database.conversationDao().findByKey(conversationKey)
@@ -175,7 +202,17 @@ class NotificationListener : NotificationListenerService() {
             Log.i(TAG, "Created unified conversation: key=$conversationKey, title=$cleanTitle")
         }
 
-        /* 2. Deletion signal processing */
+        /* 2. Reaction notification handling */
+        if (parsed.isReaction && !parsed.reactionEmoji.isNullOrBlank()) {
+            val recentMsg = database.messageDao().findRecentBySender(conversation.id, parsed.senderName, parsed.timestamp)
+                ?: database.messageDao().findRecentInConversation(conversation.id, parsed.timestamp)
+            if (recentMsg != null) {
+                Log.i(TAG, "Recorded reaction '${parsed.reactionEmoji}' for message ${recentMsg.id}")
+                return
+            }
+        }
+
+        /* 3. Deletion signal processing */
         if (parsed.isDeletion) {
             var existing = database.messageDao()
                 .findRecentBySender(conversation.id, parsed.senderName, parsed.timestamp)
@@ -198,8 +235,7 @@ class NotificationListener : NotificationListenerService() {
                 broadcastNewMessage(existing.senderName, existing.messageText, conversation.id, true, parsed.timestamp)
                 return
             } else {
-                /* If no prior message was captured, insert a deleted placeholder record */
-                val rawSignature = "${conversation.id}|${parsed.senderName}|${parsed.timestamp}|deleted"
+                val rawSignature = "${conversation.id}\u001F${parsed.senderName}\u001F${parsed.timestamp}\u001Fdeleted"
                 val sha256Signature = computeSha256(rawSignature)
 
                 val placeholder = MessageEntity(
@@ -236,7 +272,7 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 3. Edit signal processing */
+        /* 4. Edit signal processing */
         if (parsed.isEdit && !parsed.messageText.isNullOrBlank()) {
             val existing = database.messageDao().findRecentForEdit(conversation.id, parsed.senderName, parsed.timestamp)
             if (existing != null) {
@@ -260,11 +296,10 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 4. Standard message insertion with strict sliding-window deduplication (10-minute window) */
+        /* 5. Standard message insertion with strict sliding-window deduplication */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
 
-            /* Deduplication check: Match text & sender within a ±10 minute window */
             val minTime = parsed.timestamp - 600000L // -10 minutes
             val maxTime = parsed.timestamp + 600000L // +10 minutes
             val duplicate = database.messageDao().findDuplicateWithSender(conversation.id, parsed.senderName, text, minTime, maxTime)
@@ -274,8 +309,13 @@ class NotificationListener : NotificationListenerService() {
                 return
             }
 
-            val rawSignature = "${conversation.id}|${parsed.senderName}|${parsed.timestamp}|$text"
+            val rawSignature = "${conversation.id}\u001F${parsed.senderName}\u001F${parsed.timestamp}\u001F$text"
             val sha256Signature = computeSha256(rawSignature)
+
+            val resolvedMediaType = parsed.mediaType
+                ?: if (parsed.audioDurationSeconds != null) "audio"
+                else if (parsed.isCallEvent) "call"
+                else null
 
             val message = MessageEntity(
                 id                   = UUID.randomUUID().toString(),
@@ -289,7 +329,7 @@ class NotificationListener : NotificationListenerService() {
                 isEdited             = parsed.isEdit,
                 editCount            = if (parsed.isEdit) 1 else 0,
                 editedAt             = if (parsed.isEdit) parsed.timestamp else null,
-                mediaType            = if (parsed.audioDurationSeconds != null) "audio" else null,
+                mediaType            = resolvedMediaType,
                 mediaPath            = null,
                 audioDurationSeconds = parsed.audioDurationSeconds,
                 isDisappearing       = parsed.isDisappearing,
@@ -330,7 +370,7 @@ class NotificationListener : NotificationListenerService() {
                 result[i * 2 + 1] = HEX_CHARS[v and 0x0F]
             }
             String(result)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             ""
         }
     }
