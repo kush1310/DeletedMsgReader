@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Continue'
-$tags = @('v2.0.3', 'v2.0.2', 'v2.0.1', 'v1.6.3', 'v1.6.2', 'v1.6.0', 'v1.5.0', 'v1.4.0', 'v1.3.0', 'v1.2.0', 'v1.1.0', 'v1.0.0')
+$tags = @('v2.0.5', 'v2.0.4', 'v2.0.3', 'v2.0.2', 'v2.0.1', 'v1.6.3', 'v1.6.2', 'v1.6.0', 'v1.5.0', 'v1.4.0', 'v1.3.0', 'v1.2.0', 'v1.1.0', 'v1.0.0')
 
 New-Item -ItemType Directory -Force -Path release_binaries | Out-Null
 

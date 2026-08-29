@@ -39,6 +39,7 @@ import { TopAppBar } from '@/components/navigation';
 import { ToggleSwitch, ConfirmationModal } from '@/components/common';
 import { LegalDocumentModal } from '@/components/common/LegalDocumentModal';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDocument } from '@/data/legalContent';
+import { APP_VERSION } from '@/data/version';
 import {
   loadAppSettings,
   saveAppSettings,
@@ -873,7 +874,7 @@ export function SettingsPage() {
                   borderColor: 'var(--md-sys-color-outline-variant)',
                 }}
               >
-                v2.0.3
+                v{APP_VERSION}
               </span>
             </div>
           </div>

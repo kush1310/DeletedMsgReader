@@ -112,6 +112,8 @@ interface AppBrandProps {
  * @param subtitle  - Optional tagline below the application name.
  * @param size      - 'md' for compact placement, 'lg' for auth hero.
  */
+import { APP_VERSION } from '@/data/version';
+
 export function AppBrand({ className = '', subtitle, size = 'md' }: AppBrandProps) {
   return (
     <div className={`flex flex-col items-center gap-1.5 ${className}`}>
@@ -130,7 +132,7 @@ export function AppBrand({ className = '', subtitle, size = 'md' }: AppBrandProp
             border: '1px solid var(--md-sys-color-outline-variant)',
           }}
         >
-          v2.0.3
+          v{APP_VERSION}
         </span>
       </div>
       {subtitle && (

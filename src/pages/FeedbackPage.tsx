@@ -12,6 +12,7 @@ import { TopAppBar, IconButton } from '@/components/navigation';
 import { ToggleSwitch } from '@/components/common';
 import { sanitizeTextInput } from '@/services/SecurityService';
 import { HapticService } from '@/services/HapticService';
+import { APP_VERSION } from '@/data/version';
 
 export function FeedbackPage() {
   const navigate = useNavigate();
@@ -266,7 +267,7 @@ export function FeedbackPage() {
                     color: 'var(--md-sys-color-on-surface-variant)',
                   }}
                 >
-                  <p>app: NotiCatch v2.0.3</p>
+                  <p>app: NotiCatch v{APP_VERSION}</p>
                   <p>target_pkg: com.whatsapp</p>
                   <p>listener_service: ACTIVE</p>
                   <p>battery_saver_exemption: GRANTED</p>
