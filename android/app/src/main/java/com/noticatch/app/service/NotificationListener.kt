@@ -1,8 +1,11 @@
 package com.noticatch.app.service
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -21,16 +24,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
  * NotificationListener
  *
- * High-reliability Android NotificationListenerService for NotiCatch (v2.0.4).
- * Delegates message extraction to WhatsAppNotificationParser and persists records
- * to local Room SQLite with sequential mutex synchronization, Jitter buffering,
- * channel filtering, and collision-resistant SHA-256 signatures.
+ * High-reliability Android NotificationListenerService for NotiCatch.
+ * Intercepts incoming WhatsApp notifications in real-time, extracts individual messages,
+ * persists to Room SQLite with short-window deduplication, and broadcasts events to the UI.
  */
 class NotificationListener : NotificationListenerService() {
 
@@ -47,19 +50,10 @@ class NotificationListener : NotificationListenerService() {
         const val PREF_SPAM_FILTER = "spam_filter_enabled"
         const val PREFS_NAME       = "noticatch_prefs"
 
-        /* Notification channel blacklist */
-        private val IGNORED_CHANNELS = setOf(
-            "backup_notifications",
-            "silent_notifications",
-            "other_notifications",
-            "chat_history_backup",
-            "critical_app_alerts"
-        )
-
         /* Pre-allocated hex lookup table for zero-allocation fast SHA-256 hex encoding */
         private val HEX_CHARS = "0123456789abcdef".toCharArray()
 
-        /* ThreadLocal MessageDigest recycling to eliminate repeated JNI provider lookups */
+        /* ThreadLocal MessageDigest recycling */
         private val SHA256_DIGEST = ThreadLocal.withInitial {
             try {
                 MessageDigest.getInstance("SHA-256")
@@ -71,6 +65,46 @@ class NotificationListener : NotificationListenerService() {
         /* High-performance in-memory event flow for zero-IPC dispatch */
         private val _messageEvents = MutableSharedFlow<MessageBroadcastEvent>(extraBufferCapacity = 64)
         val messageEvents = _messageEvents.asSharedFlow()
+
+        @Volatile
+        var isConnected: Boolean = false
+            private set
+
+        /**
+         * ensureServiceConnected
+         *
+         * Reconnects or kickstarts the NotificationListenerService if the OS unbound it.
+         */
+        fun ensureServiceConnected(context: Context) {
+            val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+            val isEnabled = flat != null && flat.contains(context.packageName)
+            if (isEnabled) {
+                val componentName = ComponentName(context, NotificationListener::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    try {
+                        requestRebind(componentName)
+                        Log.i(TAG, "Requested rebind for NotificationListenerService.")
+                    } catch (e: Exception) {
+                        try {
+                            val pm = context.packageManager
+                            pm.setComponentEnabledSetting(
+                                componentName,
+                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                PackageManager.DONT_KILL_APP
+                            )
+                            pm.setComponentEnabledSetting(
+                                componentName,
+                                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                                PackageManager.DONT_KILL_APP
+                            )
+                            Log.i(TAG, "Toggled NotificationListenerService component state to force rebind.")
+                        } catch (e2: Exception) {
+                            Log.w(TAG, "Could not toggle component state: ${e2.message}")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     data class MessageBroadcastEvent(
@@ -83,30 +117,43 @@ class NotificationListener : NotificationListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val ingestionMutex = Mutex()
-    private lateinit var database: NotiCatchDatabase
+    private var database: NotiCatchDatabase? = null
 
-    /* Rate limiter: Max 100 events per 60-second sliding window */
+    /* Rate limiter: Max 1000 events per 60-second sliding window */
     private val rateLimitCounter = AtomicInteger(0)
     private val rateLimitWindowStart = AtomicLong(0L)
-    private val RATE_LIMIT_MAX_EVENTS = 100
+    private val RATE_LIMIT_MAX_EVENTS = 1000
     private val RATE_LIMIT_WINDOW_MS = 60_000L
 
     override fun onCreate() {
         super.onCreate()
         database = NotiCatchDatabase.getInstance(applicationContext)
-        Log.i(TAG, "NotificationListener service active (v2.0.4).")
+        Log.i(TAG, "NotificationListener service active.")
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        isConnected = true
+        if (database == null) {
+            database = NotiCatchDatabase.getInstance(applicationContext)
+        }
         Log.i(TAG, "NotificationListener connected to Android subsystem.")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        isConnected = false
         Log.w(TAG, "NotificationListener disconnected — requesting rebind.")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            requestRebind(ComponentName(this, NotificationListener::class.java))
+            try {
+                requestRebind(ComponentName(this, NotificationListener::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to request rebind on disconnect: ${e.message}")
+            }
         }
     }
 
@@ -115,11 +162,11 @@ class NotificationListener : NotificationListenerService() {
         val pkg = sbn.packageName ?: return
         if (!WhatsAppNotificationParser.isWhatsAppNotification(pkg)) return
 
-        /* OS Channel Filter: Ignore backup progress and silent background maintenance channels */
+        /* OS Channel Filter: Ignore pure background backup progress channels */
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = sbn.notification.channelId
-            if (channelId != null && IGNORED_CHANNELS.contains(channelId)) {
-                Log.d(TAG, "Suppressed system maintenance notification on channel: $channelId")
+            if (isIgnoredChannel(channelId)) {
+                Log.d(TAG, "Suppressed backup maintenance notification on channel: $channelId")
                 return
             }
         }
@@ -135,12 +182,12 @@ class NotificationListener : NotificationListenerService() {
             rateLimitCounter.set(0)
         }
         if (rateLimitCounter.incrementAndGet() > RATE_LIMIT_MAX_EVENTS) {
-            Log.w(TAG, "Rate limit exceeded — suppressing notification burst")
+            Log.w(TAG, "Rate limit exceeded — suppressing excessive burst")
             return
         }
 
         val spamFilterEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(PREF_SPAM_FILTER, true)
+            .getBoolean(PREF_SPAM_FILTER, false)
 
         serviceScope.launch {
             try {
@@ -149,32 +196,41 @@ class NotificationListener : NotificationListenerService() {
                 )
             } catch (_: Exception) {}
 
-            /* Jitter Buffer: Hold for 250ms to allow concurrent network deletion packets to settle */
+            /* Jitter Buffer: Hold for 150ms to allow concurrent network deletion packets to settle */
             if (parsedList.any { it.isDeletion || it.isEdit }) {
                 delay(150)
             }
 
             ingestionMutex.withLock {
+                val db = database ?: NotiCatchDatabase.getInstance(applicationContext).also { database = it }
                 for (parsed in parsedList) {
                     if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
                         Log.d(TAG, "Suppressed OTP message from: ${parsed.senderName}")
                         continue
                     }
-                    persistAndBroadcast(parsed)
+                    persistAndBroadcast(db, parsed)
                 }
             }
         }
+    }
+
+    private fun isIgnoredChannel(channelId: String?): Boolean {
+        if (channelId == null) return false
+        val lower = channelId.lowercase()
+        return lower == "chat_history_backup" ||
+               lower == "backup_notifications" ||
+               (lower.contains("backup") && !lower.contains("message") && !lower.contains("chat"))
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val pkg = sbn.packageName ?: return
         if (WhatsAppNotificationParser.isWhatsAppNotification(pkg)) {
-            Log.d(TAG, "WhatsApp notification dismissed from shade: id=${sbn.id}")
+            Log.d(TAG, "WhatsApp notification dismissed: id=${sbn.id}")
         }
     }
 
-    private suspend fun persistAndBroadcast(parsed: WhatsAppNotificationParser.ParsedMessage) {
+    private suspend fun persistAndBroadcast(db: NotiCatchDatabase, parsed: WhatsAppNotificationParser.ParsedMessage) {
         val cleanTitle = WhatsAppNotificationParser.cleanChatTitle(parsed.chatTitle)
         val conversationKey = WhatsAppNotificationParser.generateConversationKey(
             parsed.packageName,
@@ -183,9 +239,9 @@ class NotificationListener : NotificationListenerService() {
         )
 
         /* 1. Resolve or create parent conversation */
-        var conversation = database.conversationDao().findByKey(conversationKey)
+        var conversation = db.conversationDao().findByKey(conversationKey)
         if (conversation == null) {
-            conversation = database.conversationDao().findByTitle(cleanTitle)
+            conversation = db.conversationDao().findByTitle(cleanTitle)
         }
 
         if (conversation == null) {
@@ -198,14 +254,14 @@ class NotificationListener : NotificationListenerService() {
                 lastMessageTimestamp = parsed.timestamp,
                 deletedCount         = if (parsed.isDeletion) 1 else 0,
             )
-            database.conversationDao().insert(conversation)
-            Log.i(TAG, "Created unified conversation: key=$conversationKey, title=$cleanTitle")
+            db.conversationDao().insert(conversation)
+            Log.i(TAG, "Created conversation: key=$conversationKey, title=$cleanTitle")
         }
 
         /* 2. Reaction notification handling */
         if (parsed.isReaction && !parsed.reactionEmoji.isNullOrBlank()) {
-            val recentMsg = database.messageDao().findRecentBySender(conversation.id, parsed.senderName, parsed.timestamp)
-                ?: database.messageDao().findRecentInConversation(conversation.id, parsed.timestamp)
+            val recentMsg = db.messageDao().findRecentBySender(conversation.id, parsed.senderName, parsed.timestamp)
+                ?: db.messageDao().findRecentInConversation(conversation.id, parsed.timestamp)
             if (recentMsg != null) {
                 Log.i(TAG, "Recorded reaction '${parsed.reactionEmoji}' for message ${recentMsg.id}")
                 return
@@ -214,17 +270,17 @@ class NotificationListener : NotificationListenerService() {
 
         /* 3. Deletion signal processing */
         if (parsed.isDeletion) {
-            var existing = database.messageDao()
+            var existing = db.messageDao()
                 .findRecentBySender(conversation.id, parsed.senderName, parsed.timestamp)
 
             if (existing == null) {
-                existing = database.messageDao()
+                existing = db.messageDao()
                     .findRecentInConversation(conversation.id, parsed.timestamp)
             }
 
             if (existing != null) {
-                database.messageDao().update(existing.copy(isDeletedBySender = true))
-                database.conversationDao().update(
+                db.messageDao().update(existing.copy(isDeletedBySender = true))
+                db.conversationDao().update(
                     conversation.copy(
                         chatTitle            = cleanTitle,
                         lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
@@ -258,8 +314,8 @@ class NotificationListener : NotificationListenerService() {
                     isPurged             = false,
                     purgedAt             = null,
                 )
-                database.messageDao().insert(placeholder)
-                database.conversationDao().update(
+                db.messageDao().insert(placeholder)
+                db.conversationDao().update(
                     conversation.copy(
                         chatTitle            = cleanTitle,
                         lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
@@ -274,7 +330,7 @@ class NotificationListener : NotificationListenerService() {
 
         /* 4. Edit signal processing */
         if (parsed.isEdit && !parsed.messageText.isNullOrBlank()) {
-            val existing = database.messageDao().findRecentForEdit(conversation.id, parsed.senderName, parsed.timestamp)
+            val existing = db.messageDao().findRecentForEdit(conversation.id, parsed.senderName, parsed.timestamp)
             if (existing != null) {
                 val updated = existing.copy(
                     originalText = existing.originalText ?: existing.messageText,
@@ -283,8 +339,8 @@ class NotificationListener : NotificationListenerService() {
                     editCount    = existing.editCount + 1,
                     editedAt     = parsed.timestamp,
                 )
-                database.messageDao().update(updated)
-                database.conversationDao().update(
+                db.messageDao().update(updated)
+                db.conversationDao().update(
                     conversation.copy(
                         chatTitle            = cleanTitle,
                         lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
@@ -296,16 +352,16 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        /* 5. Standard message insertion with strict sliding-window deduplication */
+        /* 5. Standard message insertion with 3-second sliding-window duplicate suppression */
         if (!parsed.isDeletion && !parsed.messageText.isNullOrBlank()) {
             val text = parsed.messageText
 
-            val minTime = parsed.timestamp - 600000L // -10 minutes
-            val maxTime = parsed.timestamp + 600000L // +10 minutes
-            val duplicate = database.messageDao().findDuplicateWithSender(conversation.id, parsed.senderName, text, minTime, maxTime)
+            val minTime = parsed.timestamp - 3000L // -3 seconds
+            val maxTime = parsed.timestamp + 3000L // +3 seconds
+            val duplicate = db.messageDao().findDuplicateWithSender(conversation.id, parsed.senderName, text, minTime, maxTime)
 
             if (duplicate != null) {
-                Log.d(TAG, "Skipped duplicate notification message: '${text.take(20)}...' for chat '$cleanTitle'")
+                Log.d(TAG, "Skipped duplicate drawer notification: '${text.take(20)}...' for chat '$cleanTitle'")
                 return
             }
 
@@ -337,10 +393,10 @@ class NotificationListener : NotificationListenerService() {
                 isPurged             = false,
                 purgedAt             = null,
             )
-            database.messageDao().insert(message)
+            db.messageDao().insert(message)
 
             /* Update parent conversation metadata */
-            database.conversationDao().update(
+            db.conversationDao().update(
                 conversation.copy(
                     chatTitle            = cleanTitle,
                     lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),

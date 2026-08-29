@@ -26,11 +26,13 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)
         configureWebViewSandbox()
         applyScreenSecureFlag()
+        com.noticatch.app.service.NotificationListener.ensureServiceConnected(this)
     }
 
     override fun onResume() {
         super.onResume()
         applyScreenSecureFlag()
+        com.noticatch.app.service.NotificationListener.ensureServiceConnected(this)
     }
 
     /**

@@ -255,6 +255,9 @@ class MessageBridgePlugin : Plugin() {
     fun isNotificationListenerEnabled(call: PluginCall) {
         val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
         val enabled = flat != null && flat.contains(context.packageName)
+        if (enabled) {
+            NotificationListener.ensureServiceConnected(context)
+        }
         val res = JSObject().apply {
             put("enabled", enabled)
         }
@@ -374,6 +377,8 @@ class MessageBridgePlugin : Plugin() {
 
                 val array = JSArray()
                 for (entity in entities) {
+                    val latestMsg = db.messageDao().findRecentInConversation(entity.id, System.currentTimeMillis() + 86400000L)
+                    val snippet = latestMsg?.messageText ?: ""
                     val obj = JSObject().apply {
                         put("id",                   entity.id)
                         put("conversationKey",      entity.conversationKey)
@@ -382,6 +387,8 @@ class MessageBridgePlugin : Plugin() {
                         put("unreadCount",          entity.unreadCount)
                         put("lastMessageTimestamp", entity.lastMessageTimestamp)
                         put("deletedCount",         entity.deletedCount)
+                        put("lastMessageSnippet",   snippet)
+                        put("hasDeletedMessages",   entity.deletedCount > 0)
                     }
                     array.put(obj)
                 }

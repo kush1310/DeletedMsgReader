@@ -11,10 +11,12 @@ import android.service.notification.StatusBarNotification
  *
  * Decoupled, pure-Kotlin notification extraction and heuristic parsing engine for NotiCatch.
  *
- * Version 2.0.4 Capabilities:
+ * Version 2.0.4+ Universal Engine:
+ *   - Universal WhatsApp package recognition (WhatsApp, WhatsApp Business, Dual App, Cloned, GB, Beta)
  *   - Canonical JID/Tag preservation for stable conversation keys across contact renames
  *   - Android 10-15 MessagingStyle multi-message bundle array extraction
  *   - android.historicMessages and WearableExtender fallback extraction
+ *   - InboxStyle EXTRA_TEXT_LINES multi-message array traversal
  *   - Multilingual deletion detection across 35+ languages including admin deletions
  *   - Multilingual Edit detection and suffix stripping across 35+ languages
  *   - Reaction notification detection and parent message correlation tagging
@@ -22,7 +24,7 @@ import android.service.notification.StatusBarNotification
  *   - Disappearing messages ephemeral flag and timer update detection
  *   - Poll and Location share metadata identification
  *   - Missed call notification classification
- *   - Media placeholder filtering and OTP broadcast classification
+ *   - Multilingual colon separator support (ASCII ': ' and full-width '：')
  */
 object WhatsAppNotificationParser {
 
@@ -87,7 +89,7 @@ object WhatsAppNotificationParser {
         Regex("આ સંદેશ કાઢી નાખવામાં આવ્યો છે"),
         Regex("આ સંદેશ એડમિન દ્વારા કાઢી નાખવામાં આવ્યો છે"),
         Regex("இந்த செய்தி நீக்கப்பட்டது"),
-        Regex("ఈ సందేశం తొలગించబడింది"),
+        Regex("ఈ సందేశం తొలగించబడింది"),
         Regex("ಈ ಸಂದೇಶವನ್ನು ಅಳಿಸಲಾಗಿದೆ"),
         Regex("ഈ സന്ദേശം ഇല്ലാതാക്കി"),
         Regex("تم حذف هذه الرسالة"),
@@ -124,15 +126,6 @@ object WhatsAppNotificationParser {
     private val POLL_REGEX = Regex("^(?:📊\\s*)?Poll:\\s*(.+)$", RegexOption.IGNORE_CASE)
     private val LIVE_LOCATION_REGEX = Regex("^(?:📍\\s*)?(?:Live location shared|Location|Ubicación en tiempo real|Localização em tempo real|Partage de localisation)$", RegexOption.IGNORE_CASE)
 
-    /** OTP & transactional automated broadcast filter patterns. */
-    private val OTP_PATTERNS = listOf(
-        Regex("\\b\\d{4,8}\\b.*\\b(code|otp|passcode|pin|verification)\\b", RegexOption.IGNORE_CASE),
-        Regex("\\b(code|otp|passcode|pin|verification)\\b.*\\b\\d{4,8}\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bverification code\\b",                       RegexOption.IGNORE_CASE),
-        Regex("\\bone[\\s-]?time[\\s-]?password\\b",           RegexOption.IGNORE_CASE),
-        Regex("\\bdo not share\\b.*\\b(code|otp)\\b",          RegexOption.IGNORE_CASE)
-    )
-
     /** Suffix pattern attached by WhatsApp for batched notifications */
     private val TITLE_MESSAGE_COUNT_REGEX = Regex("\\s*\\(\\d+\\s+(?:new\\s+)?messages?\\)$", RegexOption.IGNORE_CASE)
 
@@ -151,8 +144,18 @@ object WhatsAppNotificationParser {
         Regex("^(?:🎬\\s*)?GIF$",              RegexOption.IGNORE_CASE)
     )
 
+    /**
+     * isWhatsAppNotification
+     *
+     * Universal matching for all WhatsApp variants, cloned spaces, and business distributions.
+     */
     fun isWhatsAppNotification(packageName: String?): Boolean {
-        return packageName == WHATSAPP_PKG || packageName == WHATSAPP_BUSINESS_PKG
+        if (packageName.isNullOrBlank()) return false
+        return packageName.contains("whatsapp", ignoreCase = true) ||
+               packageName == WHATSAPP_PKG ||
+               packageName == WHATSAPP_BUSINESS_PKG ||
+               packageName.startsWith("com.whatsapp") ||
+               packageName.endsWith(".whatsapp")
     }
 
     fun isIgnoredMedia(text: String): Boolean {
@@ -205,9 +208,6 @@ object WhatsAppNotificationParser {
         val extras: Bundle = notification.extras ?: return emptyList()
         val conversationTag = sbn.tag
 
-        /* Filter out group summary notifications when they contain no individual payloads */
-        val isGroupSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
-
         val isGroupExplicit = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
         val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
         val isGroup = isGroupExplicit || (!conversationTitle.isNullOrBlank()) || (conversationTag?.contains("@g.us") == true)
@@ -222,7 +222,7 @@ object WhatsAppNotificationParser {
         }
         val chatTitle = cleanChatTitle(candidateTitle)
 
-        val timestamp = sbn.postTime
+        val timestamp = if (sbn.postTime > 0) sbn.postTime else System.currentTimeMillis()
         val notificationId = sbn.id
         val messagesList = mutableListOf<ParsedMessage>()
 
@@ -251,17 +251,11 @@ object WhatsAppNotificationParser {
                 var sender = extractSenderFromBundle(item) ?: chatTitle
                 var cleanText = cleanEditedText(rawMsgText)
 
-                /* Extract embedded sender from group message text (e.g. "~Parth: Hi") */
-                if (cleanText.contains(": ")) {
-                    val colonIdx = cleanText.indexOf(": ")
-                    if (colonIdx in 1..40) {
-                        val potentialSender = cleanText.substring(0, colonIdx).trim().removePrefix("~").trim()
-                        val body = cleanText.substring(colonIdx + 2).trim()
-                        if (potentialSender.isNotBlank() && body.isNotBlank()) {
-                            sender = potentialSender
-                            cleanText = body
-                        }
-                    }
+                /* Extract embedded sender from group message text (e.g. "~Parth: Hi" or "Parth: Hi" or "Parth：Hi") */
+                val splitSender = extractEmbeddedSender(cleanText)
+                if (splitSender != null) {
+                    sender = splitSender.first
+                    cleanText = splitSender.second
                 }
                 sender = sender.removePrefix("~").trim()
 
@@ -274,7 +268,7 @@ object WhatsAppNotificationParser {
                 val isCallEvent = isCallEvent(cleanText)
                 val mediaType = detectMediaType(cleanText)
 
-                /* Skip non-text placeholders unless it is a deletion event */
+                /* Skip non-text media placeholders unless it is a deletion event */
                 if (!isDeletion && isIgnoredMedia(cleanText)) {
                     continue
                 }
@@ -303,19 +297,71 @@ object WhatsAppNotificationParser {
             }
         }
 
-        /* 2. Fallback to standard BigText/Text extraction if no MessagingStyle bundles found */
-        if (messagesList.isEmpty() && !isGroupSummary) {
+        /* 2. Extraction from InboxStyle EXTRA_TEXT_LINES if no MessagingStyle messages extracted */
+        if (messagesList.isEmpty()) {
+            val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            if (textLines != null && textLines.isNotEmpty()) {
+                for (lineSeq in textLines) {
+                    val line = lineSeq?.toString()?.trim() ?: continue
+                    if (line.isBlank() || isSummaryCount(line)) continue
+
+                    var sender = chatTitle
+                    var cleanText = cleanEditedText(line)
+
+                    val splitSender = extractEmbeddedSender(cleanText)
+                    if (splitSender != null) {
+                        sender = splitSender.first
+                        cleanText = splitSender.second
+                    }
+                    sender = sender.removePrefix("~").trim()
+
+                    val isDeletion = isDeletion(cleanText, sender)
+                    val isEdit = isEdit(line)
+                    val isSpamOtp = isSpamOtp(cleanText)
+                    val audioDuration = parseAudioDuration(cleanText)
+                    val isDisappearing = isDisappearing(cleanText)
+                    val (isReaction, reactionEmoji) = parseReaction(cleanText)
+                    val isCallEvent = isCallEvent(cleanText)
+                    val mediaType = detectMediaType(cleanText)
+
+                    if (isDeletion || !isIgnoredMedia(cleanText)) {
+                        messagesList.add(
+                            ParsedMessage(
+                                packageName          = packageName,
+                                chatTitle            = chatTitle,
+                                senderName           = sender.ifBlank { chatTitle },
+                                messageText          = cleanText,
+                                notificationId       = notificationId,
+                                timestamp            = timestamp,
+                                isDeletion           = isDeletion,
+                                isEdit               = isEdit,
+                                isGroup              = isGroup,
+                                isSpamOtp            = isSpamOtp,
+                                audioDurationSeconds = audioDuration,
+                                isDisappearing       = isDisappearing,
+                                isReaction           = isReaction,
+                                reactionEmoji        = reactionEmoji,
+                                isCallEvent          = isCallEvent,
+                                conversationTag      = conversationTag,
+                                mediaType            = mediaType,
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        /* 3. Fallback to standard BigText/Text extraction if still empty */
+        if (messagesList.isEmpty()) {
             val bodyText = extractBodyText(extras)
             if (bodyText.isNotBlank() && !isSummaryCount(bodyText)) {
                 var senderName = chatTitle
                 var cleanBody = bodyText
 
-                if (cleanBody.contains(": ")) {
-                    val parts = cleanBody.split(": ", limit = 2)
-                    if (parts.size == 2 && parts[0].length in 1..40) {
-                        senderName = parts[0].trim().removePrefix("~").trim()
-                        cleanBody = parts[1].trim()
-                    }
+                val splitSender = extractEmbeddedSender(cleanBody)
+                if (splitSender != null) {
+                    senderName = splitSender.first
+                    cleanBody = splitSender.second
                 }
                 senderName = senderName.removePrefix("~").trim()
 
@@ -356,6 +402,28 @@ object WhatsAppNotificationParser {
         }
 
         return messagesList
+    }
+
+    private fun extractEmbeddedSender(text: String): Pair<String, String>? {
+        // Standard ASCII colon ": "
+        if (text.contains(": ")) {
+            val idx = text.indexOf(": ")
+            if (idx in 1..40) {
+                val s = text.substring(0, idx).trim().removePrefix("~").trim()
+                val b = text.substring(idx + 2).trim()
+                if (s.isNotBlank() && b.isNotBlank()) return Pair(s, b)
+            }
+        }
+        // Full-width colon "：" (used in CJK/Hindi/Arabic translations)
+        if (text.contains("：")) {
+            val idx = text.indexOf("：")
+            if (idx in 1..40) {
+                val s = text.substring(0, idx).trim().removePrefix("~").trim()
+                val b = text.substring(idx + 1).trim()
+                if (s.isNotBlank() && b.isNotBlank()) return Pair(s, b)
+            }
+        }
+        return null
     }
 
     private val SUMMARY_REGEX_1 = Regex("^\\d+\\s+new\\s+messages?$", RegexOption.IGNORE_CASE)
@@ -444,7 +512,9 @@ object WhatsAppNotificationParser {
     }
 
     fun isSpamOtp(text: String): Boolean {
-        return OTP_PATTERNS.any { it.containsMatchIn(text) }
+        return text.contains("your whatsapp code is", ignoreCase = true) ||
+               text.contains("is your whatsapp code", ignoreCase = true) ||
+               text.contains("verification code do not share", ignoreCase = true)
     }
 
     fun parseAudioDuration(text: String): Int? {
@@ -481,6 +551,9 @@ object WhatsAppNotificationParser {
         extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim()?.let {
             if (it.isNotBlank()) return it
         }
+        extras.getCharSequence("android.title")?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
         return ""
     }
 
@@ -489,17 +562,11 @@ object WhatsAppNotificationParser {
             if (it.isNotBlank()) return it
         }
 
-        val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-        if (textLines != null && textLines.isNotEmpty()) {
-            for (i in textLines.indices.reversed()) {
-                val line = textLines[i]?.toString()?.trim()
-                if (!line.isNullOrBlank() && !isSummaryCount(line)) {
-                    return line
-                }
-            }
+        extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
         }
 
-        extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()?.let {
+        extras.getCharSequence("android.text")?.toString()?.trim()?.let {
             if (it.isNotBlank()) return it
         }
 
