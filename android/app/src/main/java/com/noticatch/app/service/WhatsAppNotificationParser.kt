@@ -351,9 +351,9 @@ object WhatsAppNotificationParser {
             }
         }
 
-        /* 3. Fallback to standard BigText/Text extraction if still empty */
+        /* 3. Fallback to standard BigText/Text/tickerText extraction if still empty */
         if (messagesList.isEmpty()) {
-            val bodyText = extractBodyText(extras)
+            val bodyText = extractBodyText(extras, notification)
             if (bodyText.isNotBlank() && !isSummaryCount(bodyText)) {
                 var senderName = chatTitle
                 var cleanBody = bodyText
@@ -557,7 +557,7 @@ object WhatsAppNotificationParser {
         return ""
     }
 
-    private fun extractBodyText(extras: Bundle): String {
+    private fun extractBodyText(extras: Bundle, notification: Notification? = null): String {
         extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()?.let {
             if (it.isNotBlank()) return it
         }
@@ -567,6 +567,10 @@ object WhatsAppNotificationParser {
         }
 
         extras.getCharSequence("android.text")?.toString()?.trim()?.let {
+            if (it.isNotBlank()) return it
+        }
+
+        notification?.tickerText?.toString()?.trim()?.let {
             if (it.isNotBlank()) return it
         }
 
