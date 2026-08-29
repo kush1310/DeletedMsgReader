@@ -74,8 +74,6 @@ class MainActivity : BridgeActivity() {
             bridge?.webView?.settings?.apply {
                 cacheMode = WebSettings.LOAD_DEFAULT
                 setGeolocationEnabled(false)
-                allowFileAccess = false
-                allowContentAccess = false
                 @Suppress("DEPRECATION")
                 allowFileAccessFromFileURLs = false
                 @Suppress("DEPRECATION")

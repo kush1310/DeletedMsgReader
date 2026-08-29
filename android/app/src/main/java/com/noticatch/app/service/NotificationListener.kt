@@ -76,33 +76,37 @@ class NotificationListener : NotificationListenerService() {
          * Reconnects or kickstarts the NotificationListenerService if the OS unbound it.
          */
         fun ensureServiceConnected(context: Context) {
-            val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-            val isEnabled = flat != null && flat.contains(context.packageName)
-            if (isEnabled) {
-                val componentName = ComponentName(context, NotificationListener::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    try {
-                        requestRebind(componentName)
-                        Log.i(TAG, "Requested rebind for NotificationListenerService.")
-                    } catch (e: Exception) {
+            try {
+                val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+                val isEnabled = flat != null && flat.contains(context.packageName)
+                if (isEnabled) {
+                    val componentName = ComponentName(context, NotificationListener::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                         try {
-                            val pm = context.packageManager
-                            pm.setComponentEnabledSetting(
-                                componentName,
-                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                                PackageManager.DONT_KILL_APP
-                            )
-                            pm.setComponentEnabledSetting(
-                                componentName,
-                                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                                PackageManager.DONT_KILL_APP
-                            )
-                            Log.i(TAG, "Toggled NotificationListenerService component state to force rebind.")
-                        } catch (e2: Exception) {
-                            Log.w(TAG, "Could not toggle component state: ${e2.message}")
+                            requestRebind(componentName)
+                            Log.i(TAG, "Requested rebind for NotificationListenerService.")
+                        } catch (e: Exception) {
+                            try {
+                                val pm = context.packageManager
+                                pm.setComponentEnabledSetting(
+                                    componentName,
+                                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                    PackageManager.DONT_KILL_APP
+                                )
+                                pm.setComponentEnabledSetting(
+                                    componentName,
+                                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                                    PackageManager.DONT_KILL_APP
+                                )
+                                Log.i(TAG, "Toggled NotificationListenerService component state to force rebind.")
+                            } catch (e2: Exception) {
+                                Log.w(TAG, "Could not toggle component state: ${e2.message}")
+                            }
                         }
                     }
                 }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Non-fatal error in ensureServiceConnected: ${e.message}")
             }
         }
     }
