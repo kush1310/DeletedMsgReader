@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.noticatch.app',
-  appName: 'NotiCatch',
+  appName: 'SpectralVault',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

@@ -18,7 +18,9 @@
  */
 
 import React, { useCallback } from 'react';
-import { MessageCircle, ShieldAlert, Settings } from 'lucide-react';
+import { MessageCircle, ShieldAlert, Settings, Activity, Terminal } from 'lucide-react';
+import { APP_NAME, APP_VERSION, APP_TAGLINE } from '@/data/version';
+import { SpectralVaultLogo } from '@/components/common';
 import type { NavTab } from '@/types';
 import { HapticService } from '@/services/HapticService';
 
@@ -110,26 +112,24 @@ interface AppBrandProps {
  *
  * @param className - Additional layout classes.
  * @param subtitle  - Optional tagline below the application name.
- * @param size      - 'md' for compact placement, 'lg' for auth hero.
  */
-import { APP_VERSION } from '@/data/version';
-
-export function AppBrand({ className = '', subtitle, size = 'md' }: AppBrandProps) {
+export function AppBrand({ className = '', subtitle = APP_TAGLINE, size = 'md' }: AppBrandProps) {
   return (
-    <div className={`flex flex-col items-center gap-1.5 ${className}`}>
-      <div className="flex items-center gap-2">
+    <div className={`flex flex-col items-center gap-2 ${className}`}>
+      <div className="flex items-center gap-2.5">
+        <SpectralVaultLogo size={size === 'lg' ? 36 : 28} glow />
         <span
           className={`font-extrabold text-on-surface tracking-tight ${size === 'lg' ? 'text-2xl' : 'text-xl'}`}
           style={{ letterSpacing: '-0.02em' }}
         >
-          NotiCatch
+          {APP_NAME}
         </span>
         <span
-          className="text-2xs font-bold px-2 py-0.5 rounded-full"
+          className="text-2xs font-bold px-2 py-0.5 rounded-full border"
           style={{
             background: 'var(--md-sys-color-primary-container)',
             color: 'var(--md-sys-color-on-primary-container)',
-            border: '1px solid var(--md-sys-color-outline-variant)',
+            borderColor: 'var(--md-sys-color-outline-variant)',
           }}
         >
           v{APP_VERSION}
@@ -164,19 +164,31 @@ const NAV_ITEMS: NavItem[] = [
     tab:   'chats',
     label: 'Chats',
     id:    'nav-tab-chats',
-    icon:  <MessageCircle strokeWidth={2} className="w-[22px] h-[22px]" />,
+    icon:  <MessageCircle strokeWidth={2} className="w-5 h-5" />,
   },
   {
     tab:   'deleted',
     label: 'Deleted',
     id:    'nav-tab-deleted',
-    icon:  <ShieldAlert strokeWidth={2} className="w-[22px] h-[22px]" />,
+    icon:  <ShieldAlert strokeWidth={2} className="w-5 h-5" />,
+  },
+  {
+    tab:   'inspector',
+    label: 'Packets',
+    id:    'nav-tab-inspector',
+    icon:  <Activity strokeWidth={2} className="w-5 h-5" />,
+  },
+  {
+    tab:   'logs',
+    label: 'Logs',
+    id:    'nav-tab-logs',
+    icon:  <Terminal strokeWidth={2} className="w-5 h-5" />,
   },
   {
     tab:   'settings',
     label: 'Settings',
     id:    'nav-tab-settings',
-    icon:  <Settings strokeWidth={2} className="w-[22px] h-[22px]" />,
+    icon:  <Settings strokeWidth={2} className="w-5 h-5" />,
   },
 ];
 

@@ -9,19 +9,26 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * NotiCatchDatabase
  *
- * High-performance Room Database singleton for NotiCatch.
- * Configured with Write-Ahead Logging (WAL), 256MB memory-mapped I/O,
- * 8MB dedicated page cache, secure deletion, and auto-checkpointing.
+ * High-performance Room Database singleton for SpectralVault.
+ * Configured with Write-Ahead Logging (WAL), memory-mapped I/O,
+ * dedicated page cache, secure deletion, and auto-checkpointing.
  */
 @Database(
-    entities = [MessageEntity::class, ConversationEntity::class],
-    version  = 1,
+    entities = [
+        MessageEntity::class,
+        ConversationEntity::class,
+        NotificationPacketEntity::class,
+        DiagnosticLogEntity::class
+    ],
+    version  = 2,
     exportSchema = false,
 )
 abstract class NotiCatchDatabase : RoomDatabase() {
 
-    abstract fun messageDao():      MessageDao
-    abstract fun conversationDao(): ConversationDao
+    abstract fun messageDao():            MessageDao
+    abstract fun conversationDao():       ConversationDao
+    abstract fun notificationPacketDao(): NotificationPacketDao
+    abstract fun diagnosticLogDao():      DiagnosticLogDao
 
     companion object {
         @Volatile
@@ -52,14 +59,11 @@ abstract class NotiCatchDatabase : RoomDatabase() {
                             db.execSQL("PRAGMA cache_size = -8000;")     // 8MB dedicated page cache
                             db.execSQL("PRAGMA busy_timeout = 5000;")    // 5000ms busy retry timeout
                             db.execSQL("PRAGMA wal_autocheckpoint = 1000;") // Checkpoint every 1000 pages
-                            /* MASVS-STORAGE-2: Overwrite deleted data pages with zeroes
-                               to prevent forensic recovery of deleted messages */
                             db.execSQL("PRAGMA secure_delete = ON;")
-                            /* Bound WAL file growth to 8MB to prevent disk exhaustion */
                             db.execSQL("PRAGMA journal_size_limit = 8388608;")
-                            db.execSQL("PRAGMA optimize;")               // Dynamic query-planner index optimization
+                            db.execSQL("PRAGMA optimize;")
                         } catch (e: Exception) {
-                            android.util.Log.w("NotiCatchDB", "Non-fatal SQLite PRAGMA initialization warning: ${e.message}")
+                            android.util.Log.w("SpectralVaultDB", "Non-fatal SQLite PRAGMA initialization warning: ${e.message}")
                         }
                     }
                 })

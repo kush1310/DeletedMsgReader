@@ -555,7 +555,7 @@ function MessageBubbleInternal({ message, isGroup = false }: MessageBubbleProps)
           </div>
         )}
 
-        <div className="bubble-deleted w-full">
+        <div className="bubble-deleted w-full break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-2">
               <Trash2
@@ -599,8 +599,8 @@ function MessageBubbleInternal({ message, isGroup = false }: MessageBubbleProps)
                 Recovered Text:
               </span>
               <p
-                className="text-sm not-italic font-medium leading-relaxed"
-                style={{ color: 'var(--md-sys-color-on-surface)' }}
+                className="text-sm not-italic font-medium leading-relaxed break-words"
+                style={{ color: 'var(--md-sys-color-on-surface)', overflowWrap: 'anywhere', wordBreak: 'break-word' }}
               >
                 {message.messageText}
               </p>
@@ -663,15 +663,15 @@ function MessageBubbleInternal({ message, isGroup = false }: MessageBubbleProps)
         </div>
       )}
 
-      <div className="bubble-received elevation-1">
+      <div className="bubble-received elevation-1 break-words max-w-full" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
         {message.mediaType && <MediaIndicator mediaType={message.mediaType} />}
         {message.audioDurationSeconds && (
           <AudioWaveform durationSeconds={message.audioDurationSeconds} />
         )}
         {message.messageText && (
           <p
-            className="text-sm font-normal leading-relaxed"
-            style={{ color: 'var(--md-sys-color-on-surface)' }}
+            className="text-sm font-normal leading-relaxed break-words"
+            style={{ color: 'var(--md-sys-color-on-surface)', overflowWrap: 'anywhere', wordBreak: 'break-word' }}
           >
             {message.messageText}
           </p>

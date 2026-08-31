@@ -65,7 +65,6 @@ class InactivityLockManager {
     if (!this.isListeningToInputs) {
       const handleInput = () => this.recordUserActivity();
       window.addEventListener('pointerdown', handleInput, { passive: true });
-      window.addEventListener('pointermove', handleInput, { passive: true });
       window.addEventListener('touchstart',  handleInput, { passive: true });
       window.addEventListener('keydown',     handleInput, { passive: true });
       window.addEventListener('scroll',      handleInput, { passive: true });

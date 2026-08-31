@@ -200,7 +200,32 @@ export interface RawNotificationPayload {
   readonly groupKey:       string | null;
 }
 
-export type NavTab = 'chats' | 'deleted' | 'settings';
+export interface NotificationPacket {
+  readonly id:               string;
+  readonly packageName:      string;
+  readonly channelId:        string | null;
+  readonly notificationId:   number;
+  readonly postTime:         number;
+  readonly rawTitle:         string | null;
+  readonly rawText:          string | null;
+  readonly extrasJson:       string;
+  readonly timeSlot:         string;
+  readonly isRevocation:     boolean;
+  readonly isSelfReply:      boolean;
+  readonly parsedSender:     string | null;
+  readonly parsedChatTitle:  string | null;
+}
+
+export interface DiagnosticLog {
+  readonly id:         string;
+  readonly level:      'INFO' | 'WARN' | 'ERROR' | 'CRITICAL';
+  readonly tag:        string;
+  readonly message:    string;
+  readonly stackTrace: string | null;
+  readonly timestamp:  number;
+}
+
+export type NavTab = 'chats' | 'deleted' | 'inspector' | 'logs' | 'settings';
 
 export type ToastSeverity = 'info' | 'success' | 'warning' | 'error';
 

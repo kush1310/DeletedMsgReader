@@ -24,6 +24,9 @@ import {
   Search,
   ShieldCheck,
   Clock,
+  CheckSquare,
+  Square,
+  ListChecks,
 } from 'lucide-react';
 import { TopAppBar, IconButton } from '@/components/navigation';
 import { SearchInput, EmptyState, ConfirmationModal, ConversationSkeleton } from '@/components/common';
@@ -34,12 +37,14 @@ import {
   requestNotificationListenerPermission,
   markConversationAsReadNative,
   deleteConversationNative,
+  deleteMultipleConversationsNative,
   exportChatAsPDFNative,
   exportChatAsCSVNative,
   isNativeAndroid,
 } from '@/services/NativeBridgeService';
 import { searchAndRank } from '@/services/SearchEngine';
 import { HapticService } from '@/services/HapticService';
+import { APP_NAME } from '@/data/version';
 import type { Conversation } from '@/types';
 
 type ChatFilter = 'all' | 'deleted' | 'groups' | 'direct';
@@ -82,9 +87,12 @@ export function ChatsPage() {
     }
   });
 
-  const [selectedChat,      setSelectedChat]      = useState<Conversation | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [actionFeedback,    setActionFeedback]    = useState<string | null>(null);
+  const [selectedChat,          setSelectedChat]          = useState<Conversation | null>(null);
+  const [showDeleteConfirm,     setShowDeleteConfirm]     = useState(false);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [isSelectMode,          setIsSelectMode]          = useState(false);
+  const [selectedIds,           setSelectedIds]           = useState<Set<string>>(new Set());
+  const [actionFeedback,        setActionFeedback]        = useState<string | null>(null);
 
   /**
    * verifyPermissionState
@@ -157,6 +165,31 @@ export function ChatsPage() {
     window.addEventListener('noticatch:new-message', handleNewMessage);
     return () => window.removeEventListener('noticatch:new-message', handleNewMessage);
   }, [loadData]);
+
+  const toggleSelectChat = useCallback((id: string) => {
+    HapticService.selection();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        if (next.size === 0) setIsSelectMode(false);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    HapticService.deleteAction();
+    const count = await deleteMultipleConversationsNative(Array.from(selectedIds));
+    setShowBatchDeleteConfirm(false);
+    setIsSelectMode(false);
+    setSelectedIds(new Set());
+    await loadData(true);
+    setActionFeedback(`Deleted ${count} conversation${count === 1 ? '' : 's'}`);
+    setTimeout(() => setActionFeedback(null), 2500);
+  }, [selectedIds, loadData]);
 
   const handleMarkAsRead = useCallback(async (chat: Conversation) => {
     HapticService.selection();
@@ -283,50 +316,97 @@ export function ChatsPage() {
       }}
     >
       {/* Top Application Bar */}
-      <TopAppBar
-        title="NotiCatch"
-        subtitle={
-          lastSynced
-            ? `Synced ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-            : undefined
-        }
-        leading={
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'var(--md-sys-color-primary-container)',
-              color: 'var(--md-sys-color-primary)',
-            }}
-          >
-            <ShieldCheck className="w-4 h-4" strokeWidth={2.2} />
-          </div>
-        }
-        trailing={
-          <>
+      {isSelectMode ? (
+        <TopAppBar
+          title={`${selectedIds.size} Selected`}
+          subtitle="Tap conversations to select or deselect"
+          leading={
             <IconButton
-              id="chats-search-button"
-              icon={<Search className="w-5 h-5" strokeWidth={2} style={{ color: 'var(--md-sys-color-on-surface)' }} />}
-              label="Search conversations"
+              id="cancel-select-mode-btn"
+              icon={<X className="w-5 h-5" style={{ color: 'var(--md-sys-color-on-surface)' }} />}
+              label="Cancel Selection"
               onClick={() => {
                 HapticService.tap();
-                setSearchVisible(v => !v);
+                setIsSelectMode(false);
+                setSelectedIds(new Set());
               }}
             />
-            <IconButton
-              id="chats-refresh-button"
-              icon={
-                <RefreshCw
-                  className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
-                  strokeWidth={2.2}
-                  style={{ color: 'var(--md-sys-color-on-surface)' }}
-                />
-              }
-              label="Refresh conversation list"
-              onClick={handleRefresh}
-            />
-          </>
-        }
-      />
+          }
+          trailing={
+            <>
+              <IconButton
+                id="select-all-btn"
+                icon={<CheckSquare className="w-5 h-5" style={{ color: 'var(--md-sys-color-primary)' }} />}
+                label="Select All"
+                onClick={() => {
+                  HapticService.tap();
+                  if (selectedIds.size === filteredResults.length) {
+                    setSelectedIds(new Set());
+                  } else {
+                    setSelectedIds(new Set(filteredResults.map(r => r.item.id)));
+                  }
+                }}
+              />
+              <IconButton
+                id="batch-delete-btn"
+                icon={<Trash2 className="w-5 h-5 text-error" />}
+                label="Delete Selected"
+                onClick={() => {
+                  if (selectedIds.size > 0) {
+                    HapticService.warning();
+                    setShowBatchDeleteConfirm(true);
+                  }
+                }}
+              />
+            </>
+          }
+        />
+      ) : (
+        <TopAppBar
+          title={APP_NAME}
+          subtitle={
+            lastSynced
+              ? `Synced ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+              : undefined
+          }
+          leading={
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'var(--md-sys-color-primary-container)',
+                color: 'var(--md-sys-color-primary)',
+              }}
+            >
+              <ShieldCheck className="w-4 h-4" strokeWidth={2.2} />
+            </div>
+          }
+          trailing={
+            <>
+              <IconButton
+                id="chats-search-button"
+                icon={<Search className="w-5 h-5" strokeWidth={2} style={{ color: 'var(--md-sys-color-on-surface)' }} />}
+                label="Search conversations"
+                onClick={() => {
+                  HapticService.tap();
+                  setSearchVisible(v => !v);
+                }}
+              />
+              <IconButton
+                id="chats-refresh-button"
+                icon={
+                  <RefreshCw
+                    className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                    strokeWidth={2.2}
+                    style={{ color: 'var(--md-sys-color-on-surface)' }}
+                  />
+                }
+                label="Refresh conversation list"
+                onClick={handleRefresh}
+              />
+            </>
+          }
+        />
+      )}
 
       {/* Notification Access Disabled Banner */}
       {hasNotifAccess === false && (
@@ -389,7 +469,7 @@ export function ChatsPage() {
           borderColor: 'var(--md-sys-color-outline-variant)',
         }}
       >
-        {searchVisible && (
+        {searchVisible && !isSelectMode && (
           <div className="space-y-2">
             <SearchInput
               id="chats-search-input"
@@ -482,25 +562,54 @@ export function ChatsPage() {
             className="divide-y"
             style={{ borderColor: 'var(--md-sys-color-outline-variant)' }}
           >
-            {filteredResults.map((result, index) => (
-              <li
-                key={result.item.id}
-                className="animate-slide-up"
-                style={{
-                  animationDelay: `${Math.min(index * 25, 200)}ms`,
-                  borderColor: 'var(--md-sys-color-outline-variant)',
-                }}
-              >
-                <ConversationRow
-                  conversation={result.item}
-                  onClick={(id) => handleConversationSelect(id, result.item.chatTitle)}
-                  onLongPress={chat => {
-                    HapticService.longPress();
-                    setSelectedChat(chat);
+            {filteredResults.map((result, index) => {
+              const isSelected = selectedIds.has(result.item.id);
+
+              return (
+                <li
+                  key={result.item.id}
+                  className="animate-slide-up flex items-center"
+                  style={{
+                    animationDelay: `${Math.min(index * 25, 200)}ms`,
+                    borderColor: 'var(--md-sys-color-outline-variant)',
+                    background: isSelected ? 'var(--md-sys-color-primary-container)' : undefined,
                   }}
-                />
-              </li>
-            ))}
+                >
+                  {isSelectMode && (
+                    <button
+                      type="button"
+                      onClick={() => toggleSelectChat(result.item.id)}
+                      className="pl-3 pr-1 py-4 flex items-center justify-center flex-shrink-0"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-primary" strokeWidth={2.5} />
+                      ) : (
+                        <Square className="w-5 h-5 text-on-surface-muted" />
+                      )}
+                    </button>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <ConversationRow
+                      conversation={result.item}
+                      onClick={(id) => {
+                        if (isSelectMode) {
+                          toggleSelectChat(id);
+                        } else {
+                          handleConversationSelect(id, result.item.chatTitle);
+                        }
+                      }}
+                      onLongPress={chat => {
+                        if (!isSelectMode) {
+                          HapticService.longPress();
+                          setSelectedChat(chat);
+                        }
+                      }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="flex flex-col items-center justify-center p-6 pt-16 space-y-4">
@@ -575,6 +684,24 @@ export function ChatsPage() {
             <div className="space-y-1">
               <button
                 type="button"
+                onClick={() => {
+                  HapticService.selection();
+                  setIsSelectMode(true);
+                  setSelectedIds(new Set([selectedChat.id]));
+                  setSelectedChat(null);
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors text-xs font-bold min-h-[48px]"
+                style={{
+                  color: 'var(--md-sys-color-on-surface)',
+                  background: 'var(--md-sys-color-surface)',
+                }}
+              >
+                <ListChecks className="w-4 h-4" style={{ color: 'var(--md-sys-color-primary)' }} />
+                <span>Select Multiple Chats</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleMarkAsRead(selectedChat)}
                 className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors text-xs font-bold min-h-[48px]"
                 style={{
@@ -632,7 +759,7 @@ export function ChatsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Single Confirmation Modal */}
       <ConfirmationModal
         isOpen={showDeleteConfirm}
         title="Delete Conversation"
@@ -643,6 +770,19 @@ export function ChatsPage() {
         confirmVariant="danger"
         onConfirm={() => selectedChat && handleDeleteChat(selectedChat)}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      {/* Batch Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showBatchDeleteConfirm}
+        title="Delete Selected Conversations"
+        description={`Permanently delete ${selectedIds.size} selected conversation${selectedIds.size === 1 ? '' : 's'} and all associated messages?`}
+        confirmLabel="Delete All Selected"
+        cancelLabel="Cancel"
+        isDangerous={true}
+        confirmVariant="danger"
+        onConfirm={handleBatchDelete}
+        onCancel={() => setShowBatchDeleteConfirm(false)}
       />
     </div>
   );

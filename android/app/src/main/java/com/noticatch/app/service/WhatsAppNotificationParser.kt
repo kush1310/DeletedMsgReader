@@ -50,6 +50,7 @@ object WhatsAppNotificationParser {
         val isCallEvent:          Boolean = false,
         val conversationTag:      String? = null,
         val mediaType:            String? = null,
+        val isSelfReply:          Boolean = false,
     )
 
     /** Multilingual deletion signal regex catalog covering 35+ languages and admin actions. */
@@ -267,6 +268,7 @@ object WhatsAppNotificationParser {
                 val (isReaction, reactionEmoji) = parseReaction(cleanText)
                 val isCallEvent = isCallEvent(cleanText)
                 val mediaType = detectMediaType(cleanText)
+                val isSelf = isSelfSender(item, sender)
 
                 /* Skip non-text media placeholders unless it is a deletion event */
                 if (!isDeletion && isIgnoredMedia(cleanText)) {
@@ -292,6 +294,7 @@ object WhatsAppNotificationParser {
                         isCallEvent          = isCallEvent,
                         conversationTag      = conversationTag,
                         mediaType            = mediaType,
+                        isSelfReply          = isSelf,
                     )
                 )
             }
@@ -323,6 +326,7 @@ object WhatsAppNotificationParser {
                     val (isReaction, reactionEmoji) = parseReaction(cleanText)
                     val isCallEvent = isCallEvent(cleanText)
                     val mediaType = detectMediaType(cleanText)
+                    val isSelf = isSelfSender(null, sender)
 
                     if (isDeletion || !isIgnoredMedia(cleanText)) {
                         messagesList.add(
@@ -344,6 +348,7 @@ object WhatsAppNotificationParser {
                                 isCallEvent          = isCallEvent,
                                 conversationTag      = conversationTag,
                                 mediaType            = mediaType,
+                                isSelfReply          = isSelf,
                             )
                         )
                     }
@@ -575,5 +580,14 @@ object WhatsAppNotificationParser {
         }
 
         return ""
+    }
+
+    private fun isSelfSender(bundle: Bundle?, sender: String): Boolean {
+        if (bundle != null) {
+            if (bundle.getBoolean("is_self", false)) return true
+            if (bundle.getCharSequence("android.selfDisplayName") != null) return true
+        }
+        val lower = sender.lowercase().trim()
+        return lower == "you" || lower.startsWith("you:") || lower.startsWith("you replied") || lower.startsWith("you sent")
     }
 }

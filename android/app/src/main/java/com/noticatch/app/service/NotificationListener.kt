@@ -200,22 +200,95 @@ class NotificationListener : NotificationListenerService() {
                 )
             } catch (_: Exception) {}
 
+            val db = database ?: NotiCatchDatabase.getInstance(applicationContext).also { database = it }
+
+            /* 1. Deep Wireshark-Style Packet Ingestion */
+            try {
+                val extras = sbn.notification?.extras
+                val rawTitle = extras?.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()
+                val rawText = extras?.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()
+                val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) sbn.notification?.channelId else null
+                val timeSlot = calculateTimeSlot(sbn.postTime)
+
+                val extrasMap = mutableMapOf<String, String>()
+                extras?.keySet()?.forEach { key ->
+                    try {
+                        extrasMap[key] = extras.get(key)?.toString()?.take(150) ?: ""
+                    } catch (_: Exception) {}
+                }
+                val extrasJson = org.json.JSONObject(extrasMap as Map<*, *>).toString()
+
+                val firstParsed = parsedList.firstOrNull()
+                val packet = com.noticatch.app.db.NotificationPacketEntity(
+                    id               = UUID.randomUUID().toString(),
+                    packageName      = pkg,
+                    channelId        = channelId,
+                    notificationId   = sbn.id,
+                    postTime         = if (sbn.postTime > 0) sbn.postTime else System.currentTimeMillis(),
+                    rawTitle         = rawTitle,
+                    rawText          = rawText,
+                    extrasJson       = extrasJson,
+                    timeSlot         = timeSlot,
+                    isRevocation     = parsedList.any { it.isDeletion },
+                    isSelfReply      = parsedList.any { it.isSelfReply },
+                    parsedSender     = firstParsed?.senderName,
+                    parsedChatTitle  = firstParsed?.chatTitle,
+                )
+                db.notificationPacketDao().insert(packet)
+            } catch (e: Exception) {
+                logDiagnostic(db, "WARN", "PacketInspector", "Failed to record raw packet: ${e.message}", e)
+            }
+
             /* Jitter Buffer: Hold for 150ms to allow concurrent network deletion packets to settle */
             if (parsedList.any { it.isDeletion || it.isEdit }) {
                 delay(150)
             }
 
             ingestionMutex.withLock {
-                val db = database ?: NotiCatchDatabase.getInstance(applicationContext).also { database = it }
                 for (parsed in parsedList) {
                     if (spamFilterEnabled && !parsed.isDeletion && parsed.isSpamOtp) {
                         Log.d(TAG, "Suppressed OTP message from: ${parsed.senderName}")
                         continue
                     }
-                    persistAndBroadcast(db, parsed)
+                    try {
+                        persistAndBroadcast(db, parsed)
+                    } catch (e: Exception) {
+                        logDiagnostic(db, "ERROR", "PersistAndBroadcast", "Failed to persist message: ${e.message}", e)
+                    }
                 }
             }
         }
+    }
+
+    private fun calculateTimeSlot(timestamp: Long): String {
+        val cal = java.util.Calendar.getInstance().apply {
+            timeInMillis = if (timestamp > 0) timestamp else System.currentTimeMillis()
+        }
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val slotStart = (hour / 2) * 2
+        val slotEnd = (slotStart + 2) % 24
+
+        fun formatHour(h: Int): String {
+            val ampm = if (h < 12) "AM" else "PM"
+            val h12 = if (h == 0) 12 else if (h > 12) h - 12 else h
+            return String.format("%02d:00 %s", h12, ampm)
+        }
+
+        return "${formatHour(slotStart)} - ${formatHour(slotEnd)}"
+    }
+
+    private suspend fun logDiagnostic(db: NotiCatchDatabase, level: String, tag: String, message: String, throwable: Throwable? = null) {
+        try {
+            val log = com.noticatch.app.db.DiagnosticLogEntity(
+                id         = UUID.randomUUID().toString(),
+                level      = level,
+                tag        = tag,
+                message    = message,
+                stackTrace = throwable?.stackTraceToString()?.take(500),
+                timestamp  = System.currentTimeMillis()
+            )
+            db.diagnosticLogDao().insert(log)
+        } catch (_: Exception) {}
     }
 
     private fun isIgnoredChannel(channelId: String?): Boolean {
@@ -404,7 +477,7 @@ class NotificationListener : NotificationListenerService() {
                 conversation.copy(
                     chatTitle            = cleanTitle,
                     lastMessageTimestamp = maxOf(conversation.lastMessageTimestamp, parsed.timestamp),
-                    unreadCount          = conversation.unreadCount + 1,
+                    unreadCount          = if (parsed.isSelfReply) conversation.unreadCount else conversation.unreadCount + 1,
                 )
             )
 

@@ -932,4 +932,190 @@ class MessageBridgePlugin : Plugin() {
         result.put("isAuthenticated", isAuth)
         call.resolve(result)
     }
+
+    @PluginMethod
+    fun setScreenProtection(call: PluginCall) {
+        val enabled = call.getBoolean("enabled", true) ?: true
+        context.getSharedPreferences("noticatch_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("screen_secure_enabled", enabled)
+            .apply()
+
+        activity?.runOnUiThread {
+            if (enabled) {
+                activity?.window?.setFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE,
+                    WindowManager.LayoutParams.FLAG_SECURE
+                )
+            } else {
+                activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+
+        val result = JSObject().apply {
+            put("success", true)
+            put("screenSecureEnabled", enabled)
+        }
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun getScreenProtection(call: PluginCall) {
+        val enabled = context.getSharedPreferences("noticatch_prefs", Context.MODE_PRIVATE)
+            .getBoolean("screen_secure_enabled", true)
+        val result = JSObject().apply {
+            put("screenSecureEnabled", enabled)
+        }
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun deleteMultipleConversations(call: PluginCall) {
+        val idsArray = call.getArray("conversationIds")
+        if (idsArray == null || idsArray.length() == 0) {
+            call.resolve(JSObject().apply { put("success", true); put("deletedCount", 0) })
+            return
+        }
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                var count = 0
+                for (i in 0 until idsArray.length()) {
+                    val id = idsArray.getString(i)
+                    if (!id.isNullOrBlank()) {
+                        db.messageDao().deleteByConversation(id)
+                        db.conversationDao().deleteById(id)
+                        count++
+                    }
+                }
+                val res = JSObject().apply {
+                    put("success", true)
+                    put("deletedCount", count)
+                }
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to delete conversations: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun getNotificationPackets(call: PluginCall) {
+        val slot = call.getString("timeSlot")
+        val query = call.getString("query")
+        val limit = call.getInt("limit", 200) ?: 200
+
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                val packets = when {
+                    !query.isNullOrBlank() -> db.notificationPacketDao().searchPackets(query)
+                    !slot.isNullOrBlank() -> db.notificationPacketDao().getByTimeSlot(slot)
+                    else -> db.notificationPacketDao().getAll(limit)
+                }
+
+                val array = JSArray()
+                for (p in packets) {
+                    val obj = JSObject().apply {
+                        put("id", p.id)
+                        put("packageName", p.packageName)
+                        put("channelId", p.channelId)
+                        put("notificationId", p.notificationId)
+                        put("postTime", p.postTime)
+                        put("rawTitle", p.rawTitle)
+                        put("rawText", p.rawText)
+                        put("extrasJson", p.extrasJson)
+                        put("timeSlot", p.timeSlot)
+                        put("isRevocation", p.isRevocation)
+                        put("isSelfReply", p.isSelfReply)
+                        put("parsedSender", p.parsedSender)
+                        put("parsedChatTitle", p.parsedChatTitle)
+                    }
+                    array.put(obj)
+                }
+
+                val res = JSObject().apply {
+                    put("packets", array)
+                    put("count", packets.size)
+                }
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to retrieve packets: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun getNotificationTimeSlots(call: PluginCall) {
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                val slots = db.notificationPacketDao().getDistinctTimeSlots()
+                val array = JSArray()
+                slots.forEach { array.put(it) }
+                val res = JSObject().apply {
+                    put("timeSlots", array)
+                }
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to retrieve time slots: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun getDiagnosticLogs(call: PluginCall) {
+        val level = call.getString("level")
+        val query = call.getString("query")
+        val limit = call.getInt("limit", 150) ?: 150
+
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                val logs = when {
+                    !query.isNullOrBlank() -> db.diagnosticLogDao().searchLogs(query)
+                    !level.isNullOrBlank() && level != "ALL" -> db.diagnosticLogDao().getByLevel(level, limit)
+                    else -> db.diagnosticLogDao().getAll(limit)
+                }
+
+                val array = JSArray()
+                for (l in logs) {
+                    val obj = JSObject().apply {
+                        put("id", l.id)
+                        put("level", l.level)
+                        put("tag", l.tag)
+                        put("message", l.message)
+                        put("stackTrace", l.stackTrace)
+                        put("timestamp", l.timestamp)
+                    }
+                    array.put(obj)
+                }
+
+                val res = JSObject().apply {
+                    put("logs", array)
+                    put("count", logs.size)
+                }
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to retrieve logs: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun clearDiagnosticLogs(call: PluginCall) {
+        pluginScope.launch {
+            try {
+                val db = NotiCatchDatabase.getInstance(context)
+                db.diagnosticLogDao().clearAll()
+                db.notificationPacketDao().clearAll()
+                val res = JSObject().apply {
+                    put("success", true)
+                }
+                call.resolve(res)
+            } catch (e: Exception) {
+                call.reject("Failed to clear logs: ${e.message}", e)
+            }
+        }
+    }
 }

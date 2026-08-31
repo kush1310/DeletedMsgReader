@@ -9,7 +9,7 @@
  * NotificationListenerService.
  */
 
-import type { AppSettings, Conversation, Message, KernelSocketStats, DeviceSecurityStatus } from '@/types';
+import type { AppSettings, Conversation, Message, KernelSocketStats, DeviceSecurityStatus, NotificationPacket, DiagnosticLog } from '@/types';
 import { validateAppSettingsSchema } from '@/services/SecurityService';
 
 type CapacitorWindow = {
@@ -26,6 +26,8 @@ type CapacitorWindow = {
         executePanicWipe:              ()                                                  => Promise<{ wiped: boolean }>;
         authenticateBiometric:         (args: { title: string; subtitle: string })         => Promise<{ success: boolean; error: string | null }>;
         setScreenSecure:               (args: { enabled: boolean })                        => Promise<{ updated: boolean }>;
+        setScreenProtection:           (args: { enabled: boolean })                        => Promise<{ success: boolean; screenSecureEnabled: boolean }>;
+        getScreenProtection:           ()                                                  => Promise<{ screenSecureEnabled: boolean }>;
         setSessionTimeout:             (args: { timeoutSeconds: number })                  => Promise<{ updated: boolean }>;
         requestBatteryExemption:       ()                                                  => Promise<{ requested: boolean }>;
         getConversations:              ()                                                  => Promise<{ conversations: Conversation[] }>;
@@ -36,8 +38,13 @@ type CapacitorWindow = {
         exportChatAsCSV:               (args: { conversationId: string; chatTitle: string }) => Promise<{ filePath: string; rowCount: number }>;
         markConversationAsRead:        (args: { conversationId: string })                  => Promise<{ success: boolean }>;
         deleteConversation:            (args: { conversationId: string })                  => Promise<{ success: boolean }>;
+        deleteMultipleConversations:   (args: { conversationIds: string[] })               => Promise<{ success: boolean; deletedCount: number }>;
         setSpamFilter:                 (args: { enabled: boolean })                        => Promise<{ updated: boolean }>;
         getAuthState:                  ()                                                  => Promise<{ isAuthenticated: boolean }>;
+        getNotificationPackets:        (args?: { timeSlot?: string; query?: string; limit?: number }) => Promise<{ packets: NotificationPacket[]; count: number }>;
+        getNotificationTimeSlots:      ()                                                  => Promise<{ timeSlots: string[] }>;
+        getDiagnosticLogs:             (args?: { level?: string; query?: string; limit?: number })    => Promise<{ logs: DiagnosticLog[]; count: number }>;
+        clearDiagnosticLogs:           ()                                                  => Promise<{ success: boolean }>;
       };
     };
   };
@@ -206,7 +213,7 @@ export async function setScreenSecureNative(enabled: boolean): Promise<void> {
   try {
     const bridge = getBridge();
     if (bridge) {
-      await bridge.setScreenSecure({ enabled });
+      await bridge.setScreenProtection({ enabled });
     }
   } catch {
     /* Non-critical */
@@ -332,6 +339,71 @@ export async function exportChatAsCSVNative(
   const bridge = getBridge();
   if (!bridge) throw new Error('CSV export is available on Android devices only.');
   return bridge.exportChatAsCSV({ conversationId, chatTitle });
+}
+
+export async function deleteMultipleConversationsNative(conversationIds: string[]): Promise<number> {
+  try {
+    const bridge = getBridge();
+    if (bridge && conversationIds.length > 0) {
+      const res = await bridge.deleteMultipleConversations({ conversationIds });
+      return res.deletedCount;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function getNotificationPacketsNative(options?: {
+  timeSlot?: string;
+  query?:    string;
+  limit?:    number;
+}): Promise<NotificationPacket[]> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return [];
+    const res = await bridge.getNotificationPackets(options);
+    return res.packets ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getNotificationTimeSlotsNative(): Promise<string[]> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return [];
+    const res = await bridge.getNotificationTimeSlots();
+    return res.timeSlots ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getDiagnosticLogsNative(options?: {
+  level?: string;
+  query?: string;
+  limit?: number;
+}): Promise<DiagnosticLog[]> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return [];
+    const res = await bridge.getDiagnosticLogs(options);
+    return res.logs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function clearDiagnosticLogsNative(): Promise<boolean> {
+  try {
+    const bridge = getBridge();
+    if (!bridge) return false;
+    const res = await bridge.clearDiagnosticLogs();
+    return res.success;
+  } catch {
+    return false;
+  }
 }
 
 /* =============================================================

@@ -23,6 +23,9 @@ import { inactivityLockService } from '@/services/InactivityLockService';
 import { ShieldAlert, RotateCcw } from 'lucide-react';
 import type { NavTab } from '@/types';
 
+import { PacketInspectorPage } from '@/pages/PacketInspectorPage';
+import { ErrorLogsPage } from '@/pages/ErrorLogsPage';
+
 /* Lazy loaded secondary routes for optimal initial bundle execution */
 const LandingPage = lazy(() => import('@/pages/LandingPage').then(m => ({ default: m.LandingPage })));
 const PrivacyOnboardingPage = lazy(() => import('@/pages/PrivacyOnboardingPage').then(m => ({ default: m.PrivacyOnboardingPage })));
@@ -96,13 +99,15 @@ class AppErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
 }
 
 /** Routes that show the bottom navigation bar */
-const BOTTOM_NAV_ROUTES = new Set(['/chats', '/deleted', '/settings']);
+const BOTTOM_NAV_ROUTES = new Set(['/chats', '/deleted', '/inspector', '/logs', '/settings']);
 
 /** Maps route paths to NavTab identifiers */
 const PATH_TO_TAB: Record<string, NavTab> = {
-  '/chats':    'chats',
-  '/deleted':  'deleted',
-  '/settings': 'settings',
+  '/chats':     'chats',
+  '/deleted':   'deleted',
+  '/inspector': 'inspector',
+  '/logs':      'logs',
+  '/settings':  'settings',
 };
 
 /** Routes that are exempt from session timeout enforcement */
@@ -216,9 +221,11 @@ function AppShell({ children }: { readonly children: ReactNode }) {
 
   const handleTabChange = useCallback((tab: NavTab) => {
     const paths: Record<NavTab, string> = {
-      chats:    '/chats',
-      deleted:  '/deleted',
-      settings: '/settings',
+      chats:     '/chats',
+      deleted:   '/deleted',
+      inspector: '/inspector',
+      logs:      '/logs',
+      settings:  '/settings',
     };
     navigate(paths[tab]);
   }, [navigate]);
@@ -256,6 +263,8 @@ export function App() {
             <Route path="/landing"   element={<LandingPage />} />
             <Route path="/chats"          element={<ChatsPage />} />
             <Route path="/deleted"        element={<DeletedOnlyPage />} />
+            <Route path="/inspector"      element={<PacketInspectorPage />} />
+            <Route path="/logs"           element={<ErrorLogsPage />} />
             <Route path="/settings"       element={<SettingsPage />} />
             <Route path="/settings/profile"       element={<ProfilePage />} />
             <Route path="/settings/notifications" element={<NotificationsSettingsPage />} />
